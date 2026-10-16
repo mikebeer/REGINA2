@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.7.5.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison implementation for Yacc-like parsers in C
 
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -46,10 +46,10 @@
    USER NAME SPACE" below.  */
 
 /* Identify Bison output, and Bison version.  */
-#define YYBISON 30705
+#define YYBISON 30802
 
 /* Bison version string.  */
-#define YYBISON_VERSION "3.7.5"
+#define YYBISON_VERSION "3.8.2"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -74,11 +74,11 @@
 #define yychar          __reginachar
 
 /* First part of user prologue.  */
-#line 1 "./yaccsrc.y"
+#line 1 "yaccsrc.y"
 
 
 #ifndef lint
-static char *RCSid = "$Id: yaccsrc.c,v 1.50 2025/03/17 22:05:52 mark Exp $";
+static char *RCSid = "$Id: yaccsrc.y,v 1.47 2025/03/17 22:05:55 mark Exp $";
 #endif
 
 /*
@@ -191,7 +191,7 @@ static void move_labels( nodeptr front, nodeptr end, int level );
                              }                                                \
                            }                                                  \
                          }
-#line 150 "./yaccsrc.y"
+#line 150 "yaccsrc.y"
 
 #ifdef NDEBUG
 # define YYDEBUG 0
@@ -199,7 +199,7 @@ static void move_labels( nodeptr front, nodeptr end, int level );
 # define YYDEBUG 1
 #endif
 
-#line 203 "./yaccsrc.c"
+#line 203 "yaccsrc.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -213,7 +213,7 @@ static void move_labels( nodeptr front, nodeptr end, int level );
 # ifndef YY_NULLPTR
 #  if defined __cplusplus
 #   if 201103L <= __cplusplus
-#    define YY_NULLPTR rxnullptr
+#    define YY_NULLPTR nullptr
 #   else
 #    define YY_NULLPTR 0
 #   endif
@@ -711,12 +711,18 @@ typedef int yy_state_fast_t;
 # define YY_USE(E) /* empty */
 #endif
 
-#if defined __GNUC__ && ! defined __ICC && 407 <= __GNUC__ * 100 + __GNUC_MINOR__
 /* Suppress an incorrect diagnostic about yylval being uninitialized.  */
-# define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                            \
+#if defined __GNUC__ && ! defined __ICC && 406 <= __GNUC__ * 100 + __GNUC_MINOR__
+# if __GNUC__ * 100 + __GNUC_MINOR__ < 407
+#  define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                           \
+    _Pragma ("GCC diagnostic push")                                     \
+    _Pragma ("GCC diagnostic ignored \"-Wuninitialized\"")
+# else
+#  define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                           \
     _Pragma ("GCC diagnostic push")                                     \
     _Pragma ("GCC diagnostic ignored \"-Wuninitialized\"")              \
     _Pragma ("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
+# endif
 # define YY_IGNORE_MAYBE_UNINITIALIZED_END      \
     _Pragma ("GCC diagnostic pop")
 #else
@@ -942,7 +948,7 @@ static const yytype_uint8 yytranslate[] =
 };
 
 #if YYDEBUG
-  /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
+/* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
        0,   160,   160,   160,   170,   173,   179,   181,   184,   186,
@@ -1073,28 +1079,6 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#ifdef YYPRINT
-/* YYTOKNUM[NUM] -- (External) token number corresponding to the
-   (internal) symbol number NUM (which must be that of a token).  */
-static const yytype_int16 yytoknum[] =
-{
-       0,   256,   257,   258,   259,   260,   261,   262,   263,   264,
-     265,   266,   267,   268,   269,   270,   271,   272,   273,   274,
-     275,   276,   277,   278,   279,   280,   281,   282,   283,   284,
-     285,   286,   287,   288,   289,   290,   291,   292,   293,   294,
-     295,   296,   297,   298,   299,   300,   301,   302,   303,   304,
-     305,   306,   307,   308,   309,   310,   311,   312,   313,   314,
-     315,   316,   317,   318,   319,   320,   321,   322,   323,   324,
-     325,   326,   327,   328,   329,   330,   331,   332,   333,   334,
-     335,   336,   337,   338,   339,   340,   341,   342,   343,   344,
-     345,   346,   347,   348,   349,   350,   351,   352,   353,   354,
-     355,   356,   357,   358,   359,   360,   361,   362,   363,   364,
-     365,   366,   367,   368,   369,   370,   371,   124,    38,    61,
-     372,    43,    45,    42,    47,    37,   373,   374,    40,    41,
-      44
-};
-#endif
-
 #define YYPACT_NINF (-532)
 
 #define yypact_value_is_default(Yyn) \
@@ -1105,8 +1089,8 @@ static const yytype_int16 yytoknum[] =
 #define yytable_value_is_error(Yyn) \
   0
 
-  /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
-     STATE-NUM.  */
+/* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
+   STATE-NUM.  */
 static const yytype_int16 yypact[] =
 {
     -532,    38,  -532,  -532,  -532,    60,    91,    86,  -532,  -532,
@@ -1177,9 +1161,9 @@ static const yytype_int16 yypact[] =
     -532,  -532,  -532,  -532
 };
 
-  /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
-     Performed when YYTABLE does not specify something else to do.  Zero
-     means the default is an error.  */
+/* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
+   Performed when YYTABLE does not specify something else to do.  Zero
+   means the default is an error.  */
 static const yytype_int16 yydefact[] =
 {
        2,     0,    20,     1,     3,    23,    18,    23,     7,    11,
@@ -1250,7 +1234,7 @@ static const yytype_int16 yydefact[] =
      193,   195,   194,   187
 };
 
-  /* YYPGOTO[NTERM-NUM].  */
+/* YYPGOTO[NTERM-NUM].  */
 static const yytype_int16 yypgoto[] =
 {
     -532,  -532,  -532,  -532,  -532,  -532,    -7,  -532,   -86,   -85,
@@ -1275,7 +1259,7 @@ static const yytype_int16 yypgoto[] =
     -304,  -532,   -52,  -116,  -217,   -99
 };
 
-  /* YYDEFGOTO[NTERM-NUM].  */
+/* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int16 yydefgoto[] =
 {
        0,     1,     2,     4,     7,   518,     8,     9,   519,    16,
@@ -1300,9 +1284,9 @@ static const yytype_int16 yydefgoto[] =
      314,   510,   315,   227,   228,   214
 };
 
-  /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
-     positive, shift that token.  If negative, reduce the rule whose
-     number is the opposite.  If YYTABLE_NINF, syntax error.  */
+/* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
+   positive, shift that token.  If negative, reduce the rule whose
+   number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int16 yytable[] =
 {
       20,    94,   174,   215,   359,   335,   268,   526,   222,   360,
@@ -1773,8 +1757,8 @@ static const yytype_int16 yycheck[] =
       -1,   119,    -1,   121,   122,   123,   124,   125
 };
 
-  /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
-     symbol of state STATE-NUM.  */
+/* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
+   state STATE-NUM.  */
 static const yytype_int16 yystos[] =
 {
        0,   132,   133,     0,   134,   141,   142,   135,   137,   138,
@@ -1845,7 +1829,7 @@ static const yytype_int16 yystos[] =
      214,   319,   325,   213
 };
 
-  /* YYR1[YYN] -- Symbol number of symbol that rule YYN derives.  */
+/* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int16 yyr1[] =
 {
        0,   131,   133,   132,   134,   134,   135,   135,   136,   136,
@@ -1898,7 +1882,7 @@ static const yytype_int16 yyr1[] =
      321,   323,   323,   324,   324,   324,   324,   325,   326,   326
 };
 
-  /* YYR2[YYN] -- Number of symbols on the right hand side of rule YYN.  */
+/* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
        0,     2,     0,     2,     2,     1,     2,     1,     2,     2,
@@ -1960,6 +1944,7 @@ enum { YYENOMEM = -2 };
 #define YYACCEPT        goto yyacceptlab
 #define YYABORT         goto yyabortlab
 #define YYERROR         goto yyerrorlab
+#define YYNOMEM         goto yyexhaustedlab
 
 
 #define YYRECOVERING()  (!!yyerrstatus)
@@ -2000,10 +1985,7 @@ do {                                            \
     YYFPRINTF Args;                             \
 } while (0)
 
-/* This macro is provided for backward compatibility. */
-# ifndef YY_LOCATION_PRINT
-#  define YY_LOCATION_PRINT(File, Loc) ((void) 0)
-# endif
+
 
 
 # define YY_SYMBOL_PRINT(Title, Kind, Value, Location)                    \
@@ -2030,10 +2012,6 @@ yy_symbol_value_print (FILE *yyo,
   YY_USE (yyoutput);
   if (!yyvaluep)
     return;
-# ifdef YYPRINT
-  if (yykind < YYNTOKENS)
-    YYPRINT (yyo, yytoknum[yykind], *yyvaluep);
-# endif
   YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
   YY_USE (yykind);
   YY_IGNORE_MAYBE_UNINITIALIZED_END
@@ -2218,6 +2196,7 @@ yyparse (void)
   YYDPRINTF ((stderr, "Starting parse\n"));
 
   yychar = YYEMPTY; /* Cause a token to be read.  */
+
   goto yysetstate;
 
 
@@ -2243,7 +2222,7 @@ yysetstate:
 
   if (yyss + yystacksize - 1 <= yyssp)
 #if !defined yyoverflow && !defined YYSTACK_RELOCATE
-    goto yyexhaustedlab;
+    YYNOMEM;
 #else
     {
       /* Get the current used size of the three stacks, in elements.  */
@@ -2271,7 +2250,7 @@ yysetstate:
 # else /* defined YYSTACK_RELOCATE */
       /* Extend the stack our own way.  */
       if (YYMAXDEPTH <= yystacksize)
-        goto yyexhaustedlab;
+        YYNOMEM;
       yystacksize *= 2;
       if (YYMAXDEPTH < yystacksize)
         yystacksize = YYMAXDEPTH;
@@ -2282,7 +2261,7 @@ yysetstate:
           YY_CAST (union yyalloc *,
                    YYSTACK_ALLOC (YY_CAST (YYSIZE_T, YYSTACK_BYTES (yystacksize))));
         if (! yyptr)
-          goto yyexhaustedlab;
+          YYNOMEM;
         YYSTACK_RELOCATE (yyss_alloc, yyss);
         YYSTACK_RELOCATE (yyvs_alloc, yyvs);
 #  undef YYSTACK_RELOCATE
@@ -2303,6 +2282,7 @@ yysetstate:
         YYABORT;
     }
 #endif /* !defined yyoverflow && !defined YYSTACK_RELOCATE */
+
 
   if (yystate == YYFINAL)
     YYACCEPT;
@@ -2416,7 +2396,7 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* $@1: %empty  */
-#line 160 "./yaccsrc.y"
+#line 160 "yaccsrc.y"
                                        { level = 0;
                                          if ( get_options_flag( parser_data.TSD->currlevel, EXT_CALLS_AS_FUNCS )
                                            && !get_options_flag( parser_data.TSD->currlevel, EXT_STRICT_ANSI ) )
@@ -2424,513 +2404,513 @@ yyreduce:
                                          else
                                             start_parendepth = 0;
                                          parendepth = 0; }
-#line 2428 "./yaccsrc.c"
+#line 2408 "yaccsrc.c"
     break;
 
   case 4: /* prog: nlncl stats  */
-#line 170 "./yaccsrc.y"
+#line 170 "yaccsrc.y"
                                        { yyval = optgluelast( yyvsp[-1], yyvsp[0] );
                                          yyval->o.last = NULL;
                                          EndProg( yyval ) ; }
-#line 2436 "./yaccsrc.c"
+#line 2416 "yaccsrc.c"
     break;
 
   case 5: /* prog: nlncl  */
-#line 173 "./yaccsrc.y"
+#line 173 "yaccsrc.y"
                                        { yyval = yyvsp[0];
                                          if ( yyval != NULL )
                                             yyval->o.last = NULL;
                                          EndProg( yyval ); }
-#line 2445 "./yaccsrc.c"
+#line 2425 "yaccsrc.c"
     break;
 
   case 6: /* stats: stats ystatement  */
-#line 179 "./yaccsrc.y"
+#line 179 "yaccsrc.y"
                                        { /* fixes bug 579711 */
                                          yyval = optgluelast( yyvsp[-1], yyvsp[0] ); }
-#line 2452 "./yaccsrc.c"
+#line 2432 "yaccsrc.c"
     break;
 
   case 7: /* stats: ystatement  */
-#line 181 "./yaccsrc.y"
+#line 181 "yaccsrc.y"
                                        { yyval = yyvsp[0]; }
-#line 2458 "./yaccsrc.c"
+#line 2438 "yaccsrc.c"
     break;
 
   case 8: /* xstats: xstats statement  */
-#line 184 "./yaccsrc.y"
+#line 184 "yaccsrc.y"
                                        { /* fixes bug 579711 */
                                          yyval = optgluelast( yyvsp[-1], yyvsp[0] ); }
-#line 2465 "./yaccsrc.c"
+#line 2445 "yaccsrc.c"
     break;
 
   case 9: /* xstats: statement gruff  */
-#line 186 "./yaccsrc.y"
+#line 186 "yaccsrc.y"
                                        { yyval = yyvsp[-1]; }
-#line 2471 "./yaccsrc.c"
+#line 2451 "yaccsrc.c"
     break;
 
   case 10: /* ystatement: statement  */
-#line 189 "./yaccsrc.y"
+#line 189 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 2477 "./yaccsrc.c"
+#line 2457 "yaccsrc.c"
     break;
 
   case 11: /* ystatement: lonely_end  */
-#line 190 "./yaccsrc.y"
+#line 190 "yaccsrc.y"
                                        { exiterror( ERR_UNMATCHED_END, 1 ); }
-#line 2483 "./yaccsrc.c"
+#line 2463 "yaccsrc.c"
     break;
 
   case 13: /* nxstats: xstats  */
-#line 198 "./yaccsrc.y"
+#line 198 "yaccsrc.y"
                                        { yyval = yyvsp[0]; }
-#line 2489 "./yaccsrc.c"
+#line 2469 "yaccsrc.c"
     break;
 
   case 14: /* nxstats: gruff  */
-#line 199 "./yaccsrc.y"
+#line 199 "yaccsrc.y"
                                        { yyval = NULL; }
-#line 2495 "./yaccsrc.c"
+#line 2475 "yaccsrc.c"
     break;
 
   case 15: /* ncl: ncl STATSEP optLabels  */
-#line 202 "./yaccsrc.y"
+#line 202 "yaccsrc.y"
                                        { yyval = optgluelast( yyvsp[-2], yyvsp[0] ); }
-#line 2501 "./yaccsrc.c"
+#line 2481 "yaccsrc.c"
     break;
 
   case 16: /* ncl: STATSEP optLabels  */
-#line 203 "./yaccsrc.y"
+#line 203 "yaccsrc.y"
                                        { yyval = yyvsp[0]; }
-#line 2507 "./yaccsrc.c"
+#line 2487 "yaccsrc.c"
     break;
 
   case 17: /* nlncl: optLabels ncl  */
-#line 206 "./yaccsrc.y"
+#line 206 "yaccsrc.y"
                                        { yyval = optgluelast( yyvsp[-1], yyvsp[0] ); }
-#line 2513 "./yaccsrc.c"
+#line 2493 "yaccsrc.c"
     break;
 
   case 18: /* nlncl: optLabels  */
-#line 207 "./yaccsrc.y"
+#line 207 "yaccsrc.y"
                                        { yyval = yyvsp[0]; }
-#line 2519 "./yaccsrc.c"
+#line 2499 "yaccsrc.c"
     break;
 
   case 19: /* optLabels: optLabels label_stat  */
-#line 210 "./yaccsrc.y"
+#line 210 "yaccsrc.y"
                                        { yyval = optgluelast( yyvsp[-1], yyvsp[0] ); }
-#line 2525 "./yaccsrc.c"
+#line 2505 "yaccsrc.c"
     break;
 
   case 20: /* optLabels: %empty  */
-#line 211 "./yaccsrc.y"
+#line 211 "yaccsrc.y"
                                        { yyval = NULL; }
-#line 2531 "./yaccsrc.c"
+#line 2511 "yaccsrc.c"
     break;
 
   case 23: /* gruff: %empty  */
-#line 218 "./yaccsrc.y"
+#line 218 "yaccsrc.y"
                                        { tmpchr=parser_data.tstart;
                                          tmplno=parser_data.tline; }
-#line 2538 "./yaccsrc.c"
+#line 2518 "yaccsrc.c"
     break;
 
   case 24: /* mttstatement: gruff mtstatement  */
-#line 222 "./yaccsrc.y"
+#line 222 "yaccsrc.y"
                                        { yyval=yyvsp[0]; }
-#line 2544 "./yaccsrc.c"
+#line 2524 "yaccsrc.c"
     break;
 
   case 25: /* mtstatement: nclstatement ncl  */
-#line 225 "./yaccsrc.y"
+#line 225 "yaccsrc.y"
                                        { yyval = optgluelast( yyvsp[-1], yyvsp[0] ); }
-#line 2550 "./yaccsrc.c"
+#line 2530 "yaccsrc.c"
     break;
 
   case 64: /* call: CALL  */
-#line 268 "./yaccsrc.y"
+#line 268 "yaccsrc.y"
                                        { yyval = makenode(X_CALL,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2558 "./yaccsrc.c"
+#line 2538 "yaccsrc.c"
     break;
 
   case 65: /* do: DO  */
-#line 272 "./yaccsrc.y"
+#line 272 "yaccsrc.y"
                                        { yyval = makenode(X_DO,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ;
                                          level++; }
-#line 2567 "./yaccsrc.c"
+#line 2547 "yaccsrc.c"
     break;
 
   case 66: /* exit: EXIT  */
-#line 277 "./yaccsrc.y"
+#line 277 "yaccsrc.y"
                                        { yyval = makenode(X_EXIT,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2575 "./yaccsrc.c"
+#line 2555 "yaccsrc.c"
     break;
 
   case 67: /* if: IF  */
-#line 281 "./yaccsrc.y"
+#line 281 "yaccsrc.y"
                                        { yyval = makenode(X_IF,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ;
                                          level++; }
-#line 2584 "./yaccsrc.c"
+#line 2564 "yaccsrc.c"
     break;
 
   case 68: /* iterate: ITERATE  */
-#line 286 "./yaccsrc.y"
+#line 286 "yaccsrc.y"
                                        { yyval = makenode(X_ITERATE,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2592 "./yaccsrc.c"
+#line 2572 "yaccsrc.c"
     break;
 
   case 69: /* leave: LEAVE  */
-#line 290 "./yaccsrc.y"
+#line 290 "yaccsrc.y"
                                        { yyval = makenode(X_LEAVE,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2600 "./yaccsrc.c"
+#line 2580 "yaccsrc.c"
     break;
 
   case 70: /* say: SAY  */
-#line 294 "./yaccsrc.y"
+#line 294 "yaccsrc.y"
                                        { yyval = makenode(X_SAY,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2608 "./yaccsrc.c"
+#line 2588 "yaccsrc.c"
     break;
 
   case 71: /* return: RETURN  */
-#line 298 "./yaccsrc.y"
+#line 298 "yaccsrc.y"
                                        { yyval = makenode(X_RETURN,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2616 "./yaccsrc.c"
+#line 2596 "yaccsrc.c"
     break;
 
   case 72: /* address: ADDRESS  */
-#line 302 "./yaccsrc.y"
+#line 302 "yaccsrc.y"
                                        { yyval = makenode(X_ADDR_N,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2624 "./yaccsrc.c"
+#line 2604 "yaccsrc.c"
     break;
 
   case 73: /* arg: ARG  */
-#line 306 "./yaccsrc.y"
+#line 306 "yaccsrc.y"
                                        { yyval = makenode(X_PARSE_ARG,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2632 "./yaccsrc.c"
+#line 2612 "yaccsrc.c"
     break;
 
   case 74: /* drop: DROP  */
-#line 310 "./yaccsrc.y"
+#line 310 "yaccsrc.y"
                                        { yyval = makenode(X_DROP,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2640 "./yaccsrc.c"
+#line 2620 "yaccsrc.c"
     break;
 
   case 75: /* interpret: INTERPRET  */
-#line 314 "./yaccsrc.y"
+#line 314 "yaccsrc.y"
                                        { yyval = makenode(X_IPRET,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2648 "./yaccsrc.c"
+#line 2628 "yaccsrc.c"
     break;
 
   case 76: /* label: LABEL  */
-#line 318 "./yaccsrc.y"
+#line 318 "yaccsrc.y"
                                        { yyval = makenode(X_LABEL,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2656 "./yaccsrc.c"
+#line 2636 "yaccsrc.c"
     break;
 
   case 77: /* nop: NOP  */
-#line 322 "./yaccsrc.y"
+#line 322 "yaccsrc.y"
                                        { yyval = makenode(X_NULL,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2664 "./yaccsrc.c"
+#line 2644 "yaccsrc.c"
     break;
 
   case 78: /* numeric: NUMERIC  */
-#line 326 "./yaccsrc.y"
+#line 326 "yaccsrc.y"
                                        { yyval = makenode(0,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2672 "./yaccsrc.c"
+#line 2652 "yaccsrc.c"
     break;
 
   case 79: /* options: OPTIONS  */
-#line 330 "./yaccsrc.y"
+#line 330 "yaccsrc.y"
                                        { yyval = makenode(X_OPTIONS,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2680 "./yaccsrc.c"
+#line 2660 "yaccsrc.c"
     break;
 
   case 80: /* parse: PARSE  */
-#line 334 "./yaccsrc.y"
+#line 334 "yaccsrc.y"
                                        { yyval = makenode(0,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2688 "./yaccsrc.c"
+#line 2668 "yaccsrc.c"
     break;
 
   case 81: /* proc: PROCEDURE  */
-#line 338 "./yaccsrc.y"
+#line 338 "yaccsrc.y"
                                        { yyval = makenode(X_PROC,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2696 "./yaccsrc.c"
+#line 2676 "yaccsrc.c"
     break;
 
   case 82: /* pull: PULL  */
-#line 342 "./yaccsrc.y"
+#line 342 "yaccsrc.y"
                                        { yyval = makenode(X_PULL,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2704 "./yaccsrc.c"
+#line 2684 "yaccsrc.c"
     break;
 
   case 83: /* push: PUSH  */
-#line 346 "./yaccsrc.y"
+#line 346 "yaccsrc.y"
                                        { yyval = makenode(X_PUSH,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2712 "./yaccsrc.c"
+#line 2692 "yaccsrc.c"
     break;
 
   case 84: /* queue: QUEUE  */
-#line 350 "./yaccsrc.y"
+#line 350 "yaccsrc.y"
                                        { yyval = makenode(X_QUEUE,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2720 "./yaccsrc.c"
+#line 2700 "yaccsrc.c"
     break;
 
   case 85: /* select: SELECT  */
-#line 354 "./yaccsrc.y"
+#line 354 "yaccsrc.y"
                                        { yyval = makenode(X_SELECT,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ;
                                          level++; }
-#line 2729 "./yaccsrc.c"
+#line 2709 "yaccsrc.c"
     break;
 
   case 86: /* signal: SIGNAL  */
-#line 359 "./yaccsrc.y"
+#line 359 "yaccsrc.y"
                                        { yyval = makenode(X_SIG_LAB,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2737 "./yaccsrc.c"
+#line 2717 "yaccsrc.c"
     break;
 
   case 87: /* when: WHEN  */
-#line 363 "./yaccsrc.y"
+#line 363 "yaccsrc.y"
                                        { yyval = makenode(X_WHEN,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2745 "./yaccsrc.c"
+#line 2725 "yaccsrc.c"
     break;
 
   case 88: /* otherwise: OTHERWISE  */
-#line 367 "./yaccsrc.y"
+#line 367 "yaccsrc.y"
                                        { yyval = makenode(X_OTHERWISE,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2753 "./yaccsrc.c"
+#line 2733 "yaccsrc.c"
     break;
 
   case 89: /* trace: TRACE  */
-#line 371 "./yaccsrc.y"
+#line 371 "yaccsrc.y"
                                        { yyval = makenode(X_TRACE,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2761 "./yaccsrc.c"
+#line 2741 "yaccsrc.c"
     break;
 
   case 90: /* upper: UPPER  */
-#line 375 "./yaccsrc.y"
+#line 375 "yaccsrc.y"
                                        { yyval = makenode(X_UPPER_VAR,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 2769 "./yaccsrc.c"
+#line 2749 "yaccsrc.c"
     break;
 
   case 91: /* @2: %empty  */
-#line 379 "./yaccsrc.y"
+#line 379 "yaccsrc.y"
                                        { yyval = current = yyvsp[0] ; }
-#line 2775 "./yaccsrc.c"
+#line 2755 "yaccsrc.c"
     break;
 
   case 93: /* address_stat2: VALUE expr naddr_with  */
-#line 383 "./yaccsrc.y"
+#line 383 "yaccsrc.y"
                                        { current->type = X_ADDR_V ;
                                          current->p[0] = yyvsp[-1] ;
                                          current->p[1] = yyvsp[0] ; }
-#line 2783 "./yaccsrc.c"
+#line 2763 "yaccsrc.c"
     break;
 
   case 94: /* address_stat2: addr_with  */
-#line 386 "./yaccsrc.y"
+#line 386 "yaccsrc.y"
                                        { exiterror( ERR_STRING_EXPECTED, 1, __reginatext ) ;}
-#line 2789 "./yaccsrc.c"
+#line 2769 "yaccsrc.c"
     break;
 
   case 95: /* address_stat2: %empty  */
-#line 387 "./yaccsrc.y"
+#line 387 "yaccsrc.y"
                                        { current->type = X_ADDR_S ; }
-#line 2795 "./yaccsrc.c"
+#line 2775 "yaccsrc.c"
     break;
 
   case 96: /* $@3: %empty  */
-#line 388 "./yaccsrc.y"
+#line 388 "yaccsrc.y"
                                        { exiterror( ERR_STRING_EXPECTED, 1, __reginatext ) ;}
-#line 2801 "./yaccsrc.c"
+#line 2781 "yaccsrc.c"
     break;
 
   case 98: /* address_stat2: nvir nexpr naddr_with  */
-#line 390 "./yaccsrc.y"
+#line 390 "yaccsrc.y"
                                        { current->name = (streng *)yyvsp[-2] ;
                                          current->type = X_ADDR_N ;
                                          current->p[0] = yyvsp[-1] ;
                                          current->p[1] = yyvsp[0] ; }
-#line 2810 "./yaccsrc.c"
+#line 2790 "yaccsrc.c"
     break;
 
   case 99: /* address_stat2: '(' expr ')' nspace naddr_with  */
-#line 394 "./yaccsrc.y"
+#line 394 "yaccsrc.y"
                                               { current->type = X_ADDR_V ;
                                          current->p[0] = yyvsp[-3] ;
                                          current->p[1] = yyvsp[0] ;
                                          current->u.nonansi = 1 ; }
-#line 2819 "./yaccsrc.c"
+#line 2799 "yaccsrc.c"
     break;
 
   case 100: /* arg_stat: arg templs  */
-#line 400 "./yaccsrc.y"
+#line 400 "yaccsrc.y"
                                        { yyval = makenode( X_PARSE, 2, yyvsp[-1], yyvsp[0] );
                                          yyval->u.parseflags = PARSE_UPPER;
                                          yyval->lineno = yyvsp[-1]->lineno;
                                          yyval->charnr = yyvsp[-1]->charnr; }
-#line 2828 "./yaccsrc.c"
+#line 2808 "yaccsrc.c"
     break;
 
   case 101: /* $@4: %empty  */
-#line 406 "./yaccsrc.y"
+#line 406 "yaccsrc.y"
                                        { parendepth = start_parendepth; }
-#line 2834 "./yaccsrc.c"
+#line 2814 "yaccsrc.c"
     break;
 
   case 102: /* call_stat: call call_name $@4 call_args  */
-#line 407 "./yaccsrc.y"
+#line 407 "yaccsrc.y"
                                        { yyval = yyvsp[-3];
                                          yyval->p[0] = yyvsp[0];
                                          yyval->name = (streng *) yyvsp[-2];
                                          parendepth = 0; }
-#line 2843 "./yaccsrc.c"
+#line 2823 "yaccsrc.c"
     break;
 
   case 103: /* $@5: %empty  */
-#line 411 "./yaccsrc.y"
+#line 411 "yaccsrc.y"
                                        { parendepth = start_parendepth; }
-#line 2849 "./yaccsrc.c"
+#line 2829 "yaccsrc.c"
     break;
 
   case 104: /* call_stat: call string $@5 call_args  */
-#line 412 "./yaccsrc.y"
+#line 412 "yaccsrc.y"
                                        { yyval = yyvsp[-3];
                                          yyval->type = X_EX_FUNC;
                                          yyval->p[0] = yyvsp[0];
                                          yyval->name = (streng *) yyvsp[-2];
                                          parendepth = 0; }
-#line 2859 "./yaccsrc.c"
+#line 2839 "yaccsrc.c"
     break;
 
   case 105: /* call_stat: call on error  */
-#line 417 "./yaccsrc.y"
+#line 417 "yaccsrc.y"
                              { exiterror( ERR_INV_SUBKEYWORD, 1, "ERROR FAILURE HALT NOTREADY", __reginatext ) ;}
-#line 2865 "./yaccsrc.c"
+#line 2845 "yaccsrc.c"
     break;
 
   case 106: /* call_stat: call off error  */
-#line 418 "./yaccsrc.y"
+#line 418 "yaccsrc.y"
                               { exiterror( ERR_INV_SUBKEYWORD, 2, "ERROR FAILURE HALT NOTREADY", __reginatext ) ;}
-#line 2871 "./yaccsrc.c"
+#line 2851 "yaccsrc.c"
     break;
 
   case 107: /* call_stat: call on c_action error  */
-#line 419 "./yaccsrc.y"
+#line 419 "yaccsrc.y"
                                       { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 2877 "./yaccsrc.c"
+#line 2857 "yaccsrc.c"
     break;
 
   case 108: /* call_stat: call on c_action namespec error  */
-#line 420 "./yaccsrc.y"
+#line 420 "yaccsrc.y"
                                                { exiterror( ERR_STRING_EXPECTED, 3, __reginatext ) ;}
-#line 2883 "./yaccsrc.c"
+#line 2863 "yaccsrc.c"
     break;
 
   case 109: /* call_stat: call on c_action namespec  */
-#line 422 "./yaccsrc.y"
+#line 422 "yaccsrc.y"
                                        { yyval = yyvsp[-3] ;
                                          yyval->type = X_CALL_SET ;
                                          yyval->p[0] = yyvsp[-2] ;
                                          yyval->name = (streng *)yyvsp[0] ;
                                          yyval->p[1] = yyvsp[-1] ; }
-#line 2893 "./yaccsrc.c"
+#line 2873 "yaccsrc.c"
     break;
 
   case 110: /* call_stat: call on c_action  */
-#line 427 "./yaccsrc.y"
+#line 427 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->type = X_CALL_SET ;
                                          yyval->p[0] = yyvsp[-1] ;
                                          yyval->name = NULL ;
                                          yyval->p[1] = yyvsp[0] ; }
-#line 2903 "./yaccsrc.c"
+#line 2883 "yaccsrc.c"
     break;
 
   case 111: /* call_stat: call off c_action error  */
-#line 432 "./yaccsrc.y"
+#line 432 "yaccsrc.y"
                                        { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 2909 "./yaccsrc.c"
+#line 2889 "yaccsrc.c"
     break;
 
   case 112: /* call_stat: call off c_action  */
-#line 433 "./yaccsrc.y"
+#line 433 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->type = X_CALL_SET ;
                                          yyval->p[0] = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ; }
-#line 2918 "./yaccsrc.c"
+#line 2898 "yaccsrc.c"
     break;
 
   case 113: /* call_name: asymbol  */
-#line 439 "./yaccsrc.y"
+#line 439 "yaccsrc.y"
                                        { yyval = yyvsp[0]; }
-#line 2924 "./yaccsrc.c"
+#line 2904 "yaccsrc.c"
     break;
 
   case 114: /* call_name: error  */
-#line 440 "./yaccsrc.y"
+#line 440 "yaccsrc.y"
                                        { exiterror( ERR_STRING_EXPECTED, 2, __reginatext );}
-#line 2930 "./yaccsrc.c"
+#line 2910 "yaccsrc.c"
     break;
 
   case 115: /* call_args: exprs  */
-#line 443 "./yaccsrc.y"
+#line 443 "yaccsrc.y"
                                        {
                                          /*
                                           * "call_args" accepted probably with
@@ -2939,54 +2919,54 @@ yyreduce:
                                          yyval = reduce_expr_list( yyvsp[0],
                                                                 REDUCE_CALL );
                                        }
-#line 2943 "./yaccsrc.c"
+#line 2923 "yaccsrc.c"
     break;
 
   case 116: /* call_args: exprs ')'  */
-#line 451 "./yaccsrc.y"
+#line 451 "yaccsrc.y"
                                        { exiterror(ERR_UNEXPECTED_PARAN, 2); }
-#line 2949 "./yaccsrc.c"
+#line 2929 "yaccsrc.c"
     break;
 
   case 117: /* expr_stat: expr  */
-#line 454 "./yaccsrc.y"
+#line 454 "yaccsrc.y"
                                        { yyval = makenode(X_COMMAND,0) ;
                                          yyval->charnr = tmpchr ;
                                          yyval->lineno = tmplno;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 2958 "./yaccsrc.c"
+#line 2938 "yaccsrc.c"
     break;
 
   case 118: /* end_stat: END  */
-#line 460 "./yaccsrc.y"
+#line 460 "yaccsrc.y"
                                        { yyval = makenode(X_END,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ;
                                          level--; }
-#line 2967 "./yaccsrc.c"
+#line 2947 "yaccsrc.c"
     break;
 
   case 119: /* end: end_stat simsymb  */
-#line 466 "./yaccsrc.y"
+#line 466 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->name = (streng*)(yyvsp[0]) ; }
-#line 2974 "./yaccsrc.c"
+#line 2954 "yaccsrc.c"
     break;
 
   case 120: /* end: end_stat  */
-#line 468 "./yaccsrc.y"
+#line 468 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 2980 "./yaccsrc.c"
+#line 2960 "yaccsrc.c"
     break;
 
   case 121: /* end: end_stat simsymb error  */
-#line 469 "./yaccsrc.y"
+#line 469 "yaccsrc.y"
                                        {  exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 2986 "./yaccsrc.c"
+#line 2966 "yaccsrc.c"
     break;
 
   case 122: /* do_stat: do repetitor conditional ncl nxstats end  */
-#line 473 "./yaccsrc.y"
+#line 473 "yaccsrc.y"
                                        { yyval = yyvsp[-5];
                                          yyval->p[0] = yyvsp[-4];
                                          yyval->p[1] = yyvsp[-3];
@@ -3005,234 +2985,234 @@ yyreduce:
                                         yyval->p[0]->name->len))))
                                             exiterror( ERR_UNMATCHED_END, 0 );
                                        }
-#line 3009 "./yaccsrc.c"
+#line 2989 "yaccsrc.c"
     break;
 
   case 123: /* repetitor: dovar '=' expr nspace tobyfor tobyfor tobyfor  */
-#line 494 "./yaccsrc.y"
+#line 494 "yaccsrc.y"
                                        { yyval =makenode(X_REP,4,yyvsp[-4],yyvsp[-2],yyvsp[-1],yyvsp[0]) ;
                                          yyval->name = (streng *)yyvsp[-6] ;
                                          checkdosyntax(yyval) ; }
-#line 3017 "./yaccsrc.c"
+#line 2997 "yaccsrc.c"
     break;
 
   case 124: /* repetitor: dovar '=' expr nspace tobyfor tobyfor  */
-#line 498 "./yaccsrc.y"
+#line 498 "yaccsrc.y"
                                        { yyval =makenode(X_REP,3,yyvsp[-3],yyvsp[-1],yyvsp[0]) ;
                                          yyval->name = (streng *)yyvsp[-5] ;
                                          checkdosyntax(yyval) ; }
-#line 3025 "./yaccsrc.c"
+#line 3005 "yaccsrc.c"
     break;
 
   case 125: /* repetitor: dovar '=' expr nspace tobyfor  */
-#line 502 "./yaccsrc.y"
+#line 502 "yaccsrc.y"
                                        { yyval = makenode(X_REP,2,yyvsp[-2],yyvsp[0]) ;
                                          yyval->name = (streng *)yyvsp[-4] ;
                                          checkdosyntax(yyval) ; }
-#line 3033 "./yaccsrc.c"
+#line 3013 "yaccsrc.c"
     break;
 
   case 126: /* repetitor: dovar '=' expr nspace  */
-#line 505 "./yaccsrc.y"
+#line 505 "yaccsrc.y"
                                        { yyval = makenode(X_REP,1,yyvsp[-1]) ;
                                          yyval->name = (streng *)yyvsp[-3] ;
                                          checkdosyntax(yyval) ; }
-#line 3041 "./yaccsrc.c"
+#line 3021 "yaccsrc.c"
     break;
 
   case 127: /* repetitor: FOREVER nspace  */
-#line 508 "./yaccsrc.y"
+#line 508 "yaccsrc.y"
                                        { yyval = makenode(X_REP_FOREVER,0) ; }
-#line 3047 "./yaccsrc.c"
+#line 3027 "yaccsrc.c"
     break;
 
   case 128: /* repetitor: FOREVER error  */
-#line 509 "./yaccsrc.y"
+#line 509 "yaccsrc.y"
                              { exiterror( ERR_INV_SUBKEYWORD, 16, "WHILE UNTIL", __reginatext ) ; }
-#line 3053 "./yaccsrc.c"
+#line 3033 "yaccsrc.c"
     break;
 
   case 129: /* repetitor: expr nspace  */
-#line 510 "./yaccsrc.y"
+#line 510 "yaccsrc.y"
                                        { yyvsp[-1] = makenode(X_DO_EXPR,1,yyvsp[-1]) ;
                                          yyval = makenode(X_REP,2,NULL,yyvsp[-1]) ; }
-#line 3060 "./yaccsrc.c"
+#line 3040 "yaccsrc.c"
     break;
 
   case 130: /* repetitor: %empty  */
-#line 512 "./yaccsrc.y"
+#line 512 "yaccsrc.y"
                                        { yyval = NULL ; }
-#line 3066 "./yaccsrc.c"
+#line 3046 "yaccsrc.c"
     break;
 
   case 131: /* nvir: CONSYMBOL  */
-#line 515 "./yaccsrc.y"
+#line 515 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 3072 "./yaccsrc.c"
+#line 3052 "yaccsrc.c"
     break;
 
   case 132: /* nvir: SIMSYMBOL  */
-#line 516 "./yaccsrc.y"
+#line 516 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 3078 "./yaccsrc.c"
+#line 3058 "yaccsrc.c"
     break;
 
   case 133: /* nvir: STRING  */
-#line 517 "./yaccsrc.y"
+#line 517 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 3084 "./yaccsrc.c"
+#line 3064 "yaccsrc.c"
     break;
 
   case 134: /* @6: %empty  */
-#line 520 "./yaccsrc.y"
+#line 520 "yaccsrc.y"
                                        { SymbolDetect |= SD_ADDRWITH ;
                                          yyval = with = makenode(X_ADDR_WITH,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 3093 "./yaccsrc.c"
+#line 3073 "yaccsrc.c"
     break;
 
   case 135: /* naddr_with: @6 addr_with  */
-#line 524 "./yaccsrc.y"
+#line 524 "yaccsrc.y"
                                        { with = NULL ;
                                          SymbolDetect &= ~SD_ADDRWITH ; }
-#line 3100 "./yaccsrc.c"
+#line 3080 "yaccsrc.c"
     break;
 
   case 136: /* naddr_with: %empty  */
-#line 526 "./yaccsrc.y"
+#line 526 "yaccsrc.y"
                                        { yyval = NULL ; }
-#line 3106 "./yaccsrc.c"
+#line 3086 "yaccsrc.c"
     break;
 
   case 137: /* addr_with: WITH connection  */
-#line 529 "./yaccsrc.y"
+#line 529 "yaccsrc.y"
                                        { yyval = yyvsp[0]; }
-#line 3112 "./yaccsrc.c"
+#line 3092 "yaccsrc.c"
     break;
 
   case 138: /* addr_with: WITH connection error  */
-#line 530 "./yaccsrc.y"
+#line 530 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 5, __reginatext ) ; }
-#line 3118 "./yaccsrc.c"
+#line 3098 "yaccsrc.c"
     break;
 
   case 139: /* addr_with: WITH nspace  */
-#line 531 "./yaccsrc.y"
+#line 531 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 5, __reginatext ) ; }
-#line 3124 "./yaccsrc.c"
+#line 3104 "yaccsrc.c"
     break;
 
   case 143: /* connection: error  */
-#line 537 "./yaccsrc.y"
+#line 537 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 5, __reginatext ) ; }
-#line 3130 "./yaccsrc.c"
+#line 3110 "yaccsrc.c"
     break;
 
   case 162: /* inputstmt: nspace INPUT nspace resourcei  */
-#line 573 "./yaccsrc.y"
+#line 573 "yaccsrc.y"
                                              { with->p[0] = yyvsp[0]; }
-#line 3136 "./yaccsrc.c"
+#line 3116 "yaccsrc.c"
     break;
 
   case 163: /* inputstmt: nspace INPUT error  */
-#line 574 "./yaccsrc.y"
+#line 574 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 6, __reginatext ) ; }
-#line 3142 "./yaccsrc.c"
+#line 3122 "yaccsrc.c"
     break;
 
   case 164: /* outputstmt: nspace OUTPUT nspace resourceo  */
-#line 577 "./yaccsrc.y"
+#line 577 "yaccsrc.y"
                                               { with->p[1] = yyvsp[0]; }
-#line 3148 "./yaccsrc.c"
+#line 3128 "yaccsrc.c"
     break;
 
   case 165: /* outputstmt: nspace OUTPUT error  */
-#line 578 "./yaccsrc.y"
+#line 578 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 7, __reginatext ) ; }
-#line 3154 "./yaccsrc.c"
+#line 3134 "yaccsrc.c"
     break;
 
   case 166: /* errorstmt: nspace ERROR nspace resourceo  */
-#line 581 "./yaccsrc.y"
+#line 581 "yaccsrc.y"
                                              { with->p[2] = yyvsp[0]; }
-#line 3160 "./yaccsrc.c"
+#line 3140 "yaccsrc.c"
     break;
 
   case 167: /* errorstmt: nspace ERROR error  */
-#line 582 "./yaccsrc.y"
+#line 582 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 14, __reginatext ) ; }
-#line 3166 "./yaccsrc.c"
+#line 3146 "yaccsrc.c"
     break;
 
   case 168: /* resourcei: resources  */
-#line 585 "./yaccsrc.y"
+#line 585 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3172 "./yaccsrc.c"
+#line 3152 "yaccsrc.c"
     break;
 
   case 169: /* resourcei: NOEOL resources  */
-#line 586 "./yaccsrc.y"
+#line 586 "yaccsrc.y"
                                        { yyval = yyvsp[0] ;
                                          yyval->u.of.noeol = 1 ; }
-#line 3179 "./yaccsrc.c"
+#line 3159 "yaccsrc.c"
     break;
 
   case 170: /* resourcei: NOEOL error  */
-#line 588 "./yaccsrc.y"
+#line 588 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 8, __reginatext ) ; }
-#line 3185 "./yaccsrc.c"
+#line 3165 "yaccsrc.c"
     break;
 
   case 171: /* resourcei: NORMAL  */
-#line 589 "./yaccsrc.y"
+#line 589 "yaccsrc.y"
                                        { yyval = makenode(X_ADDR_WITH, 0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 3193 "./yaccsrc.c"
+#line 3173 "yaccsrc.c"
     break;
 
   case 172: /* resourceo: resources  */
-#line 594 "./yaccsrc.y"
+#line 594 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3199 "./yaccsrc.c"
+#line 3179 "yaccsrc.c"
     break;
 
   case 173: /* resourceo: APPEND resources  */
-#line 595 "./yaccsrc.y"
+#line 595 "yaccsrc.y"
                                        { yyval = yyvsp[0] ;
                                          yyval->u.of.append = 1 ; }
-#line 3206 "./yaccsrc.c"
+#line 3186 "yaccsrc.c"
     break;
 
   case 174: /* resourceo: APPEND error  */
-#line 597 "./yaccsrc.y"
+#line 597 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 8, __reginatext ) ; }
-#line 3212 "./yaccsrc.c"
+#line 3192 "yaccsrc.c"
     break;
 
   case 175: /* resourceo: REPLACE resources  */
-#line 598 "./yaccsrc.y"
+#line 598 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3218 "./yaccsrc.c"
+#line 3198 "yaccsrc.c"
     break;
 
   case 176: /* resourceo: REPLACE error  */
-#line 599 "./yaccsrc.y"
+#line 599 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 9, __reginatext ) ; }
-#line 3224 "./yaccsrc.c"
+#line 3204 "yaccsrc.c"
     break;
 
   case 177: /* resourceo: NORMAL  */
-#line 600 "./yaccsrc.y"
+#line 600 "yaccsrc.y"
                                        { yyval = makenode(X_ADDR_WITH, 0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 3232 "./yaccsrc.c"
+#line 3212 "yaccsrc.c"
     break;
 
   case 178: /* resources: STREAM nnvir  */
-#line 605 "./yaccsrc.y"
+#line 605 "yaccsrc.y"
                                        { /* ANSI extension: nsimsymb is
                                           * used by the standard, but I think
                                           * there are no reasons why using
@@ -3241,17 +3221,17 @@ yyreduce:
                                          yyval = yyvsp[0] ;
                                          yyval->u.of.awt = awtSTREAM;
                                          SymbolDetect |= SD_ADDRWITH ; }
-#line 3245 "./yaccsrc.c"
+#line 3225 "yaccsrc.c"
     break;
 
   case 179: /* resources: STREAM error  */
-#line 613 "./yaccsrc.y"
+#line 613 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_OPTION, 1, __reginatext ) ; }
-#line 3251 "./yaccsrc.c"
+#line 3231 "yaccsrc.c"
     break;
 
   case 180: /* resources: STEM nsimsymb  */
-#line 614 "./yaccsrc.y"
+#line 614 "yaccsrc.y"
                                        {
                                          streng *tmp = yyvsp[0]->name;
                                          char *p;
@@ -3265,180 +3245,180 @@ yyreduce:
                                          yyval = yyvsp[0] ;
                                          yyval->u.of.awt = awtSTEM ;
                                          SymbolDetect |= SD_ADDRWITH ; }
-#line 3269 "./yaccsrc.c"
+#line 3249 "yaccsrc.c"
     break;
 
   case 181: /* resources: STEM error  */
-#line 627 "./yaccsrc.y"
+#line 627 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_OPTION, 2, __reginatext ) ; }
-#line 3275 "./yaccsrc.c"
+#line 3255 "yaccsrc.c"
     break;
 
   case 182: /* resources: LIFO nnvir  */
-#line 628 "./yaccsrc.y"
+#line 628 "yaccsrc.y"
                                        {
                                          yyval = yyvsp[0] ;
                                          yyval->u.of.awt = awtLIFO ;
                                          SymbolDetect |= SD_ADDRWITH ; }
-#line 3284 "./yaccsrc.c"
+#line 3264 "yaccsrc.c"
     break;
 
   case 183: /* resources: LIFO error  */
-#line 632 "./yaccsrc.y"
+#line 632 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_OPTION, 100, __reginatext ) ; }
-#line 3290 "./yaccsrc.c"
+#line 3270 "yaccsrc.c"
     break;
 
   case 184: /* resources: FIFO nnvir  */
-#line 633 "./yaccsrc.y"
+#line 633 "yaccsrc.y"
                                        {
                                          yyval = yyvsp[0] ;
                                          yyval->u.of.awt = awtFIFO ;
                                          SymbolDetect |= SD_ADDRWITH ; }
-#line 3299 "./yaccsrc.c"
+#line 3279 "yaccsrc.c"
     break;
 
   case 185: /* resources: FIFO error  */
-#line 637 "./yaccsrc.y"
+#line 637 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_OPTION, 101, __reginatext ) ; }
-#line 3305 "./yaccsrc.c"
+#line 3285 "yaccsrc.c"
     break;
 
   case 186: /* $@7: %empty  */
-#line 640 "./yaccsrc.y"
+#line 640 "yaccsrc.y"
                                        { SymbolDetect &= ~SD_ADDRWITH ; }
-#line 3311 "./yaccsrc.c"
+#line 3291 "yaccsrc.c"
     break;
 
   case 187: /* nsimsymb: $@7 nspace addrSim  */
-#line 641 "./yaccsrc.y"
+#line 641 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3317 "./yaccsrc.c"
+#line 3297 "yaccsrc.c"
     break;
 
   case 188: /* $@8: %empty  */
-#line 644 "./yaccsrc.y"
+#line 644 "yaccsrc.y"
                                        { SymbolDetect &= ~SD_ADDRWITH ; }
-#line 3323 "./yaccsrc.c"
+#line 3303 "yaccsrc.c"
     break;
 
   case 189: /* nnvir: $@8 nspace addrAll  */
-#line 645 "./yaccsrc.y"
+#line 645 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3329 "./yaccsrc.c"
+#line 3309 "yaccsrc.c"
     break;
 
   case 192: /* addrAll: addrSim  */
-#line 652 "./yaccsrc.y"
+#line 652 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3335 "./yaccsrc.c"
+#line 3315 "yaccsrc.c"
     break;
 
   case 193: /* addrAll: addrString  */
-#line 653 "./yaccsrc.y"
+#line 653 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3341 "./yaccsrc.c"
+#line 3321 "yaccsrc.c"
     break;
 
   case 194: /* addrSim: xsimsymb  */
-#line 656 "./yaccsrc.y"
+#line 656 "yaccsrc.y"
                                        { yyval = makenode(X_ADDR_WITH, 0) ;
                                          yyval->name = (streng *) yyvsp[0] ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->u.of.ant = antSIMSYMBOL;
                                        }
-#line 3352 "./yaccsrc.c"
+#line 3332 "yaccsrc.c"
     break;
 
   case 195: /* addrString: string  */
-#line 664 "./yaccsrc.y"
+#line 664 "yaccsrc.y"
                                        { yyval = makenode(X_ADDR_WITH, 0) ;
                                          yyval->name = (streng *) yyvsp[0] ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->u.of.ant = antSTRING;
                                        }
-#line 3363 "./yaccsrc.c"
+#line 3343 "yaccsrc.c"
     break;
 
   case 196: /* dovar: DOVARIABLE  */
-#line 672 "./yaccsrc.y"
+#line 672 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 3369 "./yaccsrc.c"
+#line 3349 "yaccsrc.c"
     break;
 
   case 197: /* tobyfor: TO expr nspace  */
-#line 675 "./yaccsrc.y"
+#line 675 "yaccsrc.y"
                                        { yyval = makenode(X_DO_TO,1,yyvsp[-1]) ; }
-#line 3375 "./yaccsrc.c"
+#line 3355 "yaccsrc.c"
     break;
 
   case 198: /* tobyfor: FOR expr nspace  */
-#line 676 "./yaccsrc.y"
+#line 676 "yaccsrc.y"
                                        { yyval = makenode(X_DO_FOR,1,yyvsp[-1]) ; }
-#line 3381 "./yaccsrc.c"
+#line 3361 "yaccsrc.c"
     break;
 
   case 199: /* tobyfor: BY expr nspace  */
-#line 677 "./yaccsrc.y"
+#line 677 "yaccsrc.y"
                                        { yyval = makenode(X_DO_BY,1,yyvsp[-1]) ; }
-#line 3387 "./yaccsrc.c"
+#line 3367 "yaccsrc.c"
     break;
 
   case 200: /* conditional: WHILE expr nspace  */
-#line 680 "./yaccsrc.y"
+#line 680 "yaccsrc.y"
                                        { yyval = makenode(X_WHILE,1,yyvsp[-1]) ; }
-#line 3393 "./yaccsrc.c"
+#line 3373 "yaccsrc.c"
     break;
 
   case 201: /* conditional: UNTIL expr nspace  */
-#line 681 "./yaccsrc.y"
+#line 681 "yaccsrc.y"
                                        { yyval = makenode(X_UNTIL,1,yyvsp[-1]) ; }
-#line 3399 "./yaccsrc.c"
+#line 3379 "yaccsrc.c"
     break;
 
   case 202: /* conditional: %empty  */
-#line 682 "./yaccsrc.y"
+#line 682 "yaccsrc.y"
                                        { yyval = NULL ; }
-#line 3405 "./yaccsrc.c"
+#line 3385 "yaccsrc.c"
     break;
 
   case 203: /* drop_stat: drop anyvars error  */
-#line 685 "./yaccsrc.y"
+#line 685 "yaccsrc.y"
                                   { exiterror( ERR_SYMBOL_EXPECTED, 1, __reginatext ) ;}
-#line 3411 "./yaccsrc.c"
+#line 3391 "yaccsrc.c"
     break;
 
   case 204: /* drop_stat: drop anyvars  */
-#line 686 "./yaccsrc.y"
+#line 686 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3418 "./yaccsrc.c"
+#line 3398 "yaccsrc.c"
     break;
 
   case 205: /* upper_stat: upper anyvars error  */
-#line 690 "./yaccsrc.y"
+#line 690 "yaccsrc.y"
                                    { exiterror( ERR_SYMBOL_EXPECTED, 1, __reginatext ) ;}
-#line 3424 "./yaccsrc.c"
+#line 3404 "yaccsrc.c"
     break;
 
   case 206: /* upper_stat: upper anyvars  */
-#line 691 "./yaccsrc.y"
+#line 691 "yaccsrc.y"
                                         { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3431 "./yaccsrc.c"
+#line 3411 "yaccsrc.c"
     break;
 
   case 207: /* exit_stat: exit nexpr  */
-#line 695 "./yaccsrc.y"
+#line 695 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3438 "./yaccsrc.c"
+#line 3418 "yaccsrc.c"
     break;
 
   case 208: /* if_stat: if expr nlncl THEN nlncl ystatement  */
-#line 700 "./yaccsrc.y"
+#line 700 "yaccsrc.y"
                                        { move_labels( yyvsp[-5], yyvsp[0], level - 1 );
                                          yyval = yyvsp[-5];
                                          yyval->p[0] = optgluelast( yyvsp[-4], yyvsp[-3] );
@@ -3446,11 +3426,11 @@ yyreduce:
                                          yyval->p[1] = optgluelast( yyvsp[-1], yyvsp[0] );
                                          yyval->p[1]->o.last = NULL;
                                          level--; }
-#line 3450 "./yaccsrc.c"
+#line 3430 "yaccsrc.c"
     break;
 
   case 209: /* if_stat: if expr nlncl THEN nlncl ystatement ELSE nlncl ystatement  */
-#line 708 "./yaccsrc.y"
+#line 708 "yaccsrc.y"
                                        { move_labels( yyvsp[-8], yyvsp[0], level - 1 );
                                          yyval = yyvsp[-8];
                                          yyval->p[0] = optgluelast( yyvsp[-7], yyvsp[-6] );
@@ -3460,775 +3440,775 @@ yyreduce:
                                          yyval->p[2] = optgluelast( yyvsp[-1], yyvsp[0] );
                                          yyval->p[2]->o.last = NULL;
                                          level--; }
-#line 3464 "./yaccsrc.c"
+#line 3444 "yaccsrc.c"
     break;
 
   case 210: /* if_stat: if expr nlncl THEN nlncl ystatement ELSE nlncl error  */
-#line 718 "./yaccsrc.y"
+#line 718 "yaccsrc.y"
                                        {  exiterror( ERR_INCOMPLETE_STRUCT, 4 ) ;}
-#line 3470 "./yaccsrc.c"
+#line 3450 "yaccsrc.c"
     break;
 
   case 211: /* if_stat: if expr nlncl THEN nlncl error  */
-#line 720 "./yaccsrc.y"
+#line 720 "yaccsrc.y"
                                        {  exiterror( ERR_INCOMPLETE_STRUCT, 3 ) ;}
-#line 3476 "./yaccsrc.c"
+#line 3456 "yaccsrc.c"
     break;
 
   case 212: /* if_stat: if ncl  */
-#line 721 "./yaccsrc.y"
+#line 721 "yaccsrc.y"
                                        {  exiterror( ERR_INCOMPLETE_STRUCT, 0 ) ;}
-#line 3482 "./yaccsrc.c"
+#line 3462 "yaccsrc.c"
     break;
 
   case 213: /* if_stat: if expr nlncl error  */
-#line 722 "./yaccsrc.y"
+#line 722 "yaccsrc.y"
                                        {  exiterror( ERR_THEN_EXPECTED, 1, parser_data.if_linenr, __reginatext )  ; }
-#line 3488 "./yaccsrc.c"
+#line 3468 "yaccsrc.c"
     break;
 
   case 214: /* unexp_then: gruff THEN  */
-#line 725 "./yaccsrc.y"
+#line 725 "yaccsrc.y"
                                        {  exiterror( ERR_THEN_UNEXPECTED, 1 )  ; }
-#line 3494 "./yaccsrc.c"
+#line 3474 "yaccsrc.c"
     break;
 
   case 215: /* unexp_else: gruff ELSE  */
-#line 728 "./yaccsrc.y"
+#line 728 "yaccsrc.y"
                                        {  exiterror( ERR_THEN_UNEXPECTED, 2 )  ; }
-#line 3500 "./yaccsrc.c"
+#line 3480 "yaccsrc.c"
     break;
 
   case 216: /* ipret_stat: interpret expr  */
-#line 731 "./yaccsrc.y"
+#line 731 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3507 "./yaccsrc.c"
+#line 3487 "yaccsrc.c"
     break;
 
   case 217: /* iterate_stat: iterate simsymb  */
-#line 736 "./yaccsrc.y"
+#line 736 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 3514 "./yaccsrc.c"
+#line 3494 "yaccsrc.c"
     break;
 
   case 218: /* iterate_stat: iterate simsymb error  */
-#line 738 "./yaccsrc.y"
+#line 738 "yaccsrc.y"
                                      { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 3520 "./yaccsrc.c"
+#line 3500 "yaccsrc.c"
     break;
 
   case 219: /* iterate_stat: iterate  */
-#line 739 "./yaccsrc.y"
+#line 739 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3526 "./yaccsrc.c"
+#line 3506 "yaccsrc.c"
     break;
 
   case 220: /* label_stat: labelname  */
-#line 742 "./yaccsrc.y"
+#line 742 "yaccsrc.y"
                                        { yyval = yyvsp[0] ;
                                          yyval->u.trace_only =
                                                          (level == 0) ? 0 : 1;
                                          newlabel( (const tsd_t *)parser_data.TSD,
                                                    &parser_data,
                                                    yyvsp[0] ) ; }
-#line 3537 "./yaccsrc.c"
+#line 3517 "yaccsrc.c"
     break;
 
   case 221: /* labelname: label  */
-#line 750 "./yaccsrc.y"
+#line 750 "yaccsrc.y"
                                        { yyval = yyvsp[0] ;
                                          yyval->name = Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 3544 "./yaccsrc.c"
+#line 3524 "yaccsrc.c"
     break;
 
   case 222: /* leave_stat: leave simsymb  */
-#line 754 "./yaccsrc.y"
+#line 754 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 3551 "./yaccsrc.c"
+#line 3531 "yaccsrc.c"
     break;
 
   case 223: /* leave_stat: leave simsymb error  */
-#line 756 "./yaccsrc.y"
+#line 756 "yaccsrc.y"
                                    { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 3557 "./yaccsrc.c"
+#line 3537 "yaccsrc.c"
     break;
 
   case 224: /* leave_stat: leave  */
-#line 757 "./yaccsrc.y"
+#line 757 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3563 "./yaccsrc.c"
+#line 3543 "yaccsrc.c"
     break;
 
   case 225: /* nop_stat: nop  */
-#line 760 "./yaccsrc.y"
+#line 760 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3569 "./yaccsrc.c"
+#line 3549 "yaccsrc.c"
     break;
 
   case 226: /* nop_stat: nop error  */
-#line 761 "./yaccsrc.y"
+#line 761 "yaccsrc.y"
                          {  exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 3575 "./yaccsrc.c"
+#line 3555 "yaccsrc.c"
     break;
 
   case 227: /* numeric_stat: numeric DIGITS expr  */
-#line 764 "./yaccsrc.y"
+#line 764 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->type = X_NUM_D ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3583 "./yaccsrc.c"
+#line 3563 "yaccsrc.c"
     break;
 
   case 228: /* numeric_stat: numeric DIGITS  */
-#line 767 "./yaccsrc.y"
+#line 767 "yaccsrc.y"
                                        { yyval = yyvsp[-1]; yyval->type = X_NUM_DDEF ; }
-#line 3589 "./yaccsrc.c"
+#line 3569 "yaccsrc.c"
     break;
 
   case 229: /* numeric_stat: numeric FORM form_expr error  */
-#line 768 "./yaccsrc.y"
+#line 768 "yaccsrc.y"
                                             { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 3595 "./yaccsrc.c"
+#line 3575 "yaccsrc.c"
     break;
 
   case 230: /* numeric_stat: numeric FORM form_expr  */
-#line 769 "./yaccsrc.y"
+#line 769 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->type = X_NUM_F ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3603 "./yaccsrc.c"
+#line 3583 "yaccsrc.c"
     break;
 
   case 231: /* numeric_stat: numeric FORM  */
-#line 772 "./yaccsrc.y"
+#line 772 "yaccsrc.y"
                                        { /* NOTE! This clashes ANSI! */
                                          yyval = yyvsp[-1] ; yyval->type=X_NUM_FRMDEF ;}
-#line 3610 "./yaccsrc.c"
+#line 3590 "yaccsrc.c"
     break;
 
   case 232: /* numeric_stat: numeric FORM VALUE expr  */
-#line 774 "./yaccsrc.y"
+#line 774 "yaccsrc.y"
                                        { yyval = yyvsp[-3] ; yyval->type=X_NUM_V ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3617 "./yaccsrc.c"
+#line 3597 "yaccsrc.c"
     break;
 
   case 233: /* numeric_stat: numeric FORM error  */
-#line 776 "./yaccsrc.y"
+#line 776 "yaccsrc.y"
                                   { exiterror( ERR_INV_SUBKEYWORD, 11, "ENGINEERING SCIENTIFIC", __reginatext ) ;}
-#line 3623 "./yaccsrc.c"
+#line 3603 "yaccsrc.c"
     break;
 
   case 234: /* numeric_stat: numeric FUZZ  */
-#line 777 "./yaccsrc.y"
+#line 777 "yaccsrc.y"
                                        { yyval = yyvsp[-1]; yyval->type = X_NUM_FDEF ;}
-#line 3629 "./yaccsrc.c"
+#line 3609 "yaccsrc.c"
     break;
 
   case 235: /* numeric_stat: numeric FUZZ expr  */
-#line 778 "./yaccsrc.y"
+#line 778 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->type = X_NUM_FUZZ ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3637 "./yaccsrc.c"
+#line 3617 "yaccsrc.c"
     break;
 
   case 236: /* numeric_stat: numeric error  */
-#line 781 "./yaccsrc.y"
+#line 781 "yaccsrc.y"
                              { exiterror( ERR_INV_SUBKEYWORD, 15, "DIGITS FORM FUZZ", __reginatext ) ;}
-#line 3643 "./yaccsrc.c"
+#line 3623 "yaccsrc.c"
     break;
 
   case 237: /* form_expr: SCIENTIFIC  */
-#line 784 "./yaccsrc.y"
+#line 784 "yaccsrc.y"
                                        { yyval = makenode(X_NUM_SCI,0) ; }
-#line 3649 "./yaccsrc.c"
+#line 3629 "yaccsrc.c"
     break;
 
   case 238: /* form_expr: ENGINEERING  */
-#line 785 "./yaccsrc.y"
+#line 785 "yaccsrc.y"
                                        { yyval = makenode(X_NUM_ENG,0) ; }
-#line 3655 "./yaccsrc.c"
+#line 3635 "yaccsrc.c"
     break;
 
   case 239: /* options_stat: options nexpr  */
-#line 788 "./yaccsrc.y"
+#line 788 "yaccsrc.y"
                                        { (yyval=yyvsp[-1])->p[0]=yyvsp[0] ; }
-#line 3661 "./yaccsrc.c"
+#line 3641 "yaccsrc.c"
     break;
 
   case 240: /* parse_stat: parse parse_flags parse_param templs  */
-#line 792 "./yaccsrc.y"
+#line 792 "yaccsrc.y"
                                        { yyval = yyvsp[-3] ;
                                          yyval->type = X_PARSE ;
                                          yyval->u.parseflags = (int) yyvsp[-2] ;
                                          yyval->p[0] = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ; }
-#line 3671 "./yaccsrc.c"
+#line 3651 "yaccsrc.c"
     break;
 
   case 241: /* parse_stat: parse parse_param templs  */
-#line 798 "./yaccsrc.y"
+#line 798 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->type = X_PARSE ;
                                          yyval->u.parseflags = 0;
                                          yyval->p[0] = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ; }
-#line 3681 "./yaccsrc.c"
+#line 3661 "yaccsrc.c"
     break;
 
   case 242: /* parse_stat: parse parse_flags error  */
-#line 803 "./yaccsrc.y"
+#line 803 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 12, "ARG EXTERNAL LINEIN PULL SOURCE VAR VALUE VERSION", __reginatext ) ;}
-#line 3687 "./yaccsrc.c"
+#line 3667 "yaccsrc.c"
     break;
 
   case 243: /* parse_stat: parse error  */
-#line 804 "./yaccsrc.y"
+#line 804 "yaccsrc.y"
                                        { exiterror( ERR_INV_SUBKEYWORD, 12, "ARG CASELESS EXTERNAL LINEIN LOWER PULL SOURCE UPPER VAR VALUE VERSION", __reginatext ) ;}
-#line 3693 "./yaccsrc.c"
+#line 3673 "yaccsrc.c"
     break;
 
   case 244: /* parse_flags: UPPER  */
-#line 807 "./yaccsrc.y"
+#line 807 "yaccsrc.y"
                                        { yyval = (nodeptr) (PARSE_UPPER  |
                                                          PARSE_NORMAL); }
-#line 3700 "./yaccsrc.c"
+#line 3680 "yaccsrc.c"
     break;
 
   case 245: /* parse_flags: UPPER CASELESS  */
-#line 809 "./yaccsrc.y"
+#line 809 "yaccsrc.y"
                                        { yyval = (nodeptr) (PARSE_UPPER  |
                                                          PARSE_CASELESS); }
-#line 3707 "./yaccsrc.c"
+#line 3687 "yaccsrc.c"
     break;
 
   case 246: /* parse_flags: CASELESS UPPER  */
-#line 811 "./yaccsrc.y"
+#line 811 "yaccsrc.y"
                                        { yyval = (nodeptr) (PARSE_UPPER  |
                                                          PARSE_CASELESS); }
-#line 3714 "./yaccsrc.c"
+#line 3694 "yaccsrc.c"
     break;
 
   case 247: /* parse_flags: LOWER  */
-#line 813 "./yaccsrc.y"
+#line 813 "yaccsrc.y"
                                        { yyval = (nodeptr) (PARSE_LOWER  |
                                                          PARSE_NORMAL); }
-#line 3721 "./yaccsrc.c"
+#line 3701 "yaccsrc.c"
     break;
 
   case 248: /* parse_flags: LOWER CASELESS  */
-#line 815 "./yaccsrc.y"
+#line 815 "yaccsrc.y"
                                        { yyval = (nodeptr) (PARSE_LOWER  |
                                                          PARSE_CASELESS); }
-#line 3728 "./yaccsrc.c"
+#line 3708 "yaccsrc.c"
     break;
 
   case 249: /* parse_flags: CASELESS LOWER  */
-#line 817 "./yaccsrc.y"
+#line 817 "yaccsrc.y"
                                        { yyval = (nodeptr) (PARSE_LOWER  |
                                                          PARSE_CASELESS); }
-#line 3735 "./yaccsrc.c"
+#line 3715 "yaccsrc.c"
     break;
 
   case 250: /* parse_flags: CASELESS  */
-#line 819 "./yaccsrc.y"
+#line 819 "yaccsrc.y"
                                        { yyval = (nodeptr) (PARSE_NORMAL |
                                                          PARSE_CASELESS); }
-#line 3742 "./yaccsrc.c"
+#line 3722 "yaccsrc.c"
     break;
 
   case 251: /* templs: templs ',' template  */
-#line 823 "./yaccsrc.y"
+#line 823 "yaccsrc.y"
                                        { /* fixes bugs like bug 579711 */
                                          yyval = optgluelast( yyvsp[-2], yyvsp[0] ); }
-#line 3749 "./yaccsrc.c"
+#line 3729 "yaccsrc.c"
     break;
 
   case 252: /* templs: template  */
-#line 825 "./yaccsrc.y"
+#line 825 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3755 "./yaccsrc.c"
+#line 3735 "yaccsrc.c"
     break;
 
   case 253: /* parse_param: ARG  */
-#line 828 "./yaccsrc.y"
+#line 828 "yaccsrc.y"
                                        { yyval = makenode(X_PARSE_ARG,0) ; }
-#line 3761 "./yaccsrc.c"
+#line 3741 "yaccsrc.c"
     break;
 
   case 254: /* parse_param: LINEIN  */
-#line 829 "./yaccsrc.y"
+#line 829 "yaccsrc.y"
                                        { yyval = makenode(X_PARSE_EXT,0) ; }
-#line 3767 "./yaccsrc.c"
+#line 3747 "yaccsrc.c"
     break;
 
   case 255: /* parse_param: EXTERNAL  */
-#line 830 "./yaccsrc.y"
+#line 830 "yaccsrc.y"
                                        { yyval = makenode(X_PARSE_EXT,0) ; }
-#line 3773 "./yaccsrc.c"
+#line 3753 "yaccsrc.c"
     break;
 
   case 256: /* parse_param: VERSION  */
-#line 831 "./yaccsrc.y"
+#line 831 "yaccsrc.y"
                                        { yyval = makenode(X_PARSE_VER,0) ; }
-#line 3779 "./yaccsrc.c"
+#line 3759 "yaccsrc.c"
     break;
 
   case 257: /* parse_param: PULL  */
-#line 832 "./yaccsrc.y"
+#line 832 "yaccsrc.y"
                                        { yyval = makenode(X_PARSE_PULL,0) ; }
-#line 3785 "./yaccsrc.c"
+#line 3765 "yaccsrc.c"
     break;
 
   case 258: /* parse_param: SOURCE  */
-#line 833 "./yaccsrc.y"
+#line 833 "yaccsrc.y"
                                        { yyval = makenode(X_PARSE_SRC,0) ; }
-#line 3791 "./yaccsrc.c"
+#line 3771 "yaccsrc.c"
     break;
 
   case 259: /* parse_param: VAR simsymb  */
-#line 834 "./yaccsrc.y"
+#line 834 "yaccsrc.y"
                                        { yyval = makenode(X_PARSE_VAR,0) ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 3798 "./yaccsrc.c"
+#line 3778 "yaccsrc.c"
     break;
 
   case 260: /* parse_param: VALUE nexpr WITH  */
-#line 836 "./yaccsrc.y"
+#line 836 "yaccsrc.y"
                                        { yyval = makenode(X_PARSE_VAL,1,yyvsp[-1]) ; }
-#line 3804 "./yaccsrc.c"
+#line 3784 "yaccsrc.c"
     break;
 
   case 261: /* parse_param: VALUE error  */
-#line 837 "./yaccsrc.y"
+#line 837 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_TEMPLATE, 3 ) ;}
-#line 3810 "./yaccsrc.c"
+#line 3790 "yaccsrc.c"
     break;
 
   case 262: /* proc_stat: proc  */
-#line 840 "./yaccsrc.y"
+#line 840 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3816 "./yaccsrc.c"
+#line 3796 "yaccsrc.c"
     break;
 
   case 263: /* proc_stat: proc error  */
-#line 841 "./yaccsrc.y"
+#line 841 "yaccsrc.y"
                           { exiterror( ERR_INV_SUBKEYWORD, 17, __reginatext ) ;}
-#line 3822 "./yaccsrc.c"
+#line 3802 "yaccsrc.c"
     break;
 
   case 264: /* proc_stat: proc EXPOSE error  */
-#line 842 "./yaccsrc.y"
+#line 842 "yaccsrc.y"
                                  { exiterror( ERR_SYMBOL_EXPECTED, 1, __reginatext ) ;}
-#line 3828 "./yaccsrc.c"
+#line 3808 "yaccsrc.c"
     break;
 
   case 265: /* proc_stat: proc EXPOSE anyvars error  */
-#line 843 "./yaccsrc.y"
+#line 843 "yaccsrc.y"
                                          { exiterror( ERR_SYMBOL_EXPECTED, 1, __reginatext ) ;}
-#line 3834 "./yaccsrc.c"
+#line 3814 "yaccsrc.c"
     break;
 
   case 266: /* proc_stat: proc EXPOSE anyvars  */
-#line 844 "./yaccsrc.y"
+#line 844 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3841 "./yaccsrc.c"
+#line 3821 "yaccsrc.c"
     break;
 
   case 267: /* pull_stat: pull template  */
-#line 848 "./yaccsrc.y"
+#line 848 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3848 "./yaccsrc.c"
+#line 3828 "yaccsrc.c"
     break;
 
   case 268: /* push_stat: push nexpr  */
-#line 852 "./yaccsrc.y"
+#line 852 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3855 "./yaccsrc.c"
+#line 3835 "yaccsrc.c"
     break;
 
   case 269: /* queue_stat: queue nexpr  */
-#line 856 "./yaccsrc.y"
+#line 856 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3862 "./yaccsrc.c"
+#line 3842 "yaccsrc.c"
     break;
 
   case 270: /* say_stat: say nexpr  */
-#line 860 "./yaccsrc.y"
+#line 860 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3869 "./yaccsrc.c"
+#line 3849 "yaccsrc.c"
     break;
 
   case 271: /* return_stat: return nexpr  */
-#line 864 "./yaccsrc.y"
+#line 864 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 3876 "./yaccsrc.c"
+#line 3856 "yaccsrc.c"
     break;
 
   case 272: /* sel_end: END simsymb  */
-#line 868 "./yaccsrc.y"
+#line 868 "yaccsrc.y"
                                        { exiterror( ERR_UNMATCHED_END, 0 ) ;}
-#line 3882 "./yaccsrc.c"
+#line 3862 "yaccsrc.c"
     break;
 
   case 273: /* sel_end: END simsymb error  */
-#line 869 "./yaccsrc.y"
+#line 869 "yaccsrc.y"
                                        { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 3888 "./yaccsrc.c"
+#line 3868 "yaccsrc.c"
     break;
 
   case 274: /* sel_end: END  */
-#line 870 "./yaccsrc.y"
+#line 870 "yaccsrc.y"
                                        { level--; }
-#line 3894 "./yaccsrc.c"
+#line 3874 "yaccsrc.c"
     break;
 
   case 275: /* select_stat: select ncl when_stats otherwise_stat sel_end  */
-#line 874 "./yaccsrc.y"
+#line 874 "yaccsrc.y"
                                        { yyval = yyvsp[-4];
                                          yyval->p[0] = optgluelast( yyvsp[-3], yyvsp[-2] );
                                          yyval->p[0]->o.last = NULL;
                                          yyval->p[1] = yyvsp[-1]; }
-#line 3903 "./yaccsrc.c"
+#line 3883 "yaccsrc.c"
     break;
 
   case 276: /* select_stat: select ncl END error  */
-#line 878 "./yaccsrc.y"
+#line 878 "yaccsrc.y"
                                        {  exiterror( ERR_WHEN_EXPECTED, 1, parser_data.select_linenr, __reginatext ) ;}
-#line 3909 "./yaccsrc.c"
+#line 3889 "yaccsrc.c"
     break;
 
   case 277: /* select_stat: select ncl otherwise error  */
-#line 880 "./yaccsrc.y"
+#line 880 "yaccsrc.y"
                                        {  exiterror( ERR_WHEN_EXPECTED, 2, parser_data.select_linenr, __reginatext ) ;}
-#line 3915 "./yaccsrc.c"
+#line 3895 "yaccsrc.c"
     break;
 
   case 278: /* select_stat: select error  */
-#line 881 "./yaccsrc.y"
+#line 881 "yaccsrc.y"
                                        {  exiterror( ERR_EXTRA_DATA, 1, __reginatext )  ;}
-#line 3921 "./yaccsrc.c"
+#line 3901 "yaccsrc.c"
     break;
 
   case 279: /* select_stat: select ncl THEN  */
-#line 882 "./yaccsrc.y"
+#line 882 "yaccsrc.y"
                                        {  exiterror( ERR_THEN_UNEXPECTED, 0 ) ;}
-#line 3927 "./yaccsrc.c"
+#line 3907 "yaccsrc.c"
     break;
 
   case 280: /* select_stat: select ncl when_stats otherwise error  */
-#line 884 "./yaccsrc.y"
+#line 884 "yaccsrc.y"
                                        {  exiterror( ERR_INCOMPLETE_STRUCT, 0 ) ;}
-#line 3933 "./yaccsrc.c"
+#line 3913 "yaccsrc.c"
     break;
 
   case 281: /* when_stats: when_stats when_stat  */
-#line 887 "./yaccsrc.y"
+#line 887 "yaccsrc.y"
                                        { yyval = optgluelast( yyvsp[-1], yyvsp[0] ); }
-#line 3939 "./yaccsrc.c"
+#line 3919 "yaccsrc.c"
     break;
 
   case 282: /* when_stats: when_stat  */
-#line 888 "./yaccsrc.y"
+#line 888 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 3945 "./yaccsrc.c"
+#line 3925 "yaccsrc.c"
     break;
 
   case 283: /* when_stats: error  */
-#line 889 "./yaccsrc.y"
+#line 889 "yaccsrc.y"
                                        {  exiterror( ERR_WHEN_EXPECTED, 2, parser_data.select_linenr, __reginatext )  ;}
-#line 3951 "./yaccsrc.c"
+#line 3931 "yaccsrc.c"
     break;
 
   case 284: /* when_stat: when expr nlncl THEN nlncl statement  */
-#line 893 "./yaccsrc.y"
+#line 893 "yaccsrc.y"
                                        { yyval = yyvsp[-5]; /* fixes bugs like bug 579711 */
                                          yyval->p[0] = optgluelast( yyvsp[-4], yyvsp[-3] );
                                          yyval->p[0]->o.last = NULL;
                                          yyval->p[1] = optgluelast( yyvsp[-1], yyvsp[0] );
                                          yyval->p[1]->o.last = NULL; }
-#line 3961 "./yaccsrc.c"
+#line 3941 "yaccsrc.c"
     break;
 
   case 285: /* when_stat: when expr nlncl THEN nlncl statement THEN  */
-#line 899 "./yaccsrc.y"
+#line 899 "yaccsrc.y"
                                        {  exiterror( ERR_THEN_UNEXPECTED, 0 ) ;}
-#line 3967 "./yaccsrc.c"
+#line 3947 "yaccsrc.c"
     break;
 
   case 286: /* when_stat: when expr  */
-#line 900 "./yaccsrc.y"
+#line 900 "yaccsrc.y"
                                        {  exiterror( ERR_THEN_EXPECTED, 2, parser_data.select_linenr, __reginatext )  ; }
-#line 3973 "./yaccsrc.c"
+#line 3953 "yaccsrc.c"
     break;
 
   case 287: /* when_stat: when error  */
-#line 901 "./yaccsrc.y"
+#line 901 "yaccsrc.y"
                                        {  exiterror( ERR_INVALID_EXPRESSION, 0 ) ;}
-#line 3979 "./yaccsrc.c"
+#line 3959 "yaccsrc.c"
     break;
 
   case 288: /* ex_when_stat: gruff when  */
-#line 911 "./yaccsrc.y"
+#line 911 "yaccsrc.y"
                                        { exiterror( ERR_WHEN_UNEXPECTED, 1 ); }
-#line 3985 "./yaccsrc.c"
+#line 3965 "yaccsrc.c"
     break;
 
   case 289: /* ex_when_stat: gruff otherwise  */
-#line 912 "./yaccsrc.y"
+#line 912 "yaccsrc.y"
                                        { exiterror( ERR_WHEN_UNEXPECTED, 2 ); }
-#line 3991 "./yaccsrc.c"
+#line 3971 "yaccsrc.c"
     break;
 
   case 290: /* otherwise_stat: otherwise nlncl nxstats  */
-#line 915 "./yaccsrc.y"
+#line 915 "yaccsrc.y"
                                          { yyval = yyvsp[-2];
                                          yyval->p[0] = optgluelast( yyvsp[-1], yyvsp[0] );
                                          if ( yyval->p[0] )
                                             yyval->p[0]->o.last = NULL; }
-#line 4000 "./yaccsrc.c"
+#line 3980 "yaccsrc.c"
     break;
 
   case 291: /* otherwise_stat: %empty  */
-#line 919 "./yaccsrc.y"
+#line 919 "yaccsrc.y"
                                        { yyval = makenode(X_NO_OTHERWISE,0) ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->charnr = parser_data.tstart ; }
-#line 4008 "./yaccsrc.c"
+#line 3988 "yaccsrc.c"
     break;
 
   case 292: /* signal_stat: signal VALUE expr  */
-#line 925 "./yaccsrc.y"
+#line 925 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->type = X_SIG_VAL ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 4016 "./yaccsrc.c"
+#line 3996 "yaccsrc.c"
     break;
 
   case 293: /* signal_stat: signal signal_name error  */
-#line 928 "./yaccsrc.y"
+#line 928 "yaccsrc.y"
                                        { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 4022 "./yaccsrc.c"
+#line 4002 "yaccsrc.c"
     break;
 
   case 294: /* signal_stat: signal signal_name  */
-#line 929 "./yaccsrc.y"
+#line 929 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->name = (streng *)yyvsp[0] ; }
-#line 4029 "./yaccsrc.c"
+#line 4009 "yaccsrc.c"
     break;
 
   case 295: /* signal_stat: signal on error  */
-#line 931 "./yaccsrc.y"
+#line 931 "yaccsrc.y"
                               { exiterror( ERR_INV_SUBKEYWORD, 3, "ERROR FAILURE HALT NOTREADY NOVALUE SYNTAX LOSTDIGITS", __reginatext ) ;}
-#line 4035 "./yaccsrc.c"
+#line 4015 "yaccsrc.c"
     break;
 
   case 296: /* signal_stat: signal off error  */
-#line 932 "./yaccsrc.y"
+#line 932 "yaccsrc.y"
                                { exiterror( ERR_INV_SUBKEYWORD, 4, "ERROR FAILURE HALT NOTREADY NOVALUE SYNTAX LOSTDIGITS", __reginatext ) ;}
-#line 4041 "./yaccsrc.c"
+#line 4021 "yaccsrc.c"
     break;
 
   case 297: /* signal_stat: signal on s_action error  */
-#line 933 "./yaccsrc.y"
+#line 933 "yaccsrc.y"
                                        { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 4047 "./yaccsrc.c"
+#line 4027 "yaccsrc.c"
     break;
 
   case 298: /* signal_stat: signal on s_action namespec error  */
-#line 934 "./yaccsrc.y"
+#line 934 "yaccsrc.y"
                                                 { exiterror( ERR_STRING_EXPECTED, 3, __reginatext ) ;}
-#line 4053 "./yaccsrc.c"
+#line 4033 "yaccsrc.c"
     break;
 
   case 299: /* signal_stat: signal on s_action namespec  */
-#line 936 "./yaccsrc.y"
+#line 936 "yaccsrc.y"
                                        { yyval = yyvsp[-3] ;
                                          yyval->type = X_SIG_SET ;
                                          yyval->p[0] = yyvsp[-2] ;
                                          yyval->name = (streng *)yyvsp[0] ;
                                          yyval->p[1] = yyvsp[-1] ; }
-#line 4063 "./yaccsrc.c"
+#line 4043 "yaccsrc.c"
     break;
 
   case 300: /* signal_stat: signal on s_action  */
-#line 941 "./yaccsrc.y"
+#line 941 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->type = X_SIG_SET ;
                                          yyval->p[0] = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ; }
-#line 4072 "./yaccsrc.c"
+#line 4052 "yaccsrc.c"
     break;
 
   case 301: /* signal_stat: signal off s_action error  */
-#line 945 "./yaccsrc.y"
+#line 945 "yaccsrc.y"
                                         { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 4078 "./yaccsrc.c"
+#line 4058 "yaccsrc.c"
     break;
 
   case 302: /* signal_stat: signal off s_action  */
-#line 946 "./yaccsrc.y"
+#line 946 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->type = X_SIG_SET ;
                                          yyval->p[0] = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ; }
-#line 4087 "./yaccsrc.c"
+#line 4067 "yaccsrc.c"
     break;
 
   case 303: /* signal_name: asymbol  */
-#line 952 "./yaccsrc.y"
+#line 952 "yaccsrc.y"
                                        { yyval = yyvsp[0]; }
-#line 4093 "./yaccsrc.c"
+#line 4073 "yaccsrc.c"
     break;
 
   case 304: /* signal_name: STRING  */
-#line 953 "./yaccsrc.y"
+#line 953 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 4099 "./yaccsrc.c"
+#line 4079 "yaccsrc.c"
     break;
 
   case 305: /* signal_name: error  */
-#line 954 "./yaccsrc.y"
+#line 954 "yaccsrc.y"
                                        { exiterror( ERR_STRING_EXPECTED, 4, __reginatext );}
-#line 4105 "./yaccsrc.c"
+#line 4085 "yaccsrc.c"
     break;
 
   case 306: /* namespec: NAME SIMSYMBOL  */
-#line 957 "./yaccsrc.y"
+#line 957 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue);}
-#line 4111 "./yaccsrc.c"
+#line 4091 "yaccsrc.c"
     break;
 
   case 307: /* namespec: NAME STRING  */
-#line 958 "./yaccsrc.y"
+#line 958 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 4117 "./yaccsrc.c"
+#line 4097 "yaccsrc.c"
     break;
 
   case 308: /* namespec: NAME error  */
-#line 959 "./yaccsrc.y"
+#line 959 "yaccsrc.y"
                                        { exiterror( ERR_STRING_EXPECTED, 3, __reginatext ) ;}
-#line 4123 "./yaccsrc.c"
+#line 4103 "yaccsrc.c"
     break;
 
   case 309: /* asymbol: CONSYMBOL  */
-#line 962 "./yaccsrc.y"
+#line 962 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 4129 "./yaccsrc.c"
+#line 4109 "yaccsrc.c"
     break;
 
   case 310: /* asymbol: SIMSYMBOL  */
-#line 963 "./yaccsrc.y"
+#line 963 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 4135 "./yaccsrc.c"
+#line 4115 "yaccsrc.c"
     break;
 
   case 311: /* on: ON  */
-#line 966 "./yaccsrc.y"
+#line 966 "yaccsrc.y"
                                        { yyval = makenode(X_ON,0) ; }
-#line 4141 "./yaccsrc.c"
+#line 4121 "yaccsrc.c"
     break;
 
   case 312: /* off: OFF  */
-#line 969 "./yaccsrc.y"
+#line 969 "yaccsrc.y"
                                        { yyval = makenode(X_OFF,0) ; }
-#line 4147 "./yaccsrc.c"
+#line 4127 "yaccsrc.c"
     break;
 
   case 313: /* c_action: ERROR  */
-#line 972 "./yaccsrc.y"
+#line 972 "yaccsrc.y"
                                        { yyval = makenode(X_S_ERROR,0) ; }
-#line 4153 "./yaccsrc.c"
+#line 4133 "yaccsrc.c"
     break;
 
   case 314: /* c_action: HALT  */
-#line 973 "./yaccsrc.y"
+#line 973 "yaccsrc.y"
                                        { yyval = makenode(X_S_HALT,0) ; }
-#line 4159 "./yaccsrc.c"
+#line 4139 "yaccsrc.c"
     break;
 
   case 315: /* c_action: NOTREADY  */
-#line 974 "./yaccsrc.y"
+#line 974 "yaccsrc.y"
                                        { yyval = makenode(X_S_NOTREADY,0) ; }
-#line 4165 "./yaccsrc.c"
+#line 4145 "yaccsrc.c"
     break;
 
   case 316: /* c_action: FAILURE  */
-#line 975 "./yaccsrc.y"
+#line 975 "yaccsrc.y"
                                        { yyval = makenode(X_S_FAILURE,0) ; }
-#line 4171 "./yaccsrc.c"
+#line 4151 "yaccsrc.c"
     break;
 
   case 317: /* s_action: c_action  */
-#line 978 "./yaccsrc.y"
+#line 978 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 4177 "./yaccsrc.c"
+#line 4157 "yaccsrc.c"
     break;
 
   case 318: /* s_action: NOVALUE  */
-#line 979 "./yaccsrc.y"
+#line 979 "yaccsrc.y"
                                        { yyval = makenode(X_S_NOVALUE,0) ; }
-#line 4183 "./yaccsrc.c"
+#line 4163 "yaccsrc.c"
     break;
 
   case 319: /* s_action: SYNTAX  */
-#line 980 "./yaccsrc.y"
+#line 980 "yaccsrc.y"
                                        { yyval = makenode(X_S_SYNTAX,0) ; }
-#line 4189 "./yaccsrc.c"
+#line 4169 "yaccsrc.c"
     break;
 
   case 320: /* s_action: LOSTDIGITS  */
-#line 981 "./yaccsrc.y"
+#line 981 "yaccsrc.y"
                                        { yyval = makenode(X_S_LOSTDIGITS,0) ; }
-#line 4195 "./yaccsrc.c"
+#line 4175 "yaccsrc.c"
     break;
 
   case 321: /* trace_stat: trace VALUE expr  */
-#line 984 "./yaccsrc.y"
+#line 984 "yaccsrc.y"
                                        { yyval = yyvsp[-2] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 4202 "./yaccsrc.c"
+#line 4182 "yaccsrc.c"
     break;
 
   case 322: /* trace_stat: trace nexpr  */
-#line 986 "./yaccsrc.y"
+#line 986 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[0] = yyvsp[0] ; }
-#line 4209 "./yaccsrc.c"
+#line 4189 "yaccsrc.c"
     break;
 
   case 323: /* trace_stat: trace whatever error  */
-#line 988 "./yaccsrc.y"
+#line 988 "yaccsrc.y"
                                    { exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
-#line 4215 "./yaccsrc.c"
+#line 4195 "yaccsrc.c"
     break;
 
   case 324: /* trace_stat: trace whatever  */
-#line 989 "./yaccsrc.y"
+#line 989 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 4222 "./yaccsrc.c"
+#line 4202 "yaccsrc.c"
     break;
 
   case 325: /* whatever: WHATEVER  */
-#line 993 "./yaccsrc.y"
+#line 993 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 4228 "./yaccsrc.c"
+#line 4208 "yaccsrc.c"
     break;
 
   case 326: /* assignment: ass_part nexpr  */
-#line 997 "./yaccsrc.y"
+#line 997 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          /*
@@ -4243,208 +4223,208 @@ yyreduce:
                                              yyvsp[0]->p[0] &&
                                              gettypeof(yyvsp[0]) == IS_A_NUMBER)
                                             yyval->type = X_NASSIGN ; }
-#line 4247 "./yaccsrc.c"
+#line 4227 "yaccsrc.c"
     break;
 
   case 327: /* ass_part: ASSIGNMENTVARIABLE  */
-#line 1013 "./yaccsrc.y"
+#line 1013 "yaccsrc.y"
                                        { yyval = makenode(X_ASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4256 "./yaccsrc.c"
+#line 4236 "yaccsrc.c"
     break;
 
   case 328: /* plusassignment: plus_ass_part nexpr  */
-#line 1019 "./yaccsrc.y"
+#line 1019 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          if (yyvsp[0]==NULL)
                                             exiterror( ERR_BAD_ARITHMETIC, 2, "", "+=" );
                                        }
-#line 4266 "./yaccsrc.c"
+#line 4246 "yaccsrc.c"
     break;
 
   case 329: /* plus_ass_part: PLUSASSIGNMENTVARIABLE  */
-#line 1026 "./yaccsrc.y"
+#line 1026 "yaccsrc.y"
                                        { yyval = makenode(X_PLUSASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4275 "./yaccsrc.c"
+#line 4255 "yaccsrc.c"
     break;
 
   case 330: /* minusassignment: minus_ass_part nexpr  */
-#line 1032 "./yaccsrc.y"
+#line 1032 "yaccsrc.y"
                                          { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          if (yyvsp[0]==NULL)
                                             exiterror( ERR_BAD_ARITHMETIC, 2, "", "-=" );
                                        }
-#line 4285 "./yaccsrc.c"
+#line 4265 "yaccsrc.c"
     break;
 
   case 331: /* minus_ass_part: MINUSASSIGNMENTVARIABLE  */
-#line 1039 "./yaccsrc.y"
+#line 1039 "yaccsrc.y"
                                          { yyval = makenode(X_MINUSASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4294 "./yaccsrc.c"
+#line 4274 "yaccsrc.c"
     break;
 
   case 332: /* multassignment: mult_ass_part nexpr  */
-#line 1045 "./yaccsrc.y"
+#line 1045 "yaccsrc.y"
                                        { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          if (yyvsp[0]==NULL)
                                             exiterror( ERR_BAD_ARITHMETIC, 2, "", "*=" );
                                        }
-#line 4304 "./yaccsrc.c"
+#line 4284 "yaccsrc.c"
     break;
 
   case 333: /* mult_ass_part: MULTASSIGNMENTVARIABLE  */
-#line 1052 "./yaccsrc.y"
+#line 1052 "yaccsrc.y"
                                        { yyval = makenode(X_MULTASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4313 "./yaccsrc.c"
+#line 4293 "yaccsrc.c"
     break;
 
   case 334: /* divassignment: div_ass_part nexpr  */
-#line 1058 "./yaccsrc.y"
+#line 1058 "yaccsrc.y"
                                      { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          if (yyvsp[0]==NULL)
                                             exiterror( ERR_BAD_ARITHMETIC, 2, "", "/=" );
                                        }
-#line 4323 "./yaccsrc.c"
+#line 4303 "yaccsrc.c"
     break;
 
   case 335: /* div_ass_part: DIVASSIGNMENTVARIABLE  */
-#line 1065 "./yaccsrc.y"
+#line 1065 "yaccsrc.y"
                                      { yyval = makenode(X_DIVASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4332 "./yaccsrc.c"
+#line 4312 "yaccsrc.c"
     break;
 
   case 336: /* intdivassignment: intdiv_ass_part nexpr  */
-#line 1071 "./yaccsrc.y"
+#line 1071 "yaccsrc.y"
                                            { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          if (yyvsp[0]==NULL)
                                             exiterror( ERR_BAD_ARITHMETIC, 2, "", "%=" );
                                        }
-#line 4342 "./yaccsrc.c"
+#line 4322 "yaccsrc.c"
     break;
 
   case 337: /* intdiv_ass_part: INTDIVASSIGNMENTVARIABLE  */
-#line 1078 "./yaccsrc.y"
+#line 1078 "yaccsrc.y"
                                            { yyval = makenode(X_INTDIVASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4351 "./yaccsrc.c"
+#line 4331 "yaccsrc.c"
     break;
 
   case 338: /* modulusassignment: modulus_ass_part nexpr  */
-#line 1084 "./yaccsrc.y"
+#line 1084 "yaccsrc.y"
                                              { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          if (yyvsp[0]==NULL)
                                             exiterror( ERR_BAD_ARITHMETIC, 2, "", "//=" );
                                        }
-#line 4361 "./yaccsrc.c"
+#line 4341 "yaccsrc.c"
     break;
 
   case 339: /* modulus_ass_part: MODULUSASSIGNMENTVARIABLE  */
-#line 1091 "./yaccsrc.y"
+#line 1091 "yaccsrc.y"
                                              { yyval = makenode(X_MODULUSASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4370 "./yaccsrc.c"
+#line 4350 "yaccsrc.c"
     break;
 
   case 340: /* andassignment: and_ass_part nexpr  */
-#line 1097 "./yaccsrc.y"
+#line 1097 "yaccsrc.y"
                                      { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          if (yyvsp[0]==NULL)
                                             exiterror( ERR_BAD_ARITHMETIC, 2, "", "&=" );
                                        }
-#line 4380 "./yaccsrc.c"
+#line 4360 "yaccsrc.c"
     break;
 
   case 341: /* and_ass_part: ANDASSIGNMENTVARIABLE  */
-#line 1104 "./yaccsrc.y"
+#line 1104 "yaccsrc.y"
                                      { yyval = makenode(X_ANDASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4389 "./yaccsrc.c"
+#line 4369 "yaccsrc.c"
     break;
 
   case 342: /* xorassignment: xor_ass_part nexpr  */
-#line 1110 "./yaccsrc.y"
+#line 1110 "yaccsrc.y"
                                      { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          if (yyvsp[0]==NULL)
                                             exiterror( ERR_BAD_ARITHMETIC, 2, "", "&&=" );
                                        }
-#line 4399 "./yaccsrc.c"
+#line 4379 "yaccsrc.c"
     break;
 
   case 343: /* xor_ass_part: XORASSIGNMENTVARIABLE  */
-#line 1117 "./yaccsrc.y"
+#line 1117 "yaccsrc.y"
                                      { yyval = makenode(X_XORASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4408 "./yaccsrc.c"
+#line 4388 "yaccsrc.c"
     break;
 
   case 344: /* orassignment: or_ass_part nexpr  */
-#line 1123 "./yaccsrc.y"
+#line 1123 "yaccsrc.y"
                                    { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                          if (yyvsp[0]==NULL)
                                             exiterror( ERR_BAD_ARITHMETIC, 2, "", "|=" );
                                        }
-#line 4418 "./yaccsrc.c"
+#line 4398 "yaccsrc.c"
     break;
 
   case 345: /* or_ass_part: ORASSIGNMENTVARIABLE  */
-#line 1130 "./yaccsrc.y"
+#line 1130 "yaccsrc.y"
                                    { yyval = makenode(X_ORASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4427 "./yaccsrc.c"
+#line 4407 "yaccsrc.c"
     break;
 
   case 346: /* concatassignment: concat_ass_part nexpr  */
-#line 1136 "./yaccsrc.y"
+#line 1136 "yaccsrc.y"
                                            { yyval = yyvsp[-1] ;
                                          yyval->p[1] = yyvsp[0] ;
                                        }
-#line 4435 "./yaccsrc.c"
+#line 4415 "yaccsrc.c"
     break;
 
   case 347: /* concat_ass_part: CONCATASSIGNMENTVARIABLE  */
-#line 1141 "./yaccsrc.y"
+#line 1141 "yaccsrc.y"
                                            { yyval = makenode(X_CONCATASSIGN,0) ;
                                          yyval->charnr = parser_data.tstart ;
                                          yyval->lineno = parser_data.tline ;
                                          yyval->p[0] = (nodeptr)create_head( (const char *)retvalue ); }
-#line 4444 "./yaccsrc.c"
+#line 4424 "yaccsrc.c"
     break;
 
   case 348: /* $@9: %empty  */
-#line 1148 "./yaccsrc.y"
+#line 1148 "yaccsrc.y"
                                        { /* We have to accept exprs here even
                                           * if we just want to accept
                                           * '(' expr ')' only. We do this
@@ -4461,11 +4441,11 @@ yyreduce:
                                           * none. This allows a faster error
                                           * detection and that's a good goal.*/
                                          parendepth--; }
-#line 4465 "./yaccsrc.c"
+#line 4445 "yaccsrc.c"
     break;
 
   case 349: /* expr: '(' $@9 exprs_sub  */
-#line 1164 "./yaccsrc.y"
+#line 1164 "yaccsrc.y"
                                        { parendepth++;
                                          if ( parendepth == 1 )
                                          {
@@ -4483,734 +4463,734 @@ yyreduce:
                                                exiterror( ERR_INTERPRETER_FAILURE, 1, __FILE__, __LINE__, "Reduction of `exprs' not happened." );
                                          }
                                        }
-#line 4487 "./yaccsrc.c"
+#line 4467 "yaccsrc.c"
     break;
 
   case 350: /* $@10: %empty  */
-#line 1181 "./yaccsrc.y"
+#line 1181 "yaccsrc.y"
                                        { parendepth--; }
-#line 4493 "./yaccsrc.c"
+#line 4473 "yaccsrc.c"
     break;
 
   case 351: /* expr: expr '+' $@10 expr  */
-#line 1182 "./yaccsrc.y"
+#line 1182 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "+" );
                                          yyval = makenode( X_PLUSS, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4500 "./yaccsrc.c"
+#line 4480 "yaccsrc.c"
     break;
 
   case 352: /* $@11: %empty  */
-#line 1184 "./yaccsrc.y"
+#line 1184 "yaccsrc.y"
                                        { parendepth--; }
-#line 4506 "./yaccsrc.c"
+#line 4486 "yaccsrc.c"
     break;
 
   case 353: /* expr: expr '-' $@11 expr  */
-#line 1185 "./yaccsrc.y"
+#line 1185 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "-" );
                                          yyval = makenode( X_MINUS, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4513 "./yaccsrc.c"
+#line 4493 "yaccsrc.c"
     break;
 
   case 354: /* $@12: %empty  */
-#line 1187 "./yaccsrc.y"
+#line 1187 "yaccsrc.y"
                                        { parendepth--; }
-#line 4519 "./yaccsrc.c"
+#line 4499 "yaccsrc.c"
     break;
 
   case 355: /* expr: expr '*' $@12 expr  */
-#line 1188 "./yaccsrc.y"
+#line 1188 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "*" );
                                          yyval = makenode( X_MULT, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4526 "./yaccsrc.c"
+#line 4506 "yaccsrc.c"
     break;
 
   case 356: /* expr: '*'  */
-#line 1190 "./yaccsrc.y"
+#line 1190 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "*" ); }
-#line 4532 "./yaccsrc.c"
+#line 4512 "yaccsrc.c"
     break;
 
   case 357: /* $@13: %empty  */
-#line 1191 "./yaccsrc.y"
+#line 1191 "yaccsrc.y"
                                        { parendepth--; }
-#line 4538 "./yaccsrc.c"
+#line 4518 "yaccsrc.c"
     break;
 
   case 358: /* expr: expr '/' $@13 expr  */
-#line 1192 "./yaccsrc.y"
+#line 1192 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "/" );
                                          yyval = makenode( X_DEVIDE, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4545 "./yaccsrc.c"
+#line 4525 "yaccsrc.c"
     break;
 
   case 359: /* expr: '/'  */
-#line 1194 "./yaccsrc.y"
+#line 1194 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "/" ); }
-#line 4551 "./yaccsrc.c"
+#line 4531 "yaccsrc.c"
     break;
 
   case 360: /* $@14: %empty  */
-#line 1195 "./yaccsrc.y"
+#line 1195 "yaccsrc.y"
                                        { parendepth--; }
-#line 4557 "./yaccsrc.c"
+#line 4537 "yaccsrc.c"
     break;
 
   case 361: /* expr: expr MODULUS $@14 expr  */
-#line 1196 "./yaccsrc.y"
+#line 1196 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "//" );
                                          yyval = makenode( X_MODULUS, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4564 "./yaccsrc.c"
+#line 4544 "yaccsrc.c"
     break;
 
   case 362: /* expr: MODULUS  */
-#line 1198 "./yaccsrc.y"
+#line 1198 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "//" ); }
-#line 4570 "./yaccsrc.c"
+#line 4550 "yaccsrc.c"
     break;
 
   case 363: /* $@15: %empty  */
-#line 1199 "./yaccsrc.y"
+#line 1199 "yaccsrc.y"
                                        { parendepth--; }
-#line 4576 "./yaccsrc.c"
+#line 4556 "yaccsrc.c"
     break;
 
   case 364: /* expr: expr '%' $@15 expr  */
-#line 1200 "./yaccsrc.y"
+#line 1200 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "%" );
                                          yyval = makenode( X_INTDIV, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4583 "./yaccsrc.c"
+#line 4563 "yaccsrc.c"
     break;
 
   case 365: /* expr: '%'  */
-#line 1202 "./yaccsrc.y"
+#line 1202 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "%" ); }
-#line 4589 "./yaccsrc.c"
+#line 4569 "yaccsrc.c"
     break;
 
   case 366: /* $@16: %empty  */
-#line 1203 "./yaccsrc.y"
+#line 1203 "yaccsrc.y"
                                        { parendepth--; }
-#line 4595 "./yaccsrc.c"
+#line 4575 "yaccsrc.c"
     break;
 
   case 367: /* expr: expr '|' $@16 expr  */
-#line 1204 "./yaccsrc.y"
+#line 1204 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "|" );
                                          yyval = makenode( X_LOG_OR, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4602 "./yaccsrc.c"
+#line 4582 "yaccsrc.c"
     break;
 
   case 368: /* expr: '|'  */
-#line 1206 "./yaccsrc.y"
+#line 1206 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "|" ); }
-#line 4608 "./yaccsrc.c"
+#line 4588 "yaccsrc.c"
     break;
 
   case 369: /* $@17: %empty  */
-#line 1207 "./yaccsrc.y"
+#line 1207 "yaccsrc.y"
                                        { parendepth--; }
-#line 4614 "./yaccsrc.c"
+#line 4594 "yaccsrc.c"
     break;
 
   case 370: /* expr: expr '&' $@17 expr  */
-#line 1208 "./yaccsrc.y"
+#line 1208 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "&" );
                                          yyval = makenode( X_LOG_AND, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4621 "./yaccsrc.c"
+#line 4601 "yaccsrc.c"
     break;
 
   case 371: /* expr: '&'  */
-#line 1210 "./yaccsrc.y"
+#line 1210 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "&" ); }
-#line 4627 "./yaccsrc.c"
+#line 4607 "yaccsrc.c"
     break;
 
   case 372: /* $@18: %empty  */
-#line 1211 "./yaccsrc.y"
+#line 1211 "yaccsrc.y"
                                        { parendepth--; }
-#line 4633 "./yaccsrc.c"
+#line 4613 "yaccsrc.c"
     break;
 
   case 373: /* expr: expr XOR $@18 expr  */
-#line 1212 "./yaccsrc.y"
+#line 1212 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "&&" );
                                          yyval = makenode( X_LOG_XOR, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4640 "./yaccsrc.c"
+#line 4620 "yaccsrc.c"
     break;
 
   case 374: /* expr: XOR  */
-#line 1214 "./yaccsrc.y"
+#line 1214 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "&&" ); }
-#line 4646 "./yaccsrc.c"
+#line 4626 "yaccsrc.c"
     break;
 
   case 375: /* $@19: %empty  */
-#line 1215 "./yaccsrc.y"
+#line 1215 "yaccsrc.y"
                                        { parendepth--; }
-#line 4652 "./yaccsrc.c"
+#line 4632 "yaccsrc.c"
     break;
 
   case 376: /* expr: expr EXP $@19 expr  */
-#line 1216 "./yaccsrc.y"
+#line 1216 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "**" );
                                          yyval = makenode( X_EXP, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4659 "./yaccsrc.c"
+#line 4639 "yaccsrc.c"
     break;
 
   case 377: /* expr: EXP  */
-#line 1218 "./yaccsrc.y"
+#line 1218 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "**" ); }
-#line 4665 "./yaccsrc.c"
+#line 4645 "yaccsrc.c"
     break;
 
   case 378: /* $@20: %empty  */
-#line 1219 "./yaccsrc.y"
+#line 1219 "yaccsrc.y"
                                        { parendepth--; }
-#line 4671 "./yaccsrc.c"
+#line 4651 "yaccsrc.c"
     break;
 
   case 379: /* expr: expr SPACE $@20 expr  */
-#line 1220 "./yaccsrc.y"
+#line 1220 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], " " );
                                          yyval = makenode( X_SPACE, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4678 "./yaccsrc.c"
+#line 4658 "yaccsrc.c"
     break;
 
   case 380: /* expr: SPACE  */
-#line 1222 "./yaccsrc.y"
+#line 1222 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, " " ); }
-#line 4684 "./yaccsrc.c"
+#line 4664 "yaccsrc.c"
     break;
 
   case 381: /* $@21: %empty  */
-#line 1223 "./yaccsrc.y"
+#line 1223 "yaccsrc.y"
                                        { parendepth--; }
-#line 4690 "./yaccsrc.c"
+#line 4670 "yaccsrc.c"
     break;
 
   case 382: /* expr: expr CONCATENATE $@21 expr  */
-#line 1224 "./yaccsrc.y"
+#line 1224 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "||" );
                                          yyval = makenode( X_CONCAT, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4697 "./yaccsrc.c"
+#line 4677 "yaccsrc.c"
     break;
 
   case 383: /* expr: CONCATENATE  */
-#line 1226 "./yaccsrc.y"
+#line 1226 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "||" ); }
-#line 4703 "./yaccsrc.c"
+#line 4683 "yaccsrc.c"
     break;
 
   case 384: /* expr: NOT expr  */
-#line 1227 "./yaccsrc.y"
+#line 1227 "yaccsrc.y"
                                        { AUTO_REDUCE( yyvsp[0], "\\" );
                                          yyval = makenode( X_LOG_NOT, 1, yyvsp[0] ); }
-#line 4710 "./yaccsrc.c"
+#line 4690 "yaccsrc.c"
     break;
 
   case 385: /* expr: NOT  */
-#line 1229 "./yaccsrc.y"
+#line 1229 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "\\" ); }
-#line 4716 "./yaccsrc.c"
+#line 4696 "yaccsrc.c"
     break;
 
   case 386: /* $@22: %empty  */
-#line 1230 "./yaccsrc.y"
+#line 1230 "yaccsrc.y"
                                        { parendepth--; }
-#line 4722 "./yaccsrc.c"
+#line 4702 "yaccsrc.c"
     break;
 
   case 387: /* expr: expr '=' $@22 expr  */
-#line 1231 "./yaccsrc.y"
+#line 1231 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "=" );
                                          yyval = makenode( X_EQUAL, 2, yyvsp[-3], yyvsp[0] );
                                          transform( yyval ); }
-#line 4730 "./yaccsrc.c"
+#line 4710 "yaccsrc.c"
     break;
 
   case 388: /* expr: '='  */
-#line 1234 "./yaccsrc.y"
+#line 1234 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "=" ); }
-#line 4736 "./yaccsrc.c"
+#line 4716 "yaccsrc.c"
     break;
 
   case 389: /* $@23: %empty  */
-#line 1235 "./yaccsrc.y"
+#line 1235 "yaccsrc.y"
                                        { parendepth--; }
-#line 4742 "./yaccsrc.c"
+#line 4722 "yaccsrc.c"
     break;
 
   case 390: /* expr: expr GTE $@23 expr  */
-#line 1236 "./yaccsrc.y"
+#line 1236 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], ">=" );
                                          yyval = makenode( X_GTE, 2, yyvsp[-3], yyvsp[0] );
                                          transform( yyval ) ; }
-#line 4750 "./yaccsrc.c"
+#line 4730 "yaccsrc.c"
     break;
 
   case 391: /* expr: GTE  */
-#line 1239 "./yaccsrc.y"
+#line 1239 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, ">=" ); }
-#line 4756 "./yaccsrc.c"
+#line 4736 "yaccsrc.c"
     break;
 
   case 392: /* $@24: %empty  */
-#line 1240 "./yaccsrc.y"
+#line 1240 "yaccsrc.y"
                                        { parendepth--; }
-#line 4762 "./yaccsrc.c"
+#line 4742 "yaccsrc.c"
     break;
 
   case 393: /* expr: expr LTE $@24 expr  */
-#line 1241 "./yaccsrc.y"
+#line 1241 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "<=" );
                                          yyval = makenode( X_LTE, 2, yyvsp[-3], yyvsp[0] );
                                          transform( yyval ) ; }
-#line 4770 "./yaccsrc.c"
+#line 4750 "yaccsrc.c"
     break;
 
   case 394: /* expr: LTE  */
-#line 1244 "./yaccsrc.y"
+#line 1244 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "<=" ); }
-#line 4776 "./yaccsrc.c"
+#line 4756 "yaccsrc.c"
     break;
 
   case 395: /* $@25: %empty  */
-#line 1245 "./yaccsrc.y"
+#line 1245 "yaccsrc.y"
                                        { parendepth--; }
-#line 4782 "./yaccsrc.c"
+#line 4762 "yaccsrc.c"
     break;
 
   case 396: /* expr: expr GT $@25 expr  */
-#line 1246 "./yaccsrc.y"
+#line 1246 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], ">" );
                                          yyval = makenode( X_GT, 2, yyvsp[-3], yyvsp[0] );
                                          transform( yyval ) ; }
-#line 4790 "./yaccsrc.c"
+#line 4770 "yaccsrc.c"
     break;
 
   case 397: /* expr: GT  */
-#line 1249 "./yaccsrc.y"
+#line 1249 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, ">" ); }
-#line 4796 "./yaccsrc.c"
+#line 4776 "yaccsrc.c"
     break;
 
   case 398: /* $@26: %empty  */
-#line 1250 "./yaccsrc.y"
+#line 1250 "yaccsrc.y"
                                        { parendepth--; }
-#line 4802 "./yaccsrc.c"
+#line 4782 "yaccsrc.c"
     break;
 
   case 399: /* expr: expr LT $@26 expr  */
-#line 1251 "./yaccsrc.y"
+#line 1251 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "<" );
                                          yyval = makenode( X_LT, 2, yyvsp[-3], yyvsp[0] );
                                          transform( yyval ) ; }
-#line 4810 "./yaccsrc.c"
+#line 4790 "yaccsrc.c"
     break;
 
   case 400: /* expr: LT  */
-#line 1254 "./yaccsrc.y"
+#line 1254 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "<" ); }
-#line 4816 "./yaccsrc.c"
+#line 4796 "yaccsrc.c"
     break;
 
   case 401: /* $@27: %empty  */
-#line 1255 "./yaccsrc.y"
+#line 1255 "yaccsrc.y"
                                        { parendepth--; }
-#line 4822 "./yaccsrc.c"
+#line 4802 "yaccsrc.c"
     break;
 
   case 402: /* expr: expr DIFFERENT $@27 expr  */
-#line 1256 "./yaccsrc.y"
+#line 1256 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "\\=" );
                                          yyval = makenode( X_DIFF, 2, yyvsp[-3], yyvsp[0] );
                                          transform( yyval ) ; }
-#line 4830 "./yaccsrc.c"
+#line 4810 "yaccsrc.c"
     break;
 
   case 403: /* expr: DIFFERENT  */
-#line 1259 "./yaccsrc.y"
+#line 1259 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "\\=" ); }
-#line 4836 "./yaccsrc.c"
+#line 4816 "yaccsrc.c"
     break;
 
   case 404: /* $@28: %empty  */
-#line 1260 "./yaccsrc.y"
+#line 1260 "yaccsrc.y"
                                        { parendepth--; }
-#line 4842 "./yaccsrc.c"
+#line 4822 "yaccsrc.c"
     break;
 
   case 405: /* expr: expr EQUALEQUAL $@28 expr  */
-#line 1261 "./yaccsrc.y"
+#line 1261 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "==" );
                                          yyval = makenode( X_S_EQUAL, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4849 "./yaccsrc.c"
+#line 4829 "yaccsrc.c"
     break;
 
   case 406: /* expr: EQUALEQUAL  */
-#line 1263 "./yaccsrc.y"
+#line 1263 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "==" ); }
-#line 4855 "./yaccsrc.c"
+#line 4835 "yaccsrc.c"
     break;
 
   case 407: /* $@29: %empty  */
-#line 1264 "./yaccsrc.y"
+#line 1264 "yaccsrc.y"
                                        { parendepth--; }
-#line 4861 "./yaccsrc.c"
+#line 4841 "yaccsrc.c"
     break;
 
   case 408: /* expr: expr NOTEQUALEQUAL $@29 expr  */
-#line 1265 "./yaccsrc.y"
+#line 1265 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "\\==" );
                                          yyval = makenode( X_S_DIFF, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4868 "./yaccsrc.c"
+#line 4848 "yaccsrc.c"
     break;
 
   case 409: /* expr: NOTEQUALEQUAL  */
-#line 1267 "./yaccsrc.y"
+#line 1267 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "\\==" ); }
-#line 4874 "./yaccsrc.c"
+#line 4854 "yaccsrc.c"
     break;
 
   case 410: /* $@30: %empty  */
-#line 1268 "./yaccsrc.y"
+#line 1268 "yaccsrc.y"
                                        { parendepth--; }
-#line 4880 "./yaccsrc.c"
+#line 4860 "yaccsrc.c"
     break;
 
   case 411: /* expr: expr GTGT $@30 expr  */
-#line 1269 "./yaccsrc.y"
+#line 1269 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], ">>" );
                                          yyval = makenode( X_S_GT, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4887 "./yaccsrc.c"
+#line 4867 "yaccsrc.c"
     break;
 
   case 412: /* expr: GTGT  */
-#line 1271 "./yaccsrc.y"
+#line 1271 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, ">>" ); }
-#line 4893 "./yaccsrc.c"
+#line 4873 "yaccsrc.c"
     break;
 
   case 413: /* $@31: %empty  */
-#line 1272 "./yaccsrc.y"
+#line 1272 "yaccsrc.y"
                                        { parendepth--; }
-#line 4899 "./yaccsrc.c"
+#line 4879 "yaccsrc.c"
     break;
 
   case 414: /* expr: expr LTLT $@31 expr  */
-#line 1273 "./yaccsrc.y"
+#line 1273 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "<<" );
                                          yyval = makenode( X_S_LT, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4906 "./yaccsrc.c"
+#line 4886 "yaccsrc.c"
     break;
 
   case 415: /* expr: LTLT  */
-#line 1275 "./yaccsrc.y"
+#line 1275 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "<<" ); }
-#line 4912 "./yaccsrc.c"
+#line 4892 "yaccsrc.c"
     break;
 
   case 416: /* $@32: %empty  */
-#line 1276 "./yaccsrc.y"
+#line 1276 "yaccsrc.y"
                                        { parendepth--; }
-#line 4918 "./yaccsrc.c"
+#line 4898 "yaccsrc.c"
     break;
 
   case 417: /* expr: expr NOTGTGT $@32 expr  */
-#line 1277 "./yaccsrc.y"
+#line 1277 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "\\>>" );
                                          yyval = makenode( X_S_NGT, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4925 "./yaccsrc.c"
+#line 4905 "yaccsrc.c"
     break;
 
   case 418: /* expr: NOTGTGT  */
-#line 1279 "./yaccsrc.y"
+#line 1279 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "\\>>" ); }
-#line 4931 "./yaccsrc.c"
+#line 4911 "yaccsrc.c"
     break;
 
   case 419: /* $@33: %empty  */
-#line 1280 "./yaccsrc.y"
+#line 1280 "yaccsrc.y"
                                        { parendepth--; }
-#line 4937 "./yaccsrc.c"
+#line 4917 "yaccsrc.c"
     break;
 
   case 420: /* expr: expr NOTLTLT $@33 expr  */
-#line 1281 "./yaccsrc.y"
+#line 1281 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "\\<<" );
                                          yyval = makenode( X_S_NLT, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4944 "./yaccsrc.c"
+#line 4924 "yaccsrc.c"
     break;
 
   case 421: /* expr: NOTLTLT  */
-#line 1283 "./yaccsrc.y"
+#line 1283 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "\\<<" ); }
-#line 4950 "./yaccsrc.c"
+#line 4930 "yaccsrc.c"
     break;
 
   case 422: /* $@34: %empty  */
-#line 1284 "./yaccsrc.y"
+#line 1284 "yaccsrc.y"
                                        { parendepth--; }
-#line 4956 "./yaccsrc.c"
+#line 4936 "yaccsrc.c"
     break;
 
   case 423: /* expr: expr GTGTE $@34 expr  */
-#line 1285 "./yaccsrc.y"
+#line 1285 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], ">>=" );
                                          yyval = makenode( X_S_GTE, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4963 "./yaccsrc.c"
+#line 4943 "yaccsrc.c"
     break;
 
   case 424: /* expr: GTGTE  */
-#line 1287 "./yaccsrc.y"
+#line 1287 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, ">>=" ); }
-#line 4969 "./yaccsrc.c"
+#line 4949 "yaccsrc.c"
     break;
 
   case 425: /* $@35: %empty  */
-#line 1288 "./yaccsrc.y"
+#line 1288 "yaccsrc.y"
                                        { parendepth--; }
-#line 4975 "./yaccsrc.c"
+#line 4955 "yaccsrc.c"
     break;
 
   case 426: /* expr: expr LTLTE $@35 expr  */
-#line 1289 "./yaccsrc.y"
+#line 1289 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "<<=" );
                                          yyval = makenode( X_S_LTE, 2, yyvsp[-3], yyvsp[0] ); }
-#line 4982 "./yaccsrc.c"
+#line 4962 "yaccsrc.c"
     break;
 
   case 427: /* expr: LTLTE  */
-#line 1291 "./yaccsrc.y"
+#line 1291 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, "<<=" ); }
-#line 4988 "./yaccsrc.c"
+#line 4968 "yaccsrc.c"
     break;
 
   case 428: /* expr: symbtree  */
-#line 1292 "./yaccsrc.y"
+#line 1292 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 4994 "./yaccsrc.c"
+#line 4974 "yaccsrc.c"
     break;
 
   case 429: /* expr: CONSYMBOL  */
-#line 1293 "./yaccsrc.y"
+#line 1293 "yaccsrc.y"
                                        { yyval = makenode( X_STRING, 0 );
                                          yyval->name = Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 5001 "./yaccsrc.c"
+#line 4981 "yaccsrc.c"
     break;
 
   case 430: /* expr: HEXSTRING  */
-#line 1295 "./yaccsrc.y"
+#line 1295 "yaccsrc.y"
                                        { yyval = makenode( X_STRING, 0 );
                                          yyval->name = Str_make_TSD(parser_data.TSD,retlength) ;
                                          memcpy(yyval->name->value,retvalue,
                                                     yyval->name->len=retlength); }
-#line 5010 "./yaccsrc.c"
+#line 4990 "yaccsrc.c"
     break;
 
   case 431: /* expr: BINSTRING  */
-#line 1299 "./yaccsrc.y"
+#line 1299 "yaccsrc.y"
                                        { yyval = makenode( X_STRING, 0 );
                                          yyval->name = Str_make_TSD(parser_data.TSD,retlength) ;
                                          memcpy(yyval->name->value,retvalue,
                                                     yyval->name->len=retlength); }
-#line 5019 "./yaccsrc.c"
+#line 4999 "yaccsrc.c"
     break;
 
   case 432: /* expr: STRING  */
-#line 1303 "./yaccsrc.y"
+#line 1303 "yaccsrc.y"
                                        { yyval = makenode( X_STRING, 0 );
                                          yyval->name = Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 5026 "./yaccsrc.c"
+#line 5006 "yaccsrc.c"
     break;
 
   case 433: /* expr: function  */
-#line 1305 "./yaccsrc.y"
+#line 1305 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 5032 "./yaccsrc.c"
+#line 5012 "yaccsrc.c"
     break;
 
   case 434: /* expr: '+' expr  */
-#line 1306 "./yaccsrc.y"
+#line 1306 "yaccsrc.y"
                                        { AUTO_REDUCE( yyvsp[0], rxnullptr );
                                          yyval = makenode( X_U_PLUSS, 1, yyvsp[0] ); }
-#line 5039 "./yaccsrc.c"
+#line 5019 "yaccsrc.c"
     break;
 
   case 435: /* expr: '-' expr  */
-#line 1308 "./yaccsrc.y"
+#line 1308 "yaccsrc.y"
                                        { AUTO_REDUCE( yyvsp[0], rxnullptr );
                                          yyval = makenode( X_U_MINUS, 1, yyvsp[0] ); }
-#line 5046 "./yaccsrc.c"
+#line 5026 "yaccsrc.c"
     break;
 
   case 436: /* expr: '+' error  */
-#line 1310 "./yaccsrc.y"
+#line 1310 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, __reginatext ); }
-#line 5052 "./yaccsrc.c"
+#line 5032 "yaccsrc.c"
     break;
 
   case 437: /* expr: '-' error  */
-#line 1311 "./yaccsrc.y"
+#line 1311 "yaccsrc.y"
                                        { exiterror( ERR_INVALID_EXPRESSION, 1, __reginatext ); }
-#line 5058 "./yaccsrc.c"
+#line 5038 "yaccsrc.c"
     break;
 
   case 438: /* exprs_sub: exprs ')'  */
-#line 1314 "./yaccsrc.y"
+#line 1314 "yaccsrc.y"
                                        { yyval = yyvsp[-1]; }
-#line 5064 "./yaccsrc.c"
+#line 5044 "yaccsrc.c"
     break;
 
   case 439: /* exprs_sub: exprs error  */
-#line 1315 "./yaccsrc.y"
+#line 1315 "yaccsrc.y"
                                        { exiterror( ERR_UNMATCHED_PARAN, 0 ); }
-#line 5070 "./yaccsrc.c"
+#line 5050 "yaccsrc.c"
     break;
 
   case 440: /* exprs_sub: STATSEP  */
-#line 1316 "./yaccsrc.y"
+#line 1316 "yaccsrc.y"
                                        { exiterror( ERR_UNMATCHED_PARAN, 0 ); }
-#line 5076 "./yaccsrc.c"
+#line 5056 "yaccsrc.c"
     break;
 
   case 441: /* symbtree: SIMSYMBOL  */
-#line 1319 "./yaccsrc.y"
+#line 1319 "yaccsrc.y"
                                        { yyval = (nodeptr)create_head( (const char *)retvalue ) ; }
-#line 5082 "./yaccsrc.c"
+#line 5062 "yaccsrc.c"
     break;
 
   case 442: /* function: extfunc func_args  */
-#line 1323 "./yaccsrc.y"
+#line 1323 "yaccsrc.y"
                                        { yyval = makenode(X_EX_FUNC,1,yyvsp[0]) ;
                                          yyval->name = (streng *)yyvsp[-1] ; }
-#line 5089 "./yaccsrc.c"
+#line 5069 "yaccsrc.c"
     break;
 
   case 443: /* function: intfunc func_args  */
-#line 1325 "./yaccsrc.y"
+#line 1325 "yaccsrc.y"
                                        { yyval = makenode(X_IN_FUNC,1,yyvsp[0]) ;
                                          yyval->name = (streng *)yyvsp[-1] ; }
-#line 5096 "./yaccsrc.c"
+#line 5076 "yaccsrc.c"
     break;
 
   case 444: /* @36: %empty  */
-#line 1329 "./yaccsrc.y"
+#line 1329 "yaccsrc.y"
                                        { /* ugly fake preservs parendepth */
                                          yyval = (YYSTYPE) parendepth;
                                          parendepth = 0; }
-#line 5104 "./yaccsrc.c"
+#line 5084 "yaccsrc.c"
     break;
 
   case 445: /* func_args: @36 exprs_sub  */
-#line 1332 "./yaccsrc.y"
+#line 1332 "yaccsrc.y"
                                        { parendepth = (int) yyval;
                                          yyval = yyvsp[0]; }
-#line 5111 "./yaccsrc.c"
+#line 5091 "yaccsrc.c"
     break;
 
   case 446: /* intfunc: INFUNCNAME  */
-#line 1336 "./yaccsrc.y"
+#line 1336 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 5117 "./yaccsrc.c"
+#line 5097 "yaccsrc.c"
     break;
 
   case 447: /* extfunc: EXFUNCNAME  */
-#line 1339 "./yaccsrc.y"
+#line 1339 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 5123 "./yaccsrc.c"
+#line 5103 "yaccsrc.c"
     break;
 
   case 448: /* template: pv solid template  */
-#line 1342 "./yaccsrc.y"
+#line 1342 "yaccsrc.y"
                                        { yyval =makenode(X_TPL_SOLID,3,yyvsp[-2],yyvsp[-1],yyvsp[0]);}
-#line 5129 "./yaccsrc.c"
+#line 5109 "yaccsrc.c"
     break;
 
   case 449: /* template: pv  */
-#line 1343 "./yaccsrc.y"
+#line 1343 "yaccsrc.y"
                                        { yyval =makenode(X_TPL_SOLID,1,yyvsp[0]) ; }
-#line 5135 "./yaccsrc.c"
+#line 5115 "yaccsrc.c"
     break;
 
   case 450: /* template: error  */
-#line 1344 "./yaccsrc.y"
+#line 1344 "yaccsrc.y"
                     { exiterror( ERR_INVALID_TEMPLATE, 1, __reginatext ) ;}
-#line 5141 "./yaccsrc.c"
+#line 5121 "yaccsrc.c"
     break;
 
   case 451: /* solid: '-' offset  */
-#line 1347 "./yaccsrc.y"
+#line 1347 "yaccsrc.y"
                                        { yyval = makenode(X_NEG_OFFS,0) ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 5148 "./yaccsrc.c"
+#line 5128 "yaccsrc.c"
     break;
 
   case 452: /* solid: '+' offset  */
-#line 1349 "./yaccsrc.y"
+#line 1349 "yaccsrc.y"
                                        { yyval = makenode(X_POS_OFFS,0) ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 5155 "./yaccsrc.c"
+#line 5135 "yaccsrc.c"
     break;
 
   case 453: /* solid: offset  */
-#line 1351 "./yaccsrc.y"
+#line 1351 "yaccsrc.y"
                                        { yyval = makenode(X_ABS_OFFS,0) ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 5162 "./yaccsrc.c"
+#line 5142 "yaccsrc.c"
     break;
 
   case 454: /* solid: '=' offset  */
-#line 1353 "./yaccsrc.y"
+#line 1353 "yaccsrc.y"
                                        { yyval = makenode(X_ABS_OFFS,0) ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 5169 "./yaccsrc.c"
+#line 5149 "yaccsrc.c"
     break;
 
   case 455: /* solid: '(' symbtree ')'  */
-#line 1355 "./yaccsrc.y"
+#line 1355 "yaccsrc.y"
                                        { yyval = makenode(X_TPL_VAR,0) ;
                                          yyval->p[0] = yyvsp[-1] ; }
-#line 5176 "./yaccsrc.c"
+#line 5156 "yaccsrc.c"
     break;
 
   case 456: /* solid: '-' '(' symbtree ')'  */
-#line 1357 "./yaccsrc.y"
+#line 1357 "yaccsrc.y"
                                        { yyval = makenode(X_NEG_OFFS,0) ;
                                          yyval->p[0] = yyvsp[-1] ; }
-#line 5183 "./yaccsrc.c"
+#line 5163 "yaccsrc.c"
     break;
 
   case 457: /* solid: '+' '(' symbtree ')'  */
-#line 1359 "./yaccsrc.y"
+#line 1359 "yaccsrc.y"
                                        { yyval = makenode(X_POS_OFFS,0) ;
                                          yyval->p[0] = yyvsp[-1] ; }
-#line 5190 "./yaccsrc.c"
+#line 5170 "yaccsrc.c"
     break;
 
   case 458: /* solid: '=' '(' symbtree ')'  */
-#line 1361 "./yaccsrc.y"
+#line 1361 "yaccsrc.y"
                                        { yyval = makenode(X_ABS_OFFS,0) ;
                                          yyval->p[0] = yyvsp[-1] ; }
-#line 5197 "./yaccsrc.c"
+#line 5177 "yaccsrc.c"
     break;
 
   case 459: /* solid: string  */
-#line 1363 "./yaccsrc.y"
+#line 1363 "yaccsrc.y"
                                        { yyval = makenode(X_TPL_MVE,0) ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 5204 "./yaccsrc.c"
+#line 5184 "yaccsrc.c"
     break;
 
   case 460: /* offset: OFFSET  */
-#line 1367 "./yaccsrc.y"
+#line 1367 "yaccsrc.y"
                                        { yyval = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 5210 "./yaccsrc.c"
+#line 5190 "yaccsrc.c"
     break;
 
   case 461: /* offset: CONSYMBOL  */
-#line 1368 "./yaccsrc.y"
+#line 1368 "yaccsrc.y"
                                        { streng *sptr = Str_cre_TSD(parser_data.TSD,retvalue) ;
                                           if (myisnumber(parser_data.TSD, sptr))
                                           {
@@ -5218,53 +5198,53 @@ yyreduce:
                                           }
                                           else
                                              exiterror( ERR_INVALID_TEMPLATE, 0 ) ;}
-#line 5222 "./yaccsrc.c"
+#line 5202 "yaccsrc.c"
     break;
 
   case 462: /* string: STRING  */
-#line 1377 "./yaccsrc.y"
+#line 1377 "yaccsrc.y"
                                        { yyval = (nodeptr) Str_cre_TSD(parser_data.TSD,retvalue) ; }
-#line 5228 "./yaccsrc.c"
+#line 5208 "yaccsrc.c"
     break;
 
   case 463: /* string: HEXSTRING  */
-#line 1378 "./yaccsrc.y"
+#line 1378 "yaccsrc.y"
                                        { streng *sptr = Str_make_TSD(parser_data.TSD,retlength) ;
                                          memcpy(sptr->value,retvalue,
                                                  sptr->len=retlength) ;
                                          yyval = (nodeptr) sptr ; }
-#line 5237 "./yaccsrc.c"
+#line 5217 "yaccsrc.c"
     break;
 
   case 464: /* string: BINSTRING  */
-#line 1382 "./yaccsrc.y"
+#line 1382 "yaccsrc.y"
                                        { streng *sptr = Str_make_TSD(parser_data.TSD,retlength) ;
                                          memcpy(sptr->value,retvalue,
                                                  sptr->len=retlength) ;
                                          yyval = (nodeptr) sptr ; }
-#line 5246 "./yaccsrc.c"
+#line 5226 "yaccsrc.c"
     break;
 
   case 465: /* pv: PLACEHOLDER pv  */
-#line 1388 "./yaccsrc.y"
+#line 1388 "yaccsrc.y"
                                        { yyval = makenode(X_TPL_POINT,1,yyvsp[0]) ; }
-#line 5252 "./yaccsrc.c"
+#line 5232 "yaccsrc.c"
     break;
 
   case 466: /* pv: symbtree pv  */
-#line 1389 "./yaccsrc.y"
+#line 1389 "yaccsrc.y"
                                        { yyval = makenode(X_TPL_SYMBOL,2,yyvsp[0],yyvsp[-1]) ; }
-#line 5258 "./yaccsrc.c"
+#line 5238 "yaccsrc.c"
     break;
 
   case 467: /* pv: %empty  */
-#line 1390 "./yaccsrc.y"
+#line 1390 "yaccsrc.y"
                                        { yyval = NULL ; }
-#line 5264 "./yaccsrc.c"
+#line 5244 "yaccsrc.c"
     break;
 
   case 468: /* $@37: %empty  */
-#line 1400 "./yaccsrc.y"
+#line 1400 "yaccsrc.y"
                                        { /* detect
                                           * "x = ( a,. b )",
                                           * "x = ( ,. b )",
@@ -5308,11 +5288,11 @@ yyreduce:
                                          yyvsp[-1] = reduce_expr_list( yyvsp[-1],
                                                               REDUCE_SUBEXPR );
                                        }
-#line 5312 "./yaccsrc.c"
+#line 5292 "yaccsrc.c"
     break;
 
   case 469: /* exprs: nexpr ',' $@37 exprs  */
-#line 1443 "./yaccsrc.y"
+#line 1443 "yaccsrc.y"
                                        { /*
                                           * Fixes bug 961301.
                                           */
@@ -5350,11 +5330,11 @@ yyreduce:
 
                                          yyval = makenode( X_EXPRLIST, 2, yyvsp[-3], yyvsp[0] );
                                          checkconst( yyval ); }
-#line 5354 "./yaccsrc.c"
+#line 5334 "yaccsrc.c"
     break;
 
   case 470: /* exprs: nexpr  */
-#line 1480 "./yaccsrc.y"
+#line 1480 "yaccsrc.y"
                                        { /* detect
                                           * "x = ()."
                                           * "x = f(().)"
@@ -5397,69 +5377,69 @@ yyreduce:
                                          yyval = makenode( X_EXPRLIST, 1, yyvsp[0] );
                                          checkconst( yyval );
                                         }
-#line 5401 "./yaccsrc.c"
+#line 5381 "yaccsrc.c"
     break;
 
   case 471: /* nexpr: expr  */
-#line 1524 "./yaccsrc.y"
+#line 1524 "yaccsrc.y"
                                        { yyval = yyvsp[0] ; }
-#line 5407 "./yaccsrc.c"
+#line 5387 "yaccsrc.c"
     break;
 
   case 472: /* nexpr: %empty  */
-#line 1525 "./yaccsrc.y"
+#line 1525 "yaccsrc.y"
                                        { yyval = NULL ; }
-#line 5413 "./yaccsrc.c"
+#line 5393 "yaccsrc.c"
     break;
 
   case 473: /* anyvars: xsimsymb anyvars  */
-#line 1528 "./yaccsrc.y"
+#line 1528 "yaccsrc.y"
                                         { yyval = makenode(X_SIM_SYMBOL,1,yyvsp[0]) ;
                                          yyval->name = (streng *) yyvsp[-1] ; }
-#line 5420 "./yaccsrc.c"
+#line 5400 "yaccsrc.c"
     break;
 
   case 474: /* anyvars: xsimsymb  */
-#line 1530 "./yaccsrc.y"
+#line 1530 "yaccsrc.y"
                                         { yyval = makenode(X_SIM_SYMBOL,0) ;
                                          yyval->name = (streng *) yyvsp[0] ; }
-#line 5427 "./yaccsrc.c"
+#line 5407 "yaccsrc.c"
     break;
 
   case 475: /* anyvars: '(' xsimsymb ')' anyvars  */
-#line 1532 "./yaccsrc.y"
+#line 1532 "yaccsrc.y"
                                         { yyval = makenode(X_IND_SYMBOL,1,yyvsp[0]) ;
                                          yyval->name = (streng *) yyvsp[-2] ; }
-#line 5434 "./yaccsrc.c"
+#line 5414 "yaccsrc.c"
     break;
 
   case 476: /* anyvars: '(' xsimsymb ')'  */
-#line 1534 "./yaccsrc.y"
+#line 1534 "yaccsrc.y"
                                         { yyval = makenode(X_IND_SYMBOL,0) ;
                                          yyval->name = (streng *) yyvsp[-1] ; }
-#line 5441 "./yaccsrc.c"
+#line 5421 "yaccsrc.c"
     break;
 
   case 477: /* xsimsymb: SIMSYMBOL  */
-#line 1538 "./yaccsrc.y"
+#line 1538 "yaccsrc.y"
                                        { yyval = (treenode *) Str_cre_TSD(parser_data.TSD,retvalue);}
-#line 5447 "./yaccsrc.c"
+#line 5427 "yaccsrc.c"
     break;
 
   case 478: /* simsymb: SIMSYMBOL  */
-#line 1541 "./yaccsrc.y"
+#line 1541 "yaccsrc.y"
                                        { yyval = (treenode *) Str_cre_TSD(parser_data.TSD,retvalue);}
-#line 5453 "./yaccsrc.c"
+#line 5433 "yaccsrc.c"
     break;
 
   case 479: /* simsymb: error  */
-#line 1542 "./yaccsrc.y"
+#line 1542 "yaccsrc.y"
                                        { exiterror( ERR_SYMBOL_EXPECTED, 1, __reginatext ) ;}
-#line 5459 "./yaccsrc.c"
+#line 5439 "yaccsrc.c"
     break;
 
 
-#line 5463 "./yaccsrc.c"
+#line 5443 "yaccsrc.c"
 
       default: break;
     }
@@ -5541,6 +5521,7 @@ yyerrorlab:
      label yyerrorlab therefore never appears in user code.  */
   if (0)
     YYERROR;
+  ++yynerrs;
 
   /* Do not reclaim the symbols of the rule whose action triggered
      this YYERROR.  */
@@ -5601,7 +5582,7 @@ yyerrlab1:
 `-------------------------------------*/
 yyacceptlab:
   yyresult = 0;
-  goto yyreturn;
+  goto yyreturnlab;
 
 
 /*-----------------------------------.
@@ -5609,24 +5590,22 @@ yyacceptlab:
 `-----------------------------------*/
 yyabortlab:
   yyresult = 1;
-  goto yyreturn;
+  goto yyreturnlab;
 
 
-#if !defined yyoverflow
-/*-------------------------------------------------.
-| yyexhaustedlab -- memory exhaustion comes here.  |
-`-------------------------------------------------*/
+/*-----------------------------------------------------------.
+| yyexhaustedlab -- YYNOMEM (memory exhaustion) comes here.  |
+`-----------------------------------------------------------*/
 yyexhaustedlab:
   yyerror (YY_("memory exhausted"));
   yyresult = 2;
-  goto yyreturn;
-#endif
+  goto yyreturnlab;
 
 
-/*-------------------------------------------------------.
-| yyreturn -- parsing is finished, clean up and return.  |
-`-------------------------------------------------------*/
-yyreturn:
+/*----------------------------------------------------------.
+| yyreturnlab -- parsing is finished, clean up and return.  |
+`----------------------------------------------------------*/
+yyreturnlab:
   if (yychar != YYEMPTY)
     {
       /* Make sure we have latest lookahead translation.  See comments at
@@ -5653,7 +5632,7 @@ yyreturn:
   return yyresult;
 }
 
-#line 1545 "./yaccsrc.y"
+#line 1545 "yaccsrc.y"
 
 
 static nodeptr makenode( int type, int numb, ... )

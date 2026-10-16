@@ -2780,7 +2780,16 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
    init_it_all( TSD ) ;
 
 #ifdef FLEX_SCANNER
+   /*
+    * Force the scanner to (re)initialize itself on the next call.
+    * flex up to 2.5.4 used yy_init != 0 for "initialization needed";
+    * flex 2.5.33 and later inverted this to yy_init == 0.
+    */
+# if YY_FLEX_MAJOR_VERSION > 2 || ( YY_FLEX_MAJOR_VERSION == 2 && ( YY_FLEX_MINOR_VERSION > 5 || ( YY_FLEX_MINOR_VERSION == 5 && defined( YY_FLEX_SUBMINOR_VERSION ) && YY_FLEX_SUBMINOR_VERSION >= 33 ) ) )
+   yy_init = 0 ;
+# else
    yy_init = 1 ;
+# endif
    yy_delete_buffer(YY_CURRENT_BUFFER) ;
    yyrestart(fptr) ;
 #else
