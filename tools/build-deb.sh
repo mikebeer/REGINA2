@@ -35,6 +35,7 @@ done
 
 mkdir -p "$WORK/root/DEBIAN" "$WORK/root/usr/share/doc/regina-rexx-oo"
 cp "$SRC/COPYING-LIB" "$WORK/root/usr/share/doc/regina-rexx-oo/copyright"
+cp "$SRC/README.OO.md" "$WORK/root/usr/share/doc/regina-rexx-oo/README.OO.md"
 [ -f "$WORK/root/etc/rxstack.conf" ] && echo /etc/rxstack.conf >"$WORK/root/DEBIAN/conffiles"
 SIZE=$(du -sk "$WORK/root" | cut -f1)
 DEPS=$(cd "$WORK/root" && dpkg-shlibdeps -O --ignore-missing-info \

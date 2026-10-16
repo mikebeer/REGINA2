@@ -59,6 +59,7 @@ cp rexx.exe "$DIST/"
 cp "$SRC"/*.mtb "$DIST/"
 cp "$SRC"/demo/*.rexx "$DIST/demo/"
 cp "$SRC/COPYING-LIB" "$DIST/COPYING-LIB.txt"
+cp "$SRC/README.OO.md" "$DIST/README.OO.md"
 cat > "$DIST/README.txt" <<EOR
 Regina Rexx $VER_DOT with optional OO syntax - 64-bit Windows
 
