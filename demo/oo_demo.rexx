@@ -1,10 +1,10 @@
-/* oo_demo.rexx - try out Regina 3.9.7 + OO syntax preview 1
+/* oo_demo.rexx - try out Regina 3.9.7 with the OO extension
  *
  * Part 1 runs classic Rexx, including "~" used as NOT, to show it still
- * works. Part 2 runs every new construct. The object system does not exist
- * yet, so each new construct must be ACCEPTED by the parser and then stop
- * with error 91.1 when it runs. Anything else is a bug - please report it.
+ * works. Part 2 uses classes, messages, collections and operators; every
+ * line must say "ok". Part 2b shows constructs that must stay errors.
  * Part 3 shows that the main program ends at the first directive.
+ * Any "WRONG" or "unexpected" line is a bug - please report it.
  *
  * Run:  rexx ./oo_demo.rexx      (Windows: rexx.exe oo_demo.rexx)
  */
@@ -32,7 +32,7 @@ try:
   parse arg code
   signal on syntax name failed
   interpret code
-  say '  PARSED AND RAN (unexpected):' code
+  say '  RAN (unexpected):' code
   return
 failed:
   say '  ' left(code, 40) '->' condition('D')
@@ -58,22 +58,40 @@ call check 'parse with -3      ', parsetest(), 'cd/bcdefghij'
 say
 
 /* ---------------------------------------------------------------- */
-say '--- Part 2: new syntax must parse, then stop with error 91.1'
-obj = 'anything'; i = 2
-call try 'x = obj~length'
-call try 'x = obj~substr(2, 3)'
-call try 'x = obj -> length'
-call try 'x = obj -> substr(2, 3)'
-call try 'x = obj~~append("a")'
-call try 'x = obj ->> append("a") ->> append("b")'
-call try 'x = obj~upper~reverse'
-call try 'x = "literal"~length'
-call try 'x = (1 + 2)~abs'
-call try 'x = obj[1]'
-call try 'x = obj[i, i + 1]'
-call try 'x = obj~items[1]~name'
-call try 'obj~display'
-call try 'obj -> display'
+say '--- Part 2: objects, messages and collections'
+acct = .account~new(100)
+acct~deposit(50)
+acct -> deposit(25)
+call check 'messages ~ and ->  ', acct~balance, 175
+call check 'string as object   ', 'hello'~upper~reverse, 'OLLEH'
+call check 'literal receiver   ', 'abc'~length, 3
+call check 'expression receiver', (1 - 4)~abs, 3
+arr = .array~new
+arr ->> append('a') ->> append('b')
+arr~~append('c')
+call check 'cascades ->> and ~~', arr~items, 3
+call check 'array [] index     ', arr[2], 'b'
+arr[5] = 'e'
+call check 'array []= assign   ', arr~size arr[5], '5 e'
+list = ''
+do item over arr
+  list = list item
+end
+call check 'DO OVER            ', strip(list), 'a b c e'
+d = .directory~new
+d['city'] = 'Zurich'
+d~country = 'CH'
+call check 'directory          ', d['city'] d~country, 'Zurich CH'
+v = .vector~new(1, 2) + .vector~new(10, 20)
+call check 'operator method "+"', v, '(11,22)'
+call check 'SAY uses ~string   ', acct, 'Account with 175'
+call check 'subclass + super   ', .savings~new(10)~describe, 'Savings: Account with 10'
+call check 'routine            ', twice(21), 42
+signal on syntax name nomethod
+x = acct~fly
+say '  WRONG  unknown message did not raise an error'
+nomethod:
+call check 'unknown message    ', rc, 97
 say
 say '--- Part 2b: these must stay syntax errors'
 call try 'x = obj~'
@@ -87,8 +105,40 @@ say '--- Part 3: the main program ends at the first directive'
 say 'This is the last line you should see.'
 
 ::class Account
+::attribute balance get
 ::method init
-  say 'BUG: method body was executed'
+  expose balance
+  use arg balance
 ::method deposit
-::routine helper
-  say 'BUG: routine body was executed'
+  expose balance
+  use arg amount
+  balance = balance + amount
+::method string
+  expose balance
+  return 'Account with' balance
+
+::class Savings subclass Account
+::method describe
+  return 'Savings:' self~string:super
+
+::class Vector
+::method init
+  expose x y
+  use arg x, y
+::method x
+  expose x
+  return x
+::method y
+  expose y
+  return y
+::method "+"
+  expose x y
+  use arg other
+  return .vector~new(x + other~x, y + other~y)
+::method string
+  expose x y
+  return '(' || x || ',' || y || ')'
+
+::routine twice
+  use arg n
+  return n * 2
