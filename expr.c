@@ -207,6 +207,43 @@ num_descr *calcul( tsd_t *TSD, nodeptr thisptr, num_descr **kill, int side, int 
    streng *sptr;
    int strip2 = 0; /* fixes bug 1107763, second part */
 
+   if ( TSD->oo_active && thisptr->p[0] )
+   {
+      /* OO extension: operators with an object as left operand */
+      int handled;
+      streng *lv;
+
+      sptr = oo_operator( TSD, thisptr, &handled, &lv );
+      if ( handled )
+      {
+         numthr = get_a_descr( TSD, NULL, 0, sptr );
+         Free_stringTSD( sptr );
+         if ( kill )
+            *kill = numthr;
+         return numthr;
+      }
+      if ( lv )
+      {
+         treenode tl, top;
+
+         memset( &tl, 0, sizeof( tl ) );
+         tl.type = X_STRING;
+         tl.name = lv;
+         top = *thisptr;
+         top.p[0] = &tl;
+         numthr = calcul( TSD, &top, NULL, side, operator );
+         if ( tl.u.number )
+         {
+            FreeTSD( tl.u.number->num );
+            FreeTSD( tl.u.number );
+         }
+         Free_stringTSD( lv );
+         if ( kill )
+            *kill = numthr;
+         return numthr;
+      }
+   }
+
    switch ( thisptr->type )
    {
       case 0:
@@ -573,6 +610,36 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
 
    if ( kill )
       *kill = NULL;
+   if ( TSD->oo_active && thisptr->p[0] )
+   {
+      /* OO extension: operators with an object as left operand */
+      int handled;
+      streng *lv;
+
+      stmp1 = oo_operator( TSD, thisptr, &handled, &lv );
+      if ( handled )
+      {
+         RETURN_NEW( stmp1 );
+      }
+      if ( lv )
+      {
+         treenode tl, top;
+
+         memset( &tl, 0, sizeof( tl ) );
+         tl.type = X_STRING;
+         tl.name = lv;
+         top = *thisptr;
+         top.p[0] = &tl;
+         stmp1 = evaluate( TSD, &top, NULL );
+         if ( tl.u.number )
+         {
+            FreeTSD( tl.u.number->num );
+            FreeTSD( tl.u.number );
+         }
+         Free_stringTSD( lv );
+         RETURN_NEW( stmp1 );
+      }
+   }
    switch ( thisptr->type )
    {
       case 0:
@@ -920,6 +987,39 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
    streng *stmp1,*stmp2;
    int tmp,sint;
    num_descr *ntmp;
+
+   if ( TSD->oo_active && thisptr->p[0] )
+   {
+      /* OO extension: operators with an object as left operand */
+      int handled;
+      streng *lv;
+
+      stmp1 = oo_operator( TSD, thisptr, &handled, &lv );
+      if ( handled )
+      {
+         tmp = str_to_bool( stmp1 );
+         Free_stringTSD( stmp1 );
+         return tmp;
+      }
+      if ( lv )
+      {
+         treenode tl, top;
+
+         memset( &tl, 0, sizeof( tl ) );
+         tl.type = X_STRING;
+         tl.name = lv;
+         top = *thisptr;
+         top.p[0] = &tl;
+         tmp = isboolean( TSD, &top, suberror, op );
+         if ( tl.u.number )
+         {
+            FreeTSD( tl.u.number->num );
+            FreeTSD( tl.u.number );
+         }
+         Free_stringTSD( lv );
+         return tmp;
+      }
+   }
 
    switch ( thisptr->type )
    {

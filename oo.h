@@ -41,6 +41,9 @@ streng *oo_stringify( tsd_t *TSD, const streng *s );
  */
 void oo_stringify_inplace( tsd_t *TSD, streng **s, int *owned );
 
+/* operators with an object as left operand, see oo.c */
+streng *oo_operator( tsd_t *TSD, nodeptr thisptr, int *handled, streng **leftval );
+
 /* "an Array" for an object handle without calling methods, else NULL */
 streng *oo_describe( tsd_t *TSD, const streng *s );
 

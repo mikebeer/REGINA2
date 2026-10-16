@@ -993,6 +993,8 @@ endloop: if (s.increment)
          goto fakerecurse ;
       }
       case X_NASSIGN:
+         if ( TSD->oo_active )
+            goto oo_plain_assign;   /* an operator method may return an object */
       {
          num_descr *ntmp;
          streng *preferred_str;
@@ -1026,6 +1028,7 @@ endloop: if (s.increment)
       }
 
       case X_ASSIGN:
+oo_plain_assign:
       {
 /* This is a CMS-ism; CMS allows the expression in an assignment to
  * be omitted, while TRL does _not_. If a CMS mode is implemented, the

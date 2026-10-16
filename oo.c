@@ -176,6 +176,7 @@ typedef struct oo_tsd {
 /* ------------------------------------------------------------------ */
 
 static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot );
+static streng *m_obj_concat( tsd_t *TSD, struct oo_call *c );
 
 static oo_tsd *get_ot( tsd_t *TSD )
 {
@@ -2597,6 +2598,14 @@ static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
    add_methods( TSD, ot->cObject, "HASMETHOD", m_hasmethod, 0 );
    add_methods( TSD, ot->cObject, "REQUEST", m_request, 0 );
    add_methods( TSD, ot->cObject, "COPY", m_copy, 0 );
+   add_methods( TSD, ot->cObject, "||", m_obj_concat, 0 );
+   {
+      streng *blank = Str_creTSD( " " ), *none = Str_creTSD( "" );
+      add_method( TSD, ot->cObject, NULL, blank, m_obj_concat, 0 );
+      add_method( TSD, ot->cObject, NULL, none, m_obj_concat, 0 );
+      Free_stringTSD( blank );
+      Free_stringTSD( none );
+   }
 
    /* Class: the methods every class object understands */
    add_methods( TSD, ot->cClass, "NEW", m_new, 0 );
@@ -3597,4 +3606,141 @@ streng *oo_describe( tsd_t *TSD, const streng *s )
    oo_object *o = obj_of( TSD, s );
 
    return o ? default_name( TSD, o ) : NULL;
+}
+
+/* ------------------------------------------------------------------ */
+/* operators applied to objects                                       */
+/* ------------------------------------------------------------------ */
+
+static const char *operator_name( int type )
+{
+   switch ( type )
+   {
+      case X_PLUSS: return "+";
+      case X_MINUS: return "-";
+      case X_MULT: return "*";
+      case X_DEVIDE: return "/";
+      case X_INTDIV: return "%";
+      case X_MODULUS: return "//";
+      case X_EXP: return "**";
+      case X_CONCAT: return "||";
+      case X_SPACE: return " ";
+      case X_EQUAL: case X_SEQUAL: case X_NEQUAL: return "=";
+      case X_DIFF: case X_SDIFF: case X_NDIFF: return "\\=";
+      case X_GT: case X_SGT: case X_NGT: return ">";
+      case X_LT: case X_SLT: case X_NLT: return "<";
+      case X_GTE: case X_SGTE: case X_NGTE: return ">=";
+      case X_LTE: case X_SLTE: case X_NLTE: return "<=";
+      case X_S_EQUAL: return "==";
+      case X_S_DIFF: return "\\==";
+      case X_S_GT: return ">>";
+      case X_S_LT: return "<<";
+      case X_S_GTE: return ">>=";
+      case X_S_LTE: return "<<=";
+      case X_S_NGT: return "\\>>";
+      case X_S_NLT: return "\\<<";
+      case X_LOG_AND: return "&";
+      case X_LOG_OR: return "|";
+      case X_LOG_XOR: return "&&";
+      case X_U_MINUS: return "-";
+      case X_U_PLUSS: return "+";
+      case X_LOG_NOT: return "\\";
+      default: return NULL;
+   }
+}
+
+/*
+ * oo_operator handles "left op right" when left is an object: the object
+ * receives the message "op" with right as argument. *handled is 0 if left
+ * is no object; then *leftval may hold the already evaluated left operand
+ * (owned by the caller) which must not be evaluated a second time.
+ */
+streng *oo_operator( tsd_t *TSD, nodeptr thisptr, int *handled, streng **leftval )
+{
+   nodeptr left = thisptr->p[0];
+   const char *op = operator_name( thisptr->type );
+   streng *lv = NULL, *rv, *rkill = NULL, *name, *r;
+   const streng *lval = NULL, *argv[1];
+
+   int unary = ( thisptr->type == X_U_MINUS || thisptr->type == X_U_PLUSS
+                 || thisptr->type == X_LOG_NOT );
+
+   *handled = 0;
+   *leftval = NULL;
+   if ( op == NULL || left == NULL || ( thisptr->p[1] == NULL && !unary ) )
+      return NULL;
+   switch ( left->type )
+   {
+      case X_SIM_SYMBOL:
+         /* look without evaluating: no NOVALUE condition here */
+         lval = isvariable( TSD, left->name );
+         if ( lval == NULL || obj_of( TSD, lval ) == NULL )
+            return NULL;
+         break;
+
+      case X_STRING:
+      case X_STEM_SYMBOL:
+         return NULL;
+
+      case X_CON_SYMBOL:
+         if ( !OO_IS_ENVSYMBOL( left ) )
+            return NULL;
+         /* fall through */
+      default:
+         /*
+          * Any other expression may produce an object. It is evaluated
+          * once; if it isn't an object the caller continues with the value.
+          */
+         lv = evaluate( TSD, left, NULL );
+         if ( obj_of( TSD, lv ) == NULL )
+         {
+            *leftval = lv;
+            return NULL;
+         }
+         lval = lv;
+         break;
+   }
+
+   name = Str_creTSD( op );
+   if ( unary )
+   {
+      rv = NULL;
+      r = send_msg( TSD, lval, name, 0, NULL );
+   }
+   else
+   {
+      rv = evaluate( TSD, thisptr->p[1], &rkill );
+      argv[0] = rv;
+      r = send_msg( TSD, lval, name, 1, argv );
+   }
+   Free_stringTSD( name );
+   if ( rkill )
+      Free_stringTSD( rkill );
+   if ( lv )
+      Free_stringTSD( lv );
+   if ( r == NULL )
+      exiterror( ERR_NO_RESULT_OBJECT, 1, op );
+   *handled = 1;
+   return r;
+}
+
+/* Object's concatenation methods: the string values are concatenated */
+static streng *m_obj_concat( tsd_t *TSD, oo_call *c )
+{
+   streng *a = oo_stringify( TSD, c->selfstr ), *b = NULL, *r;
+   const streng *bs = opt_arg( c, 0 );
+
+   if ( a == NULL )
+      a = Str_dupTSD( c->selfstr );
+   if ( bs )
+   {
+      b = oo_stringify( TSD, bs );
+      if ( c->name->len == 1 && c->name->value[0] == ' ' )
+         a = catc( TSD, a, " " );
+      a = cats( TSD, a, b ? b : bs );
+   }
+   r = a;
+   if ( b )
+      Free_stringTSD( b );
+   return r;
 }
