@@ -399,8 +399,10 @@ libregina.dll.a: cygregina.dll
 yaccsrc:
 	bison -p__regina -o$(srcdir)/yaccsrc.c -d $(srcdir)/yaccsrc.y
 
+# contrib/flex.skl only works with flex <= 2.5.4a; current flex uses its own
+# skeleton (see tools/regenerate-parser.sh)
 lexsrc:
-	flex -P__regina -S$(srcdir)/contrib/flex.skl -8 -o$(srcdir)/lexsrc.c $(srcdir)/lexsrc.l
+	flex -P__regina -8 -o$(srcdir)/lexsrc.c $(srcdir)/lexsrc.l
 
 #
 # Convert .mts to .mtb

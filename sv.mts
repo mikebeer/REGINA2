@@ -282,6 +282,9 @@
  90,  2,[%s är en utökad instruktion enl. Regina]|<token>
  90,  3,[%s argument %d, valet måste börja med ett av "%s" när "OPTIONS STRICT_ANSI" används; hittade "%s"; a Regina extension]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[%s är en utökad jämförelsen enl. Regina]|<token>
+ 91,  0,[Object-oriented extension not available]
+ 91,  1,[%s is an object-oriented extension that is not implemented yet]|<token>
+ 91,  2,[Directives are not allowed in INTERPRET data]
  93,  0,[Ogilitgt anrop till rutin]
  93,  1,[Kommandot STREAM %s måste följas av ett av "%s"; hittade "%s"]|<token>,<value>,<value>
  93,  3,[Kommandot STREAM måste vara ett av "%s"; hittade "%s"]|<value>,<value>

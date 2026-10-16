@@ -124,6 +124,18 @@ static int delayed_symbol=0;
  */
 static int inhibit_delayed_abuttal=0;
 
+/*
+ * bracket_depth counts open "[" of array references (OO extension). A "]"
+ * without an open "[" stays an invalid character as in classic Regina.
+ */
+static int bracket_depth=0;
+
+/*
+ * The spelling of the last message or cascade operator ("~", "->", "~~",
+ * "->>") for error messages of the parser.
+ */
+const char *__regina_oo_operator = "~";
+
 static char ch;
 static int kill_this_space=0, kill_next_space=1 ;
 static int extnextline = -1, extnextstart; /* for a delayed line increment */
@@ -1765,6 +1777,76 @@ key_with          [wW][iI][tT][hH]
    SET_NEXTSTART() ;
    return '=' ; }
 
+   /*
+    * OO extension: message send and cascade operators.
+    *
+    * "->" and "->>" are syntax errors in classic Rexx in every position, so
+    * they may be surrounded by blanks.
+    *
+    * "~" is a NOT character in classic Regina. It is only a message operator
+    * ("~") or cascade operator ("~~") when it directly follows a term with no
+    * blank in between (insert_abuttal is set), because a NOT can never
+    * follow a term. Comparisons like "a~=b" or "a~ <b" are longer matches of
+    * the comparison rules below and keep their classic meaning. In every
+    * other case REJECT falls back to the classic NOT rule.
+    */
+{between}\-\>\>{between} {
+   __regina_oo_operator = "->>" ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return CASCADE ; }
+
+{between}\-\>{between} {
+   __regina_oo_operator = "->" ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return MSGSEND ; }
+
+~~{between} {
+   if ( !insert_abuttal )
+      REJECT ;
+   __regina_oo_operator = "~~" ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return CASCADE ; }
+
+~{between} {
+   if ( !insert_abuttal )
+      REJECT ;
+   __regina_oo_operator = "~" ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return MSGSEND ; }
+
+   /*
+    * OO extension: array references "term[index, ...]". The "[" must
+    * directly follow a term; anything else stays an invalid character.
+    */
+\[{between} {
+   if ( !insert_abuttal )
+      REJECT ;
+   bracket_depth++ ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return '[' ; }
+
+{between}\] {
+   if ( bracket_depth == 0 )
+      REJECT ;
+   bracket_depth-- ;
+   expression_ended = 1 ;
+   SET_NEXTSTART() ;
+   return ']' ; }
+
+   /*
+    * OO extension: directives "::CLASS", "::METHOD", ... at the start of a
+    * clause. "::" is always a syntax error in classic Rexx.
+    */
+<comm>::{between} {
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return DCOLON ; }
+
 {not}{between} {
    /* why don't I have a {between} in the beginning of this re? bug? */
    BEGIN other ;
@@ -2733,6 +2815,7 @@ static void init_it_all( tsd_t *TSD )
    in_do = 0 ;
    in_then = 0 ;
    inhibit_delayed_abuttal = 0 ;
+   bracket_depth = 0 ;
    firstln = 0 ;
    in_parse = 0 ;
    in_trace = 0 ;

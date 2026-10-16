@@ -259,6 +259,9 @@
  90,  2,[%s ist eine Erweiterungsinstruktion von Regina]|<token>
  90,  3,[Routine %s, Argument %d: Option muss ein Wert aus "%s" sein, wenn "OPTIONS STRICT_ANSI" vorliegt; Regina-Erweiterung "%s" gefunden]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[%s ist eine Erweiterung Betreiber von Regina]|<token>
+ 91,  0,[Objektorientierte Erweiterung nicht verfügbar]
+ 91,  1,[%s ist eine objektorientierte Erweiterung, die noch nicht implementiert ist]|<token>
+ 91,  2,[Direktiven sind in INTERPRET-Daten nicht erlaubt]
  93,  0,[Ungültiger Aufruf einer Routine]
  93,  1,[Das STREAM-Kommando %s fordert als Nachfolger eines der Worte "%s"; "%s" gefunden]|<token>,<value>,<value>
  93,  3,[Das STREAM-Kommando muss eines sein aus "%s"; "%s" gefunden]|<value>,<value>

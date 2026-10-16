@@ -295,6 +295,9 @@
  90,  2,[%s is a Regina extension instruction]|<token>
  90,  3,[%s argument %d, option must start with one of "%s" with "OPTIONS STRICT_ANSI"; found "%s"; a Regina extension]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[%s is a Regina extension operator]|<token>
+ 91,  0,[Object-oriented extension not available]
+ 91,  1,[%s is an object-oriented extension that is not implemented yet]|<token>
+ 91,  2,[Directives are not allowed in INTERPRET data]
  93,  0,[Incorrect call to routine]
  93,  1,[STREAM command %s must be followed by one of "%s"; found "%s"]|<token>,<value>,<value>
  93,  3,[STREAM command must be one of "%s"; found "%s"]|<value>,<value>

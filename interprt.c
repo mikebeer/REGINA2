@@ -2051,6 +2051,12 @@ endloop: if (s.increment)
          do_options(TSD, TSD->currlevel, (thisptr->p[0]) ? evaluate(TSD,thisptr->p[0],NULL) : nullstringptr(), 0) ;
          break ;
 
+      case X_DIRECTIVE:
+         /*
+          * OO extension: running into a directive ends the main program
+          * (or a subroutine) like RETURN without a value. The directive's
+          * own statements are kept in p[1] and are never reached here.
+          */
       case X_RETURN:
       {
          stackelem *top;
@@ -2058,7 +2064,7 @@ endloop: if (s.increment)
          streng *retval;
 
          /* buggy, need to deallocate procbox and vars ... */
-         if (thisptr->p[0])
+         if (thisptr->type == X_RETURN && thisptr->p[0])
             retval = evaluate(TSD,thisptr->p[0],NULL) ;
          else
             retval = NULL ;

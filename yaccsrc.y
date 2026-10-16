@@ -89,6 +89,7 @@ static void checkdosyntax( cnodeptr thisptr ) ;
 void newlabel( const tsd_t *TSD, internal_parser_type *ipt, nodeptr thisptr ) ;
 static nodeptr optgluelast( nodeptr p1, nodeptr p2 );
 static void move_labels( nodeptr front, nodeptr end, int level );
+extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 
 #define IS_EXPRLIST(x) ( ( (x) != NULL )                   \
                       && ( ( (x)->type == X_CEXPRLIST )    \
@@ -129,6 +130,7 @@ static void move_labels( nodeptr front, nodeptr end, int level );
 %token GTGT LTLT NOTGTGT NOTLTLT GTGTE LTLTE
 %token INPUT OUTPUT ERROR NORMAL APPEND REPLACE STREAM STEM LIFO FIFO NOEOL
 %token LOWER CASELESS
+%token MSGSEND CASCADE DCOLON /* OO extension */
 %token PLUSASSIGNMENTVARIABLE MINUSASSIGNMENTVARIABLE MULTASSIGNMENTVARIABLE DIVASSIGNMENTVARIABLE MODULUSASSIGNMENTVARIABLE INTDIVASSIGNMENTVARIABLE ORASSIGNMENTVARIABLE XORASSIGNMENTVARIABLE ANDASSIGNMENTVARIABLE CONCATASSIGNMENTVARIABLE
 
 %start start
@@ -141,6 +143,7 @@ static void move_labels( nodeptr front, nodeptr end, int level );
 %left '*' '/' '%' MODULUS
 %left EXP
 %left UMINUS UPLUS NOT /*UPLUS and UMINUS are locally used to assign precedence*/
+%left MSGSEND CASCADE '[' /* OO extension: message terms bind tightest */
 
 %nonassoc THEN
 %nonassoc ELSE
@@ -174,6 +177,55 @@ prog         : nlncl stats             { $$ = optgluelast( $1, $2 );
                                          if ( $$ != NULL )
                                             $$->o.last = NULL;
                                          EndProg( $$ ); }
+             | nlncl stats dirsect     { $$ = optgluelast( $1, $2 );
+                                         $$ = optgluelast( $$, $3 );
+                                         $$->o.last = NULL;
+                                         EndProg( $$ ) ; }
+             | nlncl dirsect           { $$ = optgluelast( $1, $2 );
+                                         $$->o.last = NULL;
+                                         EndProg( $$ ) ; }
+             ;
+
+/*
+ * OO extension: directives. The main program ends at the first directive;
+ * every directive owns the statements up to the next directive in p[1].
+ * The directive's words are a chain of X_STRING nodes in p[0].
+ */
+dirsect      : dirsect dirblock        { $$ = optgluelast( $1, $2 ); }
+             | dirblock                { $$ = $1; }
+             ;
+
+dirblock     : directive stats         { $$ = $1;
+                                         $$->p[1] = optgluelast( $$->p[1], $2 );
+                                         if ( $$->p[1] != NULL )
+                                            $$->p[1]->o.last = NULL; }
+             | directive               { $$ = $1;
+                                         if ( $$->p[1] != NULL )
+                                            $$->p[1]->o.last = NULL; }
+             ;
+
+directive    : DCOLON                  { $$ = makenode( X_DIRECTIVE, 0 );
+                                         $$->lineno = parser_data.tline;
+                                         $$->charnr = parser_data.tstart; }
+                      dirwords ncl     { $$ = $2;
+                                         $$->name = $3->name;
+                                         $$->p[0] = $3->next;
+                                         if ( $$->p[0] != NULL )
+                                            $$->p[0]->o.last = NULL;
+                                         $$->p[1] = $4; /* labels */ }
+             | DCOLON error            { exiterror( ERR_YACC_SYNTAX, 1, parser_data.tline ); }
+             ;
+
+dirwords     : dirwords SPACE dirword  { $$ = optgluelast( $1, $3 ); }
+             | dirword                 { $$ = $1; }
+             ;
+
+dirword      : SIMSYMBOL               { $$ = makenode( X_STRING, 0 );
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
+             | CONSYMBOL               { $$ = makenode( X_STRING, 0 );
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
+             | STRING                  { $$ = makenode( X_STRING, 0 );
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
              ;
 
 stats        : stats ystatement        { /* fixes bug 579711 */
@@ -1289,6 +1341,18 @@ expr        : '('                      { /* We have to accept exprs here even
                          expr          { parendepth++; AUTO_REDUCE( $1, "<<=" );
                                          $$ = makenode( X_S_LTE, 2, $1, $4 ); }
             |      LTLTE               { exiterror( ERR_INVALID_EXPRESSION, 1, "<<=" ); }
+            | expr MSGSEND msgtarget   { AUTO_REDUCE( $1, __regina_oo_operator );
+                                         $$ = $3;
+                                         $$->type = X_MSGSEND;
+                                         $$->p[0] = $1; }
+            | expr CASCADE msgtarget   { AUTO_REDUCE( $1, __regina_oo_operator );
+                                         $$ = $3;
+                                         $$->type = X_CASCADE;
+                                         $$->p[0] = $1; }
+            |      MSGSEND             { exiterror( ERR_INVALID_EXPRESSION, 1, __regina_oo_operator ); }
+            |      CASCADE             { exiterror( ERR_INVALID_EXPRESSION, 1, __regina_oo_operator ); }
+            | expr '[' bracket_args    { AUTO_REDUCE( $1, "[" );
+                                         $$ = makenode( X_INDEX, 2, $1, $3 ); }
             | symbtree                 { $$ = $1 ; }
             | CONSYMBOL                { $$ = makenode( X_STRING, 0 );
                                          $$->name = Str_cre_TSD(parser_data.TSD,retvalue) ; }
@@ -1332,6 +1396,28 @@ func_args   :                          { /* ugly fake preservs parendepth */
               exprs_sub                { parendepth = (int) $$;
                                          $$ = $2; }
             ;
+
+/*
+ * OO extension: the method part of a message term. The node returned has
+ * name = method name and p[1] = argument list (NULL without parentheses);
+ * the caller sets the type and the receiver in p[0].
+ */
+msgtarget   : SIMSYMBOL                { $$ = makenode( X_MSGSEND, 0 );
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
+            | STRING                   { $$ = makenode( X_MSGSEND, 0 );
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
+            | intfunc func_args        { $$ = makenode( X_MSGSEND, 2, NULL, $2 );
+                                         $$->name = (streng *) $1; }
+            | extfunc func_args        { $$ = makenode( X_MSGSEND, 2, NULL, $2 );
+                                         $$->name = (streng *) $1; }
+            ;
+
+bracket_args :                         { /* like func_args, with "]" */
+                                         $$ = (YYSTYPE) parendepth;
+                                         parendepth = 0; }
+               exprs ']'               { parendepth = (int) $$;
+                                         $$ = $2; }
+             ;
 
 intfunc     : INFUNCNAME               { $$ = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
             ;

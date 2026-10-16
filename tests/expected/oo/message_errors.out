@@ -1,0 +1,14 @@
+err 64: x = a~ => Error 64.1: [Syntax error at line 19]
+err 64: x = a-> => Error 64.1: [Syntax error at line 19]
+err 35: x = -> b => Error 35.1: Invalid expression detected at "->"
+err 35: x = ->> b => Error 35.1: Invalid expression detected at "->>"
+err 35: x = a - > b => Error 35.1: Invalid expression detected at ">"
+err 64: x = a -> > b => Error 64.1: [Syntax error at line 19]
+err 64: x = a~1 => Error 64.1: [Syntax error at line 19]
+err 64: x = a[ => Error 64.1: [Syntax error at line 19]
+err 64: x = a[1 => Error 64.1: [Syntax error at line 19]
+err 13: x = a] => Error 13.1: Invalid character in program "('5d'X)"
+err 13: x = a [1] => Error 13.1: Invalid character in program "('5b'X)"
+err 13: x = [1] => Error 13.1: Invalid character in program "('5b'X)"
+err 91: ::class foo => Error 91.2: [Directives are not allowed in INTERPRET data]
+rc=0

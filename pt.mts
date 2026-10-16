@@ -264,6 +264,9 @@
  90,  2,[%s eh uma instrucao de extensao Regina]|<token>
  90,  3,[%s argumento %d, a opcao deve iniciar com um dos "%s" com "OPTIONS STRICT_ANSI"; encontrado "%s"; uma extensao Regina]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[%s eh uma operador de extensao Regina]|<token>
+ 91,  0,[Object-oriented extension not available]
+ 91,  1,[%s is an object-oriented extension that is not implemented yet]|<token>
+ 91,  2,[Directives are not allowed in INTERPRET data]
  93,  0,[chamada incorreta para rotina]
  93,  1,[o comando STREAM %s deve ser seguido por um dos "%s"; encontrado "%s"]|<token>,<value>,<value>
  93,  3,[o comando STREAM deve ser um dos "%s"; encontrado "%s"]|<value>,<value>

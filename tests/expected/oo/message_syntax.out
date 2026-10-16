@@ -1,0 +1,40 @@
+err 91: x = a~b => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a~b() => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a~b(1, 2) => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a->b => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a -> b => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a -> b(1) => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a~~b => Error 91.1: [Message cascade (~~ or ->>) is an object-oriented extension that is not implemented yet]
+err 91: x = a->>b => Error 91.1: [Message cascade (~~ or ->>) is an object-oriented extension that is not implemented yet]
+err 91: x = a ->> b(1) ->> c => Error 91.1: [Message cascade (~~ or ->>) is an object-oriented extension that is not implemented yet]
+err 91: x = "str"~length => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = 'str' -> length => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = (1+2)~abs => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a~b~c => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a->b->c => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a~b + 1 => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = -a~b => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = \a~b => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a~ b => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a~"+"(1) => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a[1] => Error 91.1: [Array reference ([ ]) is an object-oriented extension that is not implemented yet]
+err 91: x = a[1, 2] => Error 91.1: [Array reference ([ ]) is an object-oriented extension that is not implemented yet]
+err 91: x = a[i+1] => Error 91.1: [Array reference ([ ]) is an object-oriented extension that is not implemented yet]
+err 91: x = a~b[1] => Error 91.1: [Array reference ([ ]) is an object-oriented extension that is not implemented yet]
+err 91: x = a[1]~b => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: x = a[1][2] => Error 91.1: [Array reference ([ ]) is an object-oriented extension that is not implemented yet]
+err 91: x = a[] => Error 91.1: [Array reference ([ ]) is an object-oriented extension that is not implemented yet]
+err 91: a~b => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: a -> b(1) => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+err 91: say a~b => Error 91.1: [Message send (~ or ->) is an object-oriented extension that is not implemented yet]
+abc 1
+  ok: say a ~b
+1
+  ok: say a~=b a~ =b a~<b
+1 1
+  ok: say ~b ~ b
+1
+  ok: say~b
+if-not ok
+  ok: if~b then say "if-not ok"
+rc=0

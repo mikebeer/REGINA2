@@ -379,6 +379,9 @@ do_an_add:
       case X_IS_EXTERNAL:
       case X_CONCAT:
       case X_SPACE:
+      case X_MSGSEND:
+      case X_CASCADE:
+      case X_INDEX:
       {
          numthr = get_a_descr( TSD, NULL, 0, evaluate( TSD, thisptr, &sptr ) );
          FREE_TMP_STRING( sptr );
@@ -825,6 +828,21 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          stmp1 = bool_to_str( TSD, isboolean( TSD, thisptr, 0, NULL )) ;
          RETURN_NEW( stmp1 );
 
+      /*
+       * OO extension: parsed, but there is no object system yet.
+       */
+      case X_MSGSEND:
+         exiterror( ERR_OO_NOT_AVAILABLE, 1, "Message send (~ or ->)" );
+         return NULL;
+
+      case X_CASCADE:
+         exiterror( ERR_OO_NOT_AVAILABLE, 1, "Message cascade (~~ or ->>)" );
+         return NULL;
+
+      case X_INDEX:
+         exiterror( ERR_OO_NOT_AVAILABLE, 1, "Array reference ([ ])" );
+         return NULL;
+
       default:
          exiterror( ERR_INTERPRETER_FAILURE, 1, __FILE__, __LINE__, "" )  ;
          return NULL ;
@@ -943,6 +961,9 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
       case X_IS_EXTERNAL:
       case X_CONCAT:
       case X_SPACE:
+      case X_MSGSEND:
+      case X_CASCADE:
+      case X_INDEX:
          tmp = str_to_bool( evaluate( TSD, thisptr, &stmp1 ) );
          FREE_TMP_STRING( stmp1 );
          return tmp;

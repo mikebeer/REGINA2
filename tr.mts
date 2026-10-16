@@ -288,6 +288,9 @@
  90,  2,[%s ogesi bir Regina uzanti buyrugudur]|<token>
  90,  3,[%s degistirgesini iceren %d. siradaki ogenin isaret ettigi senecek "OPTIONS_STRICT_ANSI" ile belirtilmis "%s" ogelerinden birisi ile baslamalidir; bulunan "%s"; bir Regina uzantisidir]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[%s ogesi bir Regina uzanti islecinin]|<token>
+ 91,  0,[Object-oriented extension not available]
+ 91,  1,[%s is an object-oriented extension that is not implemented yet]|<token>
+ 91,  2,[Directives are not allowed in INTERPRET data]
  93,  0,[Dogru olmayan yordam cagrimi]
  93,  1,[%s seklindeki STREAM buyrugu "%s" ogelerinin bir tanesi tarafindan takip edilmelidir; bulunan "%s"]|<token>,<value>,<value>
  93,  3,[STREAM buyrugu "%s" ogelerinden bir tanesi olmalidir; bulunan "%s"]|<value>,<value>

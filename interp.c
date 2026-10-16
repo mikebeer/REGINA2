@@ -73,6 +73,23 @@ streng *dointerpret( tsd_t *TSD, streng *string )
 
    newtree = parsing.root ;
    parsing.kill = string ;
+
+   /*
+    * OO extension: directives are not allowed in INTERPRET data.
+    */
+   {
+      nodeptr n;
+
+      for ( n = newtree; n != NULL; n = n->next )
+      {
+         if ( n->type == X_DIRECTIVE )
+         {
+            DestroyInternalParsingTree( TSD, &parsing );
+            exiterror( ERR_OO_NOT_AVAILABLE, 2 );
+            return NULL;
+         }
+      }
+   }
    if (TSD->currentnode)
       set_line_nos( newtree, TSD->currentnode->lineno, TSD->currentnode->charnr ) ;
 

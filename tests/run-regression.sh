@@ -1,22 +1,32 @@
 #!/bin/sh
-# Regression check: run the trip suite and tests/classic with a given
-# rexx binary and compare against the outputs recorded from the
-# unmodified Regina 3.9.7 build (tests/expected/).
+# Regression check for the Regina OO work.
 #
-#   tests/run-regression.sh /path/to/rexx            compare
-#   tests/run-regression.sh /path/to/rexx --record   (re)record expected output
+# Suites:
+#   trip     the trip suite shipped with Regina (../trip)
+#   classic  classic programs whose behaviour the OO syntax must not change
+#   oo       the new OO syntax
+#
+# trip and classic are compared against output recorded from the unmodified
+# Regina 3.9.7 build; oo against reviewed output of the OO build. All
+# expected output lives in tests/expected/<suite>/.
+#
+#   tests/run-regression.sh /path/to/rexx                  compare all suites
+#   tests/run-regression.sh /path/to/rexx --record SUITE   re-record one suite
 #
 # Exit status 0 = every output identical.
 set -u
 REXX=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 MODE=${2:-compare}
+RECORD_SUITE=${3:-}
 HERE=$(cd "$(dirname "$0")" && pwd)
 SRC=$(cd "$HERE/.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/regina-regress.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
+SUITES="trip classic oo"
 
 cp -R "$SRC/trip" "$WORK/trip"
 cp -R "$HERE/classic" "$WORK/classic"
+cp -R "$HERE/oo" "$WORK/oo"
 ( cd "$WORK/trip" && for p in rc true std filter; do cc -o $p $p.c 2>/dev/null; done )
 PATH="$WORK/trip:$PATH"; export PATH
 
@@ -25,7 +35,7 @@ normalize() {
       -e 's#^[0-9.]* seconds used$#@SECONDS@ seconds used#'
 }
 
-run_dir() {   # $1 = suite name
+run_suite() {   # $1 = suite name
   mkdir -p "$WORK/out/$1"
   cd "$WORK/$1"
   for f in *.rexx; do
@@ -34,18 +44,22 @@ run_dir() {   # $1 = suite name
     normalize <"$WORK/raw" >"$WORK/out/$1/${f%.rexx}.out"
   done
 }
-run_dir trip
-run_dir classic
+for suite in $SUITES; do run_suite $suite; done
 
 if [ "$MODE" = "--record" ]; then
-  rm -rf "$HERE/expected"; mkdir -p "$HERE/expected"
-  cp -R "$WORK/out/trip" "$WORK/out/classic" "$HERE/expected/"
-  echo "recorded expected output in $HERE/expected"
+  case " $SUITES " in
+    *" $RECORD_SUITE "*) ;;
+    *) echo "usage: $0 REXX --record {trip|classic|oo}"; exit 2 ;;
+  esac
+  rm -rf "$HERE/expected/$RECORD_SUITE"; mkdir -p "$HERE/expected"
+  cp -R "$WORK/out/$RECORD_SUITE" "$HERE/expected/"
+  echo "recorded expected output for suite $RECORD_SUITE"
   exit 0
 fi
 
-fail=0; total=0
-for suite in trip classic; do
+status=0
+for suite in $SUITES; do
+  fail=0; total=0
   for exp in "$HERE/expected/$suite"/*.out; do
     total=$((total+1))
     got="$WORK/out/$suite/$(basename "$exp")"
@@ -54,6 +68,13 @@ for suite in trip classic; do
       diff "$exp" "$got" | head -20
     fi
   done
+  # a test program without recorded output is a failure, too
+  for got in "$WORK/out/$suite"/*.out; do
+    [ -f "$HERE/expected/$suite/$(basename "$got")" ] && continue
+    fail=$((fail+1)); total=$((total+1))
+    echo "FAIL $suite/$(basename "$got" .out): no expected output recorded"
+  done
+  echo "$suite: $((total-fail))/$total identical"
+  [ $fail -eq 0 ] || status=1
 done
-echo "$((total-fail))/$total identical to Regina 3.9.7 baseline"
-[ $fail -eq 0 ]
+exit $status

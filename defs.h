@@ -162,6 +162,11 @@
 #define X_XORASSIGN     144
 #define X_ANDASSIGN     145
 #define X_CONCATASSIGN  146
+/* OO extension */
+#define X_MSGSEND       147 /* p[0] receiver, name method, p[1] args or NULL */
+#define X_CASCADE       148 /* like X_MSGSEND, result is the receiver */
+#define X_INDEX         149 /* p[0] receiver, p[1] index list: a[i,j] */
+#define X_DIRECTIVE     150 /* name keyword, p[0] words, p[1] body */
 
 
 /* The three first two numbers have not errortext attched to them */
@@ -221,6 +226,7 @@
 #define ERR_YACC_SYNTAX         64
 
 #define ERR_NON_ANSI_FEATURE    90
+#define ERR_OO_NOT_AVAILABLE    91 /* OO extension, temporary */
 #define ERR_STREAM_COMMAND      93
 #define ERR_EXTERNAL_QUEUE      94
 

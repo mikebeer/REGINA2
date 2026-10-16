@@ -285,6 +285,9 @@
  90,  2,[%s jest instrukcj¥ rozszerzenia Regina'y]|<token>
  90,  3,[Argument %s nr %d, Przy "OPTIONS STRICT_ANSI" opcja musi zaczynaå si© jednym z "%s; znaleziono "%s"; rozszerzenie Regina'y]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[%s jest operatora rozszerzenia Regina'y]|<token>
+ 91,  0,[Object-oriented extension not available]
+ 91,  1,[%s is an object-oriented extension that is not implemented yet]|<token>
+ 91,  2,[Directives are not allowed in INTERPRET data]
  93,  0,[Niepoprawne wywoêanie procedury]
  93,  1,[Po komendzie STREAM %s musi wyst©powaå jedna z "%s"; znaleziono "%s"]|<token>,<value>,<value>
  93,  3,[Komenda STREAM musi byå jedn¥ z "%s"; znaleziono "%s"]|<value>,<value>
