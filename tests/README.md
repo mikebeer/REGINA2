@@ -28,3 +28,10 @@ during the build and races under `-j`.
 After editing `lexsrc.l` or `yaccsrc.y`, run `tools/regenerate-parser.sh`
 (flex 2.6, bison 3) and commit the generated `lexsrc.c`, `yaccsrc.c` and
 `yaccsrc.h` together with the sources.
+
+## Packages
+
+| Command | Result |
+|---|---|
+| `tools/build-deb.sh [OUTDIR]` | `regina-rexx-oo_<ver>_<arch>.deb` for Debian/Ubuntu. Runs the regression suites first and refuses to package if they fail. Replaces the distribution's `regina-rexx`/`libregina3`. |
+| `tools/build-windows.sh [OUTDIR]` | Standalone 64-bit `rexx.exe` (no DLL) and `regina-rexx-oo-<ver>-win64.zip`, cross-compiled with MinGW-w64 (`apt install mingw-w64`). |

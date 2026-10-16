@@ -208,7 +208,10 @@ directive    : DCOLON                  { $$ = makenode( X_DIRECTIVE, 0 );
                                          $$->lineno = parser_data.tline;
                                          $$->charnr = parser_data.tstart; }
                       dirwords ncl     { $$ = $2;
+                                         /* take over the keyword; the
+                                          * node must not own it twice */
                                          $$->name = $3->name;
+                                         $3->name = NULL;
                                          $$->p[0] = $3->next;
                                          if ( $$->p[0] != NULL )
                                             $$->p[0]->o.last = NULL;
