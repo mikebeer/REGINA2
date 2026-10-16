@@ -1,0 +1,6 @@
+date, time, 
+first  = /0.000000/
+second = /.000000/
+FuncTrip: error in line 116:    call ch three, '.000000'
+ 
+rc=0

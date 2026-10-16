@@ -1,0 +1,40 @@
+do, end, if, 
+Reports "select; when 1; else nop; end" as syntax error 35, not 18
+35
+select, assignment, 
+Reports ".4=5" as syntax error 50, not 31
+50.1
+
+Reports ".4==5" as syntax error 50, not 31
+50.1
+parse, 
+Reports "parse source . *(a) ." as syntax error 64, not 38
+64.1
+labels, sh: 1: BAR: not found
+
+Didn't catch "'foo': bar" as syntax error 20
+strings, when, end, data,  
+hex/bin, signal, strings, symbols, 
+Didn't catch "call on failure name "foobar"" as syntax error 19
+
+Didn't catch "signal on failure name "foobar"" as syntax error 19
+trailers, 
+Reports "call on failure foo" as syntax error 21, not 25
+21.1
+
+Reports "call off failure foo" as syntax error 21, not 25
+21.1
+trace, subkwd, 
+Reports "call on failure foobar there" as syntax error 21, not 25
+21.1
+
+Reports "signal on failure foobar there" as syntax error 21, not 25
+21.1
+wholenum, 
+Didn't catch "var=1112223334; parse arg . +(var) ." as syntax error 26
+do,  
+loops, express, 
+Reports "numeric digits 0" as syntax error 26, not 33
+26.5
+
+rc=0

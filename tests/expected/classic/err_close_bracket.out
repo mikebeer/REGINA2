@@ -1,0 +1,3 @@
+Error 13 running "@WORK@/classic/err_close_bracket.rexx", line 2: Invalid character in program
+Error 13.1: Invalid character in program "('5d'X)"
+rc=243

@@ -1,0 +1,5 @@
+    32 *-* address path 'unknown_prg'
+       +++ RC=-9 +++
+
+test passed
+rc=0

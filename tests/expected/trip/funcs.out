@@ -1,0 +1,7 @@
+arguments, comments, nullargs, labels, external, sh: 1: testfile: Permission denied
+
+first  = //
+second = /4/
+FuncTrip: error in  58:    call ch result, 4
+result, builtin, whole,  
+rc=0

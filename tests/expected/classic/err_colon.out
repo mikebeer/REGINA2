@@ -1,0 +1,3 @@
+Error 20 running "@WORK@/classic/err_colon.rexx", line 3: Name expected
+Error 20.1: Name required; found ":"
+rc=236

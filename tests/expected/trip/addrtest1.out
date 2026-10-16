@@ -1,0 +1,68 @@
+--------------------------------------------
+Queue's name q is (empty for default queue SESSION)
+--------------------------------------------
+
+Action: Just QUEUE, then PULL
+
+Action: 
+first line
+second line
+third line
+
+Action: LIFO> cat >LIFO
+
+Action: 
+third line
+second line
+first line
+
+Action: LIFO> cat >FIFO
+
+Action: 
+first line
+second line
+third line
+
+Action: ADDRESS SYSTEM "cat" WITH INPUT LIFO "" OUTPUT FIFO q
+
+Action: 
+first line
+second line
+third line
+
+Action: ADDRESS SYSTEM "cat" WITH INPUT LIFO "" OUTPUT APPEND FIFO q
+
+Action: 
+first line
+second line
+third line
+
+Action: ADDRESS SYSTEM "cat" WITH INPUT STEM s. OUTPUT LIFO q
+stem line 3
+stem line 2
+stem line 1
+
+Action: ADDRESS SYSTEM "cat" WITH INPUT STEM s. OUTPUT APPEND FIFO q
+stem line 3
+stem line 2
+stem line 1
+stem line 1
+stem line 2
+stem line 3
+
+Action: ADDRESS SYSTEM "echo Hello World" WITH OUTPUT FIFO q
+Hello World
+
+Action: ADDRESS SYSTEM WITH OUTPUT APPEND STREAM "stdout" ERROR APPEND STREAM "stdout"
+
+Action: ADDRESS SYSTEM "std"
+Line to stderr
+Line to stdout
+If you don't see 'Line to stderr' followed by 'Line to stdout', there is a problem!
+
+Action: ADDRESS SYSTEM WITH OUTPUT STREAM "junk" ERROR STREAM "junk"
+
+Action: ADDRESS SYSTEM "std"
+Line 1 from 'junk' is: 'Line to stderr', should be: 'Line to stderr'
+Line 2 from 'junk' is: 'Line to stdout', should be: 'Line to stdout'
+rc=0
