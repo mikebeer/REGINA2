@@ -1,0 +1,23 @@
+                        Regina  3.9.7
+                         18 Mar 2025
+
+Changes in this release (from 3.9.6)
+------------------------------------
+  * Bugs Fixed:
+    - #580 Missing files in SVN trunk (target Windows)
+    - #587 https://regina-rexx.sourceforge.io/ Sourceforge links mostly broken
+    - #595 Unexpected NUL bytes from changestr()
+    - #596 stream(filename,"C","OPEN WRITE REPLACE") fails, but "CREATE" works
+    - #598 Implicit command doesn't recognize arguments
+    - #600 Erroneous syntax error 37
+    - #602 Error "System resources exhausted" on Haiku
+    - #606 regina.dll reports WIN8 for Windows 11 systems
+    - #607 Visual C++ 4.0 build is broken
+    - #609 CENTER regression
+    - #610 CALL X(SIGL) passes **updated** SIGL as ARG(1)
+    - #612 Problems with cc23
+    - #613 Fixed typos in PDF
+
+  * Implement return of available memory via STORAGE() and FREESPACE() for Windows and Linux
+  * Distribute binary error message files as source so Regina can be cross-compiled
+  * Add rexxtry.rexx test program

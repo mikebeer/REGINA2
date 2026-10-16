@@ -1,0 +1,17 @@
+#
+# systemd service file for Regina stack service
+# installs to /etc/systemd/system/rxstack.service
+#
+[Unit]
+Description=Regina Rexx stack service
+Documentation=man:rxstack(1) man:regina(1) https://regina-rexx.sourceforge.io/doc/index.html
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/rxstack
+Restart=always
+User=rxstack
+Group=rxstack
+
+[Install]
+WantedBy=multi-user.target

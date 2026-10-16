@@ -1,0 +1,5 @@
+#!/bin/sh
+ADDONS=@addonsdir@
+SRC=/boot/system/lib/regina-rexx/@VERSION_UNQUOTED@/addons/libregutil.so
+ln -sf $SRC $ADDONS
+true

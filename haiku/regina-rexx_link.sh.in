@@ -1,0 +1,7 @@
+#!/bin/sh
+ADDONS=@addonsdir@
+SRC=/boot/system/lib/regina-rexx/@VERSION_UNQUOTED@/addons/librxtest1.so
+ln -sf $SRC $ADDONS
+SRC=/boot/system/lib/regina-rexx/@VERSION_UNQUOTED@/addons/librxtest2.so
+ln -sf $SRC $ADDONS
+true

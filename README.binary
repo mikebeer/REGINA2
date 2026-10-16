@@ -1,0 +1,39 @@
+                            Installing Regina using binary packages under Unix/Linux/macOS
+
+Regina is usually installed from a native installable package; either RPM or DEB.
+There are occasions where this is not an option, so a binary package on Regina is available for installation.
+The binary package is distributed as a compressed, tar file; Regina*.tar.gz
+
+The directory structure of the binary package is:
+bin/              - executable file
+doc/regina-rexx   - documentation files (not reference manual)
+include/          - header file for development
+lib/              - shared and static libraries (runtime and development)
+man/              - man page
+share/regina-rexx - sample programs and language files
+
+The package is designed to be unpacked into a base directory such as /usr/local (if you have root access on your
+machine), or $HOME if not.  You can unpack the package wherever you want, but the remainder of this README assumes
+you are unpacking into $HOME.
+
+To install the package for use execute the following commands:
+% cd $HOME
+% tar zxvf Regina*.tar.gz
+
+To enable Regina to function, you need to add $HOME/bin to the PATH environment variable; usually done in your
+shell's startup script, normally .profile or .bash_profile
+export PATH=$PATH:$HOME/bin
+
+In addition the "lib" directory needs to be added to the locations the dynamic loader searches. This is usually
+done by adding the directory to the LD_LIBRARY_PATH environment variable:
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/lib
+
+Most Unix/Linuxes use LD_LIBRARY_PATH; macOS uses DYLD_LIBRARY_PATH, AIX uses LIBPATH
+
+If you want to use a different language than English for error messages you need to set the following environment
+variables (assuming de as language):
+export REGINA_LANG_DIR=$HOME/share/regina-rexx
+export REGINA_LANG=de
+
+That's it. Now you can run your Rexx programs by simply running:
+% regina myprog.rexx

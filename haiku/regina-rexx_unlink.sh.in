@@ -1,0 +1,7 @@
+#!/bin/sh
+ADDONS=@addonsdir@
+SRC=librxtest1.so
+rm -f $ADDONS/$SRC
+SRC=librxtest2.so
+rm -f $ADDONS/$SRC
+true

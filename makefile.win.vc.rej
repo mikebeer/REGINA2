@@ -1,0 +1,21 @@
+*** makefile.win.vc	Mon May  6 08:28:17 2024
+--- makefile.win.vc	Wed Sep 11 20:12:53 2024
+***************
+*** 323,329 ****
+  regina.dll: $(TSFILES) regina$(LARCH)dll.obj regina.dll.mf
+  #   $(LD) /PDB:$*_dll.pdb $(LINKOPT) /DLL /BASE:0x6B000000 /OUT:regina.dll /MAP:regina_dd.map /IMPLIB:regina.lib /DEF:$(SRCDIR)\regina_$(LARCH)_dll.def regina$(LARCH)dll.obj *.ts.obj $(LIBS) $(WINSOCK)
+     $(LD) /PDB:$*_dll.pdb $(LINKOPT) /DLL /OUT:regina.dll /MAP:regina_dd.map /IMPLIB:regina.lib /DEF:$(SRCDIR)\regina_$(LARCH)_dll.def regina$(LARCH)dll.obj *.ts.obj $(LIBS) $(WINSOCK)
+     mt.exe /manifest $@.manifest $@.mf /outputresource:$@;2
+  
+  sregina.exe: $(STATFILES)
+     $(LD) /PDB:$*.pdb ?? /OUT:sregina.exe $(STATFILES) $(STATICFUNCTIONLIBS)
+--- 363,371 ----
+  regina.dll: $(TSFILES) regina$(LARCH)dll.obj regina.dll.mf
+  #   $(LD) /PDB:$*_dll.pdb $(LINKOPT) /DLL /BASE:0x6B000000 /OUT:regina.dll /MAP:regina_dd.map /IMPLIB:regina.lib /DEF:$(SRCDIR)\regina_$(LARCH)_dll.def regina$(LARCH)dll.obj *.ts.obj $(LIBS) $(WINSOCK)
+     $(LD) /PDB:$*_dll.pdb $(LINKOPT) /DLL /OUT:regina.dll /MAP:regina_dd.map /IMPLIB:regina.lib /DEF:$(SRCDIR)\regina_$(LARCH)_dll.def regina$(LARCH)dll.obj *.ts.obj $(LIBS) $(WINSOCK)
++ !if "$(HAVE_MT)" == "Y"
+     mt.exe /manifest $@.manifest $@.mf /outputresource:$@;2
++ !endif
+  
+  sregina.exe: $(STATFILES)
+     $(LD) /PDB:$*.pdb ?? /OUT:sregina.exe $(STATFILES) $(STATICFUNCTIONLIBS)

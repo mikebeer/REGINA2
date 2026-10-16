@@ -1,0 +1,6 @@
+#!/bin/sh
+ADDONS=@addonsdir@
+SRC=libregutil.so
+echo 'Unlinking' $SRC from $ADDONS >> /tmp/rc.log
+rm -f $ADDONS/$SRC
+true
