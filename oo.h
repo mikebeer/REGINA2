@@ -41,11 +41,17 @@ streng *oo_stringify( tsd_t *TSD, const streng *s );
  */
 void oo_stringify_inplace( tsd_t *TSD, streng **s, int *owned );
 
+/* charnr of temporary operand nodes; they are not traced again */
+#define OO_TEMP_NODE (-4711)
+
 /* operators with an object as left operand, see oo.c */
 streng *oo_operator( tsd_t *TSD, nodeptr thisptr, int *handled, streng **leftval );
 
 /* "an Array" for an object handle without calling methods, else NULL */
 streng *oo_describe( tsd_t *TSD, const streng *s );
+
+/* simple variable value without tracing or NOVALUE (variable.c) */
+const streng *oo_peek_simple( tsd_t *TSD, const streng *name );
 
 /* expression nodes */
 streng *oo_eval_message( tsd_t *TSD, nodeptr thisptr, int need_result );
@@ -68,6 +74,12 @@ void oo_exec_usearg( tsd_t *TSD, nodeptr thisptr );
  */
 streng *oo_call_routine( tsd_t *TSD, const streng *name, paramboxptr args );
 int oo_has_routine( tsd_t *TSD, const streng *name );
+
+/* takes over the final state of a kept parse tree (see killsystem()) */
+void oo_take_tree( tsd_t *TSD, const internal_parser_type *tree );
+
+/* frees all OO state of a thread when its program has ended */
+void oo_end_program( tsd_t *TSD );
 
 /* label lookup inside methods and routines; see getlabel() */
 nodeptr oo_getlabel( const tsd_t *TSD, const streng *name );

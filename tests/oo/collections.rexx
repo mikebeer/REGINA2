@@ -77,6 +77,6 @@ x~objectname = 'my thing'
 say x x~objectname
 exit
 show: procedure
-  parse arg obj
+  obj = arg(1)              /* PARSE ARG would give the string "an Array" */
   say 'show got' obj~class~id obj~items
   return

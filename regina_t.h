@@ -341,6 +341,7 @@ typedef struct proclevelbox {
    unsigned long options;
    int pool;
    void *oo_ctx;              /* OO: method/routine frame, see oo.c */
+   void *oo_propagate;        /* OO: jmp_buf for SYNTAX errors to pass up */
 } proclevbox ;
 
 typedef struct _ttree { /* bucket list of treenodes which allows ultra fast

@@ -1,0 +1,11 @@
+compound comparison ok
+nested BIF in STRING: 2 P2****
+operand changed by right side: 8
+sendwith fill: xxxx,xxxx,xxxx
+copy keeps stems: 1 2
+indexed attribute assignment: one
+STRING using self: S: S: S: S: 
+big index: Error 88.6: [Array index 2000000000 exceeds the maximum of 100000000]
+buffer insert object: aan Arrayb
+deep recursion: [Control stack full]
+rc=0

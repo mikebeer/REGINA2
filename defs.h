@@ -175,6 +175,7 @@
 #define X_OO_OVERINIT   156 /* DO OVER: name snapshot var, p[0] collection */
 #define X_OO_OVERITEM   157 /* DO OVER: p[0] snapshot var, p[1] index var */
 #define X_OO_OVERWHILE  158 /* DO OVER ... WHILE: p[0] var, p[1] item, p[2] cond */
+#define X_OO_OVERSTEP   159 /* DO OVER: "var = item" at the start of the body */
 
 
 /* The three first two numbers have not errortext attched to them */

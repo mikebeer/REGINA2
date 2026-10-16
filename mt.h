@@ -73,6 +73,8 @@ typedef struct _tsd_t {
    struct _OS_Dep_funcs   *OS;
    void *                  oo_tsd;             /* local variables of oo.c */
    int                     oo_active;          /* set once OO is used     */
+   int                     oo_depth;           /* nested method calls     */
+   char *                  oo_stack_base;      /* C stack at depth 0      */
 } tsd_t;
 
 #if (defined(POSIX) || defined(_POSIX_SOURCE) || defined(_PTHREAD_SEMANTICS)) && (defined(_REENTRANT) || defined(REENTRANT)) && defined(REGINA_REENTRANT)

@@ -30,6 +30,8 @@ int oo_stem_tails( tsd_t *TSD, const streng *stemname,
                    void *data );
 streng *(*oo_find_bif( tsd_t *TSD, const char *name ))( tsd_t *, cparamboxptr );
 int oo_exit_protected( tsd_t *TSD, void (*fn)( tsd_t *, void * ), void *data );
+streng *oo_run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                      void (*setup)( tsd_t *, void * ), void *data );
 
 /* ------------------------------------------------------------------ */
 /* data structures                                                    */
@@ -168,7 +170,7 @@ typedef struct oo_tsd {
    oo_object **classes;         /* all classes, for ".NAME" lookups  */
    int nclasses, capclasses;
    streng *s_self, *s_super, *s_string, *s_init, *s_unknown, *s_makearray;
-   int overcount;
+   struct oo_program *loading;  /* ::REQUIRES file being loaded */
 } oo_tsd;
 
 /* ------------------------------------------------------------------ */
@@ -670,7 +672,14 @@ static paramboxptr make_plist( tsd_t *TSD, int argc, const streng **argv )
 
    for ( i = 0; i < argc; i++ )
    {
-      p = (paramboxptr) MallocTSD( sizeof( parambox ) );
+      if ( TSD->par_stack )
+      {
+         /* deallocplink() keeps boxes on par_stack for reuse */
+         p = TSD->par_stack;
+         TSD->par_stack = p->next;
+      }
+      else
+         p = (paramboxptr) MallocTSD( sizeof( parambox ) );
       p->next = NULL;
       p->dealloc = 1;
       p->value = argv[i] ? Str_dupTSD( argv[i] ) : NULL;
@@ -683,19 +692,33 @@ static paramboxptr make_plist( tsd_t *TSD, int argc, const streng **argv )
    return first;
 }
 
+typedef struct { const streng *selfstr; oo_frame *frame; } self_setup;
+
+static void setup_self( tsd_t *TSD, void *data )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   self_setup *ss = (self_setup *) data;
+   oo_scope *sc;
+
+   setvalue( TSD, ot->s_self, Str_dupTSD( ss->selfstr ), -1 );
+   sc = get_scope( TSD, ss->frame->self, ss->frame->scope );
+   if ( sc->superproxy == NULL )
+   {
+      sc->superproxy = new_object( TSD, ot->cObject, OK_SUPER );
+      sc->superproxy->u.sup.self = ss->frame->self;
+      sc->superproxy->u.sup.start = ss->frame->scope;
+   }
+   setvalue( TSD, ot->s_super, hdup( TSD, sc->superproxy ), -1 );
+}
+
 /*
- * Runs a method or routine body in a new procedure level with a fresh
- * variable pool, like an internal function call with PROCEDURE.
+ * Runs a method or routine body as a new activation, see oo_run_level()
+ * in interprt.c.
  */
 static streng *run_body( tsd_t *TSD, nodeptr body, oo_frame *frame,
                          paramboxptr args, const streng *selfstr )
 {
-   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
-   proclevel oldlevel = TSD->currlevel;
-   nodeptr savenode = TSD->currentnode;
-   int stackmark;
-   streng *result;
-   oo_scope *sc;
+   self_setup ss;
 
    if ( body == NULL )
    {
@@ -703,36 +726,9 @@ static streng *run_body( tsd_t *TSD, nodeptr body, oo_frame *frame,
          deallocplink( TSD, args );
       return NULL;
    }
-
-   TSD->currlevel = newlevel( TSD, oldlevel );
-   TSD->currlevel->args = args;
-   TSD->currlevel->vars = create_new_varpool( TSD, 0 );
-   TSD->currlevel->varflag = 1;
-   TSD->currlevel->oo_ctx = frame;
-   stackmark = pushcallstack( TSD, TSD->currentnode );
-
-   if ( frame->self )
-   {
-      setvalue( TSD, ot->s_self, Str_dupTSD( selfstr ), -1 );
-      sc = get_scope( TSD, frame->self, frame->scope );
-      if ( sc->superproxy == NULL )
-      {
-         sc->superproxy = new_object( TSD, ot->cObject, OK_SUPER );
-         sc->superproxy->u.sup.self = frame->self;
-         sc->superproxy->u.sup.start = frame->scope;
-      }
-      setvalue( TSD, ot->s_super, hdup( TSD, sc->superproxy ), -1 );
-   }
-
-   result = interpret( TSD, body );
-
-   TSD->currentnode = savenode;
-   popcallstack( TSD, stackmark );
-   removelevel( TSD, TSD->currlevel );
-   TSD->currlevel = oldlevel;
-   TSD->currlevel->next = NULL;
-   TSD->trace_stat = TSD->currlevel->tracestat;
-   return result;
+   ss.selfstr = selfstr;
+   ss.frame = frame;
+   return oo_run_level( TSD, body, args, frame, frame->self ? setup_self : NULL, &ss );
 }
 
 static streng *invoke( tsd_t *TSD, oo_method *m, oo_object *scope,
@@ -863,7 +859,15 @@ streng *oo_stringify( tsd_t *TSD, const streng *s )
       return Str_dupTSD( o->u.s );
    if ( o->kind == OK_BUFFER && o->cls == ot->cBuffer )
       return Str_dupTSD( o->u.s );
-   r = send_msg( TSD, s, ot->s_string, 0, NULL );
+   {
+      /* a STRING method that uses its own object as a string */
+      static int nesting = 0;
+      if ( nesting > 50 )
+         return default_name( TSD, o );
+      nesting++;
+      r = send_msg( TSD, s, ot->s_string, 0, NULL );
+      nesting--;
+   }
    for ( depth = 0; r && obj_of( TSD, r ) && depth < 4; depth++ )
    {
       streng *t = default_name( TSD, obj_of( TSD, r ) );
@@ -1002,7 +1006,7 @@ static streng *m_sendwith( tsd_t *TSD, oo_call *c )
    const streng *n = need_arg( TSD, c, 0 );
    oo_object *arr = obj_of( TSD, need_arg( TSD, c, 1 ) );
    const streng **items = NULL;
-   long cnt;
+   long cnt, i;
 
    if ( arr == NULL || ( arr->kind != OK_ARRAY && arr->kind != OK_QUEUE ) )
    {
@@ -1016,8 +1020,12 @@ static streng *m_sendwith( tsd_t *TSD, oo_call *c )
    /* positional: holes stay omitted arguments */
    cnt = arr->u.a.size;
    items = (const streng **) MallocTSD( ( cnt + 1 ) * sizeof( streng * ) );
-   memcpy( items, arr->u.a.v, cnt * sizeof( streng * ) );
+   for ( i = 0; i < cnt; i++ )   /* copies: the method may change the array */
+      items[i] = arr->u.a.v[i] ? Str_dupTSD( arr->u.a.v[i] ) : NULL;
    r = send_msg( TSD, c->selfstr, name, (int) cnt, items );
+   for ( i = 0; i < cnt; i++ )
+      if ( items[i] )
+         Free_stringTSD( (streng *) items[i] );
    FreeTSD( (void *) items );
    Free_stringTSD( name );
    return r;
@@ -1094,7 +1102,7 @@ static streng *m_new( tsd_t *TSD, oo_call *c )
    oo_classdata *cd = cls->u.c;
    streng *h, *r;
 
-   if ( !cd->resolved )
+   if ( cd->resolved != 1 )
       resolve_class( TSD, cls );
    if ( cd->mixin )
       exiterror( ERR_EXECUTION_ERROR, 7, tmpstr_of( TSD, cd->name ) );
@@ -1133,7 +1141,7 @@ static streng *m_cls_superclass( tsd_t *TSD, oo_call *c )
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
    oo_object *cls = cls_self( TSD, c );
 
-   if ( !cls->u.c->resolved )
+   if ( cls->u.c->resolved != 1 )
       resolve_class( TSD, cls );
    return hdup( TSD, cls->u.c->super ? cls->u.c->super : ot->nil );
 }
@@ -1148,7 +1156,7 @@ static streng *m_cls_superclasses( tsd_t *TSD, oo_call *c )
    long n = 0;
    int i;
 
-   if ( !cls->u.c->resolved )
+   if ( cls->u.c->resolved != 1 )
       resolve_class( TSD, cls );
    if ( cls->u.c->super )
       oo_array_put( TSD, arr, ++n, hdup( TSD, cls->u.c->super ) );
@@ -1189,6 +1197,10 @@ static streng *m_cls_inherit( tsd_t *TSD, oo_call *c )
    oo_classdata *cd = cls->u.c;
    oo_object **n;
 
+   if ( mix->u.c->mro == NULL )
+      compute_mro( TSD, mix );
+   if ( is_subclass( mix, cls ) )
+      exiterror( ERR_EXECUTION_ERROR, 10, tmpstr_of( TSD, cls->u.c->name ) );
    n = (oo_object **) MallocTSD( ( cd->ninherits + 1 ) * sizeof( oo_object * ) );
    if ( cd->ninherits )
    {
@@ -1550,10 +1562,18 @@ static streng *m_string_op( tsd_t *TSD, oo_call *c )
 /* collections: Array, Queue, List                                    */
 /* ------------------------------------------------------------------ */
 
+#define OO_MAX_INDEX 100000000L
+
 void oo_array_put( tsd_t *TSD, oo_object *a, long idx, streng *v )
 {
    long i;
 
+   if ( idx > OO_MAX_INDEX )
+   {
+      char buf[32];
+      sprintf( buf, "%ld", idx );
+      exiterror( ERR_INVALID_ARGUMENT, 6, buf );
+   }
    if ( idx > a->u.a.cap )
    {
       long ncap = a->u.a.cap ? a->u.a.cap : 8;
@@ -1674,7 +1694,7 @@ static streng *m_arr_of( tsd_t *TSD, oo_call *c )
    oo_object *cls = cls_self( TSD, c ), *a;
    int i;
 
-   if ( !cls->u.c->resolved )
+   if ( cls->u.c->resolved != 1 )
       resolve_class( TSD, cls );
    a = new_object( TSD, cls, cls->u.c->ikind == OK_QUEUE ? OK_QUEUE : OK_ARRAY );
    for ( i = 0; i < c->argc; i++ )
@@ -2254,6 +2274,8 @@ static streng *m_dir_unknown( tsd_t *TSD, oo_call *c )
    unsigned hv;
    oo_entry *e;
 
+   if ( args && args->kind != OK_ARRAY && args->kind != OK_QUEUE )
+      args = NULL;
    if ( name->len > 1 && name->value[name->len - 1] == '=' )
    {
       name->len--;
@@ -2321,8 +2343,10 @@ static streng *m_buf_insert( tsd_t *TSD, oo_call *c )
    oo_object *b = buf_self( TSD, c );
    const streng *v = need_arg( TSD, c, 0 );
    long pos = opt_arg( c, 1 ) ? whole_arg( TSD, c, 1, 0 ) : 0;
-   streng *n;
+   streng *n, *vk = oo_stringify( TSD, v );
 
+   if ( vk )
+      v = vk;
    if ( pos > b->u.s->len )
       pos = b->u.s->len;
    n = Str_makeTSD( b->u.s->len + v->len );
@@ -2332,6 +2356,8 @@ static streng *m_buf_insert( tsd_t *TSD, oo_call *c )
    n->len = b->u.s->len + v->len;
    Free_stringTSD( b->u.s );
    b->u.s = n;
+   if ( vk )
+      Free_stringTSD( vk );
    return Str_dupTSD( c->selfstr );
 }
 
@@ -2822,15 +2848,19 @@ static void resolve_class( tsd_t *TSD, oo_object *c )
    oo_object *s;
    int i;
 
-   if ( cd->resolved )
+   if ( cd->resolved == 1 )
       return;
-   cd->resolved = 1;    /* also protects against cycles */
+   if ( cd->resolved == -1 )
+      exiterror( ERR_EXECUTION_ERROR, 10, tmpstr_of( TSD, cd->name ) );
+   cd->resolved = -1;   /* in progress: detects cycles */
    if ( cd->supername )
    {
       s = class_by_id( ot, cd->supername );
-      if ( s == NULL || s == c )
+      if ( s == NULL )
          exiterror( ERR_EXECUTION_ERROR, 1, tmpstr_of( TSD, cd->supername ) );
-      if ( !s->u.c->resolved )
+      if ( s == c )
+         exiterror( ERR_EXECUTION_ERROR, 10, tmpstr_of( TSD, cd->name ) );
+      if ( s->u.c->resolved != 1 )
          resolve_class( TSD, s );
       cd->super = s;
    }
@@ -2845,11 +2875,14 @@ static void resolve_class( tsd_t *TSD, oo_object *c )
          s = class_by_id( ot, cd->inheritnames[i] );
          if ( s == NULL )
             exiterror( ERR_EXECUTION_ERROR, 1, tmpstr_of( TSD, cd->inheritnames[i] ) );
-         if ( !s->u.c->resolved )
+         if ( s == c )
+            exiterror( ERR_EXECUTION_ERROR, 10, tmpstr_of( TSD, cd->name ) );
+         if ( s->u.c->resolved != 1 )
             resolve_class( TSD, s );
          cd->inherits[i] = s;
       }
    }
+   cd->resolved = 1;
    invalidate_mros( ot, TSD );
 }
 
@@ -3027,8 +3060,6 @@ static void process_directives( tsd_t *TSD, oo_program *prog, nodeptr first )
  * X_OO_INIT is the first statement of every program with directives. It
  * sets up the classes, methods and routines of that program.
  */
-static oo_program *loading_prog = NULL;
-
 void oo_exec_init( tsd_t *TSD, nodeptr thisptr )
 {
    oo_tsd *ot = get_ot( TSD );
@@ -3038,10 +3069,10 @@ void oo_exec_init( tsd_t *TSD, nodeptr thisptr )
       return;
    thisptr->u.nonansi = 1;
 
-   if ( loading_prog )
+   if ( ot->loading )
    {
-      prog = loading_prog;
-      loading_prog = NULL;
+      prog = ot->loading;
+      ot->loading = NULL;
    }
    else
    {
@@ -3139,6 +3170,14 @@ static void load_required( tsd_t *TSD, const streng *name, oo_program *from, nod
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
    streng *path = find_required( TSD, name, from );
    oo_program *p;
+
+   if ( path == NULL )
+   {
+      streng *lower = Str_dupTSD( name );
+      mem_lower( lower->value, lower->len );
+      path = find_required( TSD, lower, from );
+      Free_stringTSD( lower );
+   }
    FILE *fp;
    internal_parser_type parsing;
    oo_frame *frame;
@@ -3175,11 +3214,11 @@ static void load_required( tsd_t *TSD, const streng *name, oo_program *from, nod
    frame->self = NULL;
    frame->scope = NULL;
    frame->labels = &p->labels;
-   loading_prog = ( parsing.root && parsing.root->type == X_OO_INIT ) ? p : NULL;
+   ot->loading = ( parsing.root && parsing.root->type == X_OO_INIT ) ? p : NULL;
    pd.p = p;
    pd.frame = frame;
    oo_exit_protected( TSD, run_prolog, &pd );
-   loading_prog = NULL;
+   ot->loading = NULL;
    FreeTSD( frame );
 }
 
@@ -3377,14 +3416,12 @@ void oo_exec_assign( tsd_t *TSD, nodeptr thisptr )
    recv = evaluate( TSD, target->p[0], &kill );
    if ( kill == NULL )
       kill = recv = Str_dupTSD( recv );
+   /* obj~name(args) = v sends NAME= (v, args), a[i] = v sends []= (v, i) */
+   argc = eval_args( TSD, target->p[1], &plist, &argv );
    if ( target->type == X_INDEX )
-   {
-      argc = eval_args( TSD, target->p[1], &plist, &argv );
       name = Str_creTSD( "[]=" );
-   }
    else
    {
-      argv = (const streng **) MallocTSD( sizeof( streng * ) );
       name = Str_dupTSD( target->name );
       name = catc( TSD, name, "=" );
    }
@@ -3494,19 +3531,92 @@ static int cmp_tails( const void *x, const void *y )
    return cmp_strings( x, y );
 }
 
+/* the classic meaning of "DO x OVER y": count = y if x and OVER are empty */
+static int classic_over_count( tsd_t *TSD, nodeptr thisptr, const streng *v, long *count )
+{
+   nodeptr var = thisptr->p[1], over = thisptr->p[2];
+   const streng *vx, *vo;
+   streng *t;
+   int err = 0, i, j;
+   long n;
+
+   if ( var == NULL || over == NULL || var->type != X_SIM_SYMBOL )
+      return 0;
+   vx = isvariable( TSD, var->name );
+   vo = isvariable( TSD, over->name );
+   if ( vx == NULL || vo == NULL || vx->len != 0 || vo->len != 0 || v == NULL
+     || obj_of( TSD, v ) != NULL )
+      return 0;
+   for ( i = 0; i < v->len && rx_isspace( v->value[i] ); i++ )
+      ;
+   for ( j = v->len; j > i && rx_isspace( v->value[j - 1] ); j-- )
+      ;
+   if ( j == i )
+      return 0;
+   t = Str_ncreTSD( v->value + i, j - i );
+   n = streng_to_int( TSD, t, &err );
+   Free_stringTSD( t );
+   if ( err || n < 0 )
+      return 0;
+   *count = n;
+   return 1;
+}
+
+/*
+ * A program that doesn't use objects gets the classic error for a "DO x
+ * OVER y" that is neither a valid count nor a collection.
+ */
+static void classic_over_error( tsd_t *TSD, nodeptr thisptr, const streng *v )
+{
+   nodeptr var = thisptr->p[1], over = thisptr->p[2];
+   const streng *vx, *vo;
+   streng *s;
+
+   if ( var == NULL || over == NULL || var->type != X_SIM_SYMBOL )
+      return;
+   vx = isvariable( TSD, var->name );
+   vo = isvariable( TSD, over->name );
+   s = Str_dupTSD( vx ? vx : var->name );
+   s = catc( TSD, s, " " );
+   s = cats( TSD, s, vo ? vo : over->name );
+   s = catc( TSD, s, " " );
+   s = cats( TSD, s, v );
+   exiterror( ERR_INVALID_INTEGER, 2, tmpstr_of( TSD, s ) );
+}
+
 streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr )
 {
-   oo_tsd *ot = get_ot( TSD );
+   int was_active = TSD->oo_active;
+   oo_tsd *ot;
    nodeptr coll = thisptr->p[0];
    oo_object *snap, *o, *old;
    const streng *cur;
-   long i, n = 0;
+   streng *kill = NULL, *v = NULL, *arrh = NULL;
+   long i, n = 0, classic;
 
    /* release the snapshot of the previous run of this loop */
-   cur = isvariable( TSD, thisptr->name ) ? getvalue( TSD, thisptr->name, -1 ) : NULL;
+   cur = isvariable( TSD, thisptr->name );
    if ( cur && ( old = obj_of( TSD, cur ) ) != NULL && old->snapshot )
       free_object( TSD, old );
 
+   if ( coll->type != X_STEM_SYMBOL )
+      v = evaluate( TSD, coll, &kill );
+   if ( classic_over_count( TSD, thisptr, coll->type == X_STEM_SYMBOL
+                              ? isvariable( TSD, coll->name ) : v, &classic ) )
+   {
+      /*
+       * A valid classic program: repeat the body, assign nothing. The
+       * snapshot variable gets a plain string, objects stay unused.
+       */
+      if ( kill )
+         Free_stringTSD( kill );
+      setvalue( TSD, thisptr->name, Str_creTSD( "\001CLASSIC" ), -1 );
+      return mkint( TSD, classic );
+   }
+   if ( !was_active && coll->type != X_STEM_SYMBOL && !OO_LOOKS_LIKE_HANDLE( v ) )
+      classic_over_error( TSD, thisptr, v );
+
+   ot = get_ot( TSD );
    snap = new_object( TSD, ot->cArray, OK_ARRAY );
    snap->snapshot = 1;
 
@@ -3526,9 +3636,6 @@ streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr )
    }
    else
    {
-      streng *kill = NULL, *v = evaluate( TSD, coll, &kill );
-      streng *arrh = NULL;
-
       o = obj_of( TSD, v );
       if ( o && o->kind != OK_ARRAY && o->kind != OK_QUEUE && o->kind != OK_DIRECTORY
         && o->kind != OK_TABLE && o->kind != OK_SUPPLIER )
@@ -3541,7 +3648,8 @@ streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr )
       }
       if ( o == NULL )
       {
-         streng *d = describe( TSD, v );
+         streng *d;
+         d = describe( TSD, v );
          exiterror( ERR_EXECUTION_ERROR, 5, tmpstr_of( TSD, d ) );
       }
       if ( o->kind == OK_ARRAY || o->kind == OK_QUEUE )
@@ -3593,7 +3701,14 @@ streng *oo_eval_over_item( tsd_t *TSD, nodeptr thisptr )
 /* DO name OVER c WHILE cond: set name before cond is tested */
 void oo_over_assign( tsd_t *TSD, nodeptr thisptr )
 {
-   streng *v = oo_eval_over_item( TSD, thisptr->p[1] );
+   streng *k = NULL, *v;
+   oo_object *snap = obj_of( TSD, evaluate( TSD, thisptr->p[1]->p[0], &k ) );
+
+   if ( k )
+      Free_stringTSD( k );
+   if ( snap == NULL )
+      return;      /* classic "DO expr": no control variable */
+   v = oo_eval_over_item( TSD, thisptr->p[1] );
 
    if ( thisptr->p[0]->type == X_HEAD_SYMBOL )
       fix_compound( TSD, thisptr->p[0], v );
@@ -3672,10 +3787,12 @@ streng *oo_operator( tsd_t *TSD, nodeptr thisptr, int *handled, streng **leftval
    switch ( left->type )
    {
       case X_SIM_SYMBOL:
-         /* look without evaluating: no NOVALUE condition here */
-         lval = isvariable( TSD, left->name );
+         /* look without evaluating: no trace line, no NOVALUE condition */
+         lval = oo_peek_simple( TSD, left->name );
          if ( lval == NULL || obj_of( TSD, lval ) == NULL )
             return NULL;
+         /* the right operand may change the variable: keep a copy */
+         lval = lv = Str_dupTSD( lval );
          break;
 
       case X_STRING:
@@ -3743,4 +3860,129 @@ static streng *m_obj_concat( tsd_t *TSD, oo_call *c )
    if ( b )
       Free_stringTSD( b );
    return r;
+}
+
+/*
+ * Frees the OO state of the thread: objects, classes, routines and the
+ * parse trees kept for them. Variable pools of objects are not freed;
+ * they belong to the variable module and are small.
+ */
+void oo_end_program( tsd_t *TSD )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_program *p, *pn;
+   oo_routine *r, *rn;
+   unsigned long i;
+   int k;
+
+   if ( ot == NULL )
+      return;
+   for ( i = 1; i <= ot->nobjs; i++ )
+   {
+      oo_object *o = ot->objs[i];
+      oo_scope *s, *sn;
+      if ( o == NULL )
+         continue;
+      if ( ( o->kind == OK_DIRECTORY || o->kind == OK_TABLE ) && o->u.h )
+      {
+         while ( o->u.h->first )
+         {
+            streng *v = h_remove( TSD, o->u.h, o->u.h->first->key );
+            Free_stringTSD( v );
+         }
+         if ( o->u.h->tbl )
+            FreeTSD( o->u.h->tbl );
+         FreeTSD( o->u.h );
+         o->u.h = NULL;
+      }
+      else if ( ( o->kind == OK_BUFFER || o->kind == OK_STRING ) && o->u.s )
+         Free_stringTSD( o->u.s );
+      else if ( o->kind == OK_CLASS && o->u.c )
+      {
+         oo_classdata *cd = o->u.c;
+         oo_method *m, *mn;
+         int pass;
+         for ( pass = 0; pass < 2; pass++ )
+            for ( m = pass ? cd->cmethods : cd->imethods; m; m = mn )
+            {
+               mn = m->next;
+               Free_stringTSD( m->name );
+               if ( m->attr )
+                  Free_stringTSD( m->attr );
+               if ( m->constval )
+                  Free_stringTSD( m->constval );
+               if ( m->labels.v )
+                  FreeTSD( m->labels.v );
+               FreeTSD( m );
+            }
+         Free_stringTSD( cd->name );
+         Free_stringTSD( cd->id );
+         if ( cd->supername )
+            Free_stringTSD( cd->supername );
+         for ( k = 0; k < cd->ninherits && cd->inheritnames; k++ )
+            Free_stringTSD( cd->inheritnames[k] );
+         if ( cd->inheritnames )
+            FreeTSD( cd->inheritnames );
+         if ( cd->inherits )
+            FreeTSD( cd->inherits );
+         if ( cd->mro )
+            FreeTSD( cd->mro );
+         FreeTSD( cd );
+         o->u.c = NULL;
+      }
+      for ( s = o->scopes; s; s = sn )
+      {
+         sn = s->next;
+         FreeTSD( s );
+      }
+      if ( o->objname )
+         Free_stringTSD( o->objname );
+      free_object( TSD, o );
+   }
+   for ( r = ot->routines; r; r = rn )
+   {
+      rn = r->next;
+      Free_stringTSD( r->name );
+      if ( r->labels.v )
+         FreeTSD( r->labels.v );
+      FreeTSD( r );
+   }
+   for ( p = ot->programs; p; p = pn )
+   {
+      pn = p->next;
+      DestroyInternalParsingTree( TSD, &p->tree );
+      if ( p->file )
+         Free_stringTSD( p->file );
+      if ( p->labels.v )
+         FreeTSD( p->labels.v );
+      FreeTSD( p );
+   }
+   FreeTSD( ot->objs );
+   FreeTSD( ot->classes );
+   Free_stringTSD( ot->s_self );
+   Free_stringTSD( ot->s_super );
+   Free_stringTSD( ot->s_string );
+   Free_stringTSD( ot->s_init );
+   Free_stringTSD( ot->s_unknown );
+   Free_stringTSD( ot->s_makearray );
+   FreeTSD( ot );
+   TSD->oo_tsd = NULL;
+   TSD->oo_active = 0;
+   TSD->oo_depth = 0;
+   TSD->oo_stack_base = NULL;
+}
+
+void oo_take_tree( tsd_t *TSD, const internal_parser_type *tree )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_program *p;
+
+   if ( ot == NULL )
+      return;
+   for ( p = ot->programs; p; p = p->next )
+      if ( p->tree.root == tree->root )
+      {
+         p->tree = *tree;   /* labels may have been sorted meanwhile */
+         return;
+      }
 }

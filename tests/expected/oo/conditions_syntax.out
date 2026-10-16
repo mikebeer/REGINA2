@@ -1,0 +1,10 @@
+caught 42 line 4 Error 42.3: Arithmetic overflow; divisor must not be zero
+still works: ok
+resumed at i=2 ok
+caught 42 line 19 Error 42.3: Arithmetic overflow; divisor must not be zero
+still works: ok
+resumed at i=3 ok
+caught 42 line 19 Error 42.3: Arithmetic overflow; divisor must not be zero
+still works: ok
+done traps ok
+rc=0

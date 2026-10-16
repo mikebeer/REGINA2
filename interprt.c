@@ -18,6 +18,9 @@
  */
 
 #include "rexx.h"
+#if !defined(_WIN32) && !defined(_WIN64)
+# include <sys/resource.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
@@ -2118,6 +2121,10 @@ oo_plain_assign:
          oo_exec_usearg( TSD, thisptr );
          break ;
 
+      case X_OO_OVERSTEP:
+         oo_over_assign( TSD, thisptr );
+         break ;
+
       case X_OPTIONS: /* fixes 1116894 */
          do_options(TSD, TSD->currlevel, (thisptr->p[0]) ? evaluate(TSD,thisptr->p[0],NULL) : nullstringptr(), 0) ;
          break ;
@@ -2668,6 +2675,7 @@ proclevel newlevel( tsd_t *TSD, proclevel oldlevel )
       level->args = NULL;
       level->options = 0;
       level->oo_ctx = NULL;
+      level->oo_propagate = NULL;
 
       if ( it->opts_set )
          level->options = it->options;
@@ -2794,6 +2802,18 @@ static void expose_indir( tsd_t *TSD, const streng *list )
  */
 void jump_rexx_signal( tsd_t *TSD )
 {
+   /*
+    * OO extension: a SYNTAX error inside a method or routine whose caller
+    * traps SYNTAX leaves the method and is raised again in the caller.
+    * The marker is a SYNTAX trap without a label name, see oo_run_level().
+    */
+   if ( TSD->currlevel->oo_propagate && TSD->nextsig
+     && TSD->nextsig->type == SIGNAL_SYNTAX && !TSD->in_protected )
+   {
+      trap *traps = gettraps( TSD, TSD->currlevel );
+      if ( traps[SIGNAL_SYNTAX].name == NULL )
+         longjmp( *(jmp_buf *) TSD->currlevel->oo_propagate, 1 );
+   }
    if ( TSD->in_protected )
    {
       /*
@@ -2914,4 +2934,141 @@ int oo_exit_protected( tsd_t *TSD, void (*fn)( tsd_t *, void * ), void *data )
    TSD->systeminfo->script_exit = save;
    TSD->instore_is_errorfree = errfree;
    return exited;
+}
+
+/*
+ * OO extension: runs the body of a method or routine as a new activation.
+ * Like an internal function call with PROCEDURE, plus the ooRexx rules:
+ * - the activation has its own variable pool, condition traps and
+ *   NUMERIC settings (defaults, not the caller's);
+ * - a SYNTAX error that isn't trapped inside is raised again in the caller
+ *   when the caller traps SYNTAX;
+ * - ctx is stored in the level for EXPOSE, SELF and label lookups.
+ * setup(TSD, data) is called once the new level is current.
+ */
+static long oo_stack_limit = 0;
+
+/*
+ * How much of the C stack nested methods may use before "Control stack
+ * full" is raised instead of crashing.
+ */
+static long oo_stack_budget( void )
+{
+#if defined(_WIN32) || defined(_WIN64)
+   return 192L * 1024 * 1024;    /* rexx.exe is linked with a 256 MB stack */
+#else
+   struct rlimit rl;
+   long lim = 8L * 1024 * 1024;
+
+   if ( getrlimit( RLIMIT_STACK, &rl ) == 0 && rl.rlim_cur != RLIM_INFINITY )
+      lim = (long) rl.rlim_cur;
+   if ( lim > 64L * 1024 * 1024 )
+      lim = 64L * 1024 * 1024;
+   return lim - lim / 4;         /* leave a quarter for everything else */
+#endif
+}
+
+streng *oo_run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                      void (*setup)( tsd_t *, void * ), void *data )
+{
+   jmp_buf jb;
+   proclevel volatile oldlevel = TSD->currlevel;
+   nodeptr volatile savenode = TSD->currentnode;
+   volatile int cstack = TSD->systeminfo->cstackcnt;
+   volatile unsigned nst = nstacktrigger( TSD );
+   volatile unsigned st = stacktrigger( TSD );
+   streng *result;
+   sigtype *sig;
+   trap *ct, *nt;
+   int stackmark, i, propagate;
+
+   {
+      char probe;
+      long used;
+
+      if ( TSD->oo_stack_base == NULL || TSD->oo_depth == 0 )
+      {
+         TSD->oo_stack_base = &probe;
+         oo_stack_limit = oo_stack_budget();
+      }
+      used = (long) ( TSD->oo_stack_base - &probe );
+      if ( used < 0 )
+         used = -used;
+      if ( used > oo_stack_limit )
+         exiterror( ERR_FULL_CTRL_STACK, 0 );
+   }
+
+   ct = gettraps( TSD, oldlevel );
+   propagate = ct[SIGNAL_SYNTAX].on_off && ct[SIGNAL_SYNTAX].invoked;
+
+   TSD->currlevel = newlevel( TSD, oldlevel );
+   TSD->currlevel->args = args;
+   TSD->currlevel->vars = create_new_varpool( TSD, 0 );
+   TSD->currlevel->varflag = 1;
+   TSD->currlevel->oo_ctx = ctx;
+   TSD->currlevel->oo_propagate = propagate ? (void *) &jb : NULL;
+   TSD->currlevel->numfuzz = DEFAULT_NUMERIC_FUZZ;
+   TSD->currlevel->currnumsize = DEFAULT_NUMERIC_SIZE;
+   TSD->currlevel->numform = DEFAULT_NUMFORM;
+   nt = (trap *) MallocTSD( sizeof( trap ) * SIGNALS );
+   for ( i = 0; i < SIGNALS; i++ )
+   {
+      nt[i].name = NULL;
+      nt[i].on_off = 0;
+      nt[i].delayed = 0;
+      nt[i].def_act = default_action[i];
+      nt[i].ignored = default_ignore[i];
+      nt[i].invoked = 0;
+   }
+   if ( propagate )
+   {
+      nt[SIGNAL_SYNTAX].on_off = 1;
+      nt[SIGNAL_SYNTAX].invoked = 1;   /* name NULL: the marker */
+   }
+   TSD->currlevel->traps = nt;
+   stackmark = pushcallstack( TSD, TSD->currentnode );
+   TSD->oo_depth++;
+
+   if ( setjmp( jb ) == 0 )
+   {
+      if ( setup )
+         setup( TSD, data );
+      result = interpret( TSD, body );
+      TSD->oo_depth--;
+      TSD->currentnode = savenode;
+      popcallstack( TSD, stackmark );
+      removelevel( TSD, TSD->currlevel );
+      TSD->currlevel = oldlevel;
+      TSD->currlevel->next = NULL;
+      TSD->trace_stat = TSD->currlevel->tracestat;
+      return result;
+   }
+
+   /* a SYNTAX error to pass to the caller */
+   TSD->oo_depth--;
+   sig = TSD->nextsig;
+   TSD->nextsig = NULL;
+   nstackcleanup( TSD, nst, NULL );
+   stackcleanup( TSD, st );
+   if ( oldlevel->next )
+      removelevel( TSD, oldlevel->next );
+   TSD->currlevel = oldlevel;
+   oldlevel->next = NULL;
+   TSD->trace_stat = oldlevel->tracestat;
+   TSD->currentnode = savenode;
+   TSD->systeminfo->cstackcnt = cstack;
+   if ( sig )
+   {
+      int rc = sig->rc, subrc = sig->subrc;
+      streng *descr = sig->descr ? Str_dupTSD( sig->descr ) : NULL;
+      FREE_IF_DEFINED( TSD, sig->info );
+      FREE_IF_DEFINED( TSD, sig->descr );
+      FreeTSD( sig );
+      condition_hook( TSD, SIGNAL_SYNTAX, rc, subrc,
+                      savenode ? savenode->lineno : -1, descr, NULL );
+      /* not trapped after all */
+      exiterror( rc, 0 );
+   }
+   exiterror( ERR_INTERPRETER_FAILURE, 1, __FILE__, __LINE__, "OO SYNTAX propagation" );
+   return NULL;
 }

@@ -2912,10 +2912,61 @@ static void init_it_all( tsd_t *TSD )
  * tree isn't executed here.
  * Exactly fptr xor str must be non-null.
  */
+/*
+ * OO extension: returns 1 if a line of the program starts with "::" (a
+ * directive). Then EXPOSE and USE ARG are instructions in the whole
+ * program, not only after the first directive. The file position is
+ * restored; for a stream that can't be positioned 0 is returned.
+ */
+static int has_directive_line( FILE *fptr, const streng *str )
+{
+   char buf[512];
+   int at_start = 1, i, found = 0;
+   long pos;
+
+   if ( str != NULL )
+   {
+      for ( i = 0; i < str->len && !found; i++ )
+      {
+         char c = str->value[i];
+         if ( at_start && ( c == ' ' || c == '\t' ) )
+            continue;
+         if ( at_start && c == ':' && i + 1 < str->len && str->value[i + 1] == ':' )
+            found = 1;
+         at_start = ( c == '\n' );
+      }
+      return found;
+   }
+   if ( fptr == NULL || ( pos = ftell( fptr ) ) < 0 )
+      return 0;
+   while ( !found && fgets( buf, sizeof( buf ), fptr ) != NULL )
+   {
+      size_t len = strlen( buf );
+      if ( at_start )
+      {
+         for ( i = 0; buf[i] == ' ' || buf[i] == '\t'; i++ )
+            ;
+         if ( buf[i] == ':' && buf[i + 1] == ':' )
+            found = 1;
+      }
+      at_start = ( len > 0 && buf[len - 1] == '\n' );
+   }
+   clearerr( fptr );
+   fseek( fptr, pos, SEEK_SET );
+   return found;
+}
+
 static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
                   internal_parser_type *result)
 {
    init_it_all( TSD ) ;
+
+   /*
+    * OO extension: EXPOSE and USE ARG are instructions in programs with
+    * directives, and in INTERPRET data of a program using objects.
+    */
+   in_directives = has_directive_line( fptr, str )
+                || ( str != NULL && TSD->oo_active );
 
 #ifdef FLEX_SCANNER
    /*

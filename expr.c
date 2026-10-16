@@ -229,8 +229,11 @@ num_descr *calcul( tsd_t *TSD, nodeptr thisptr, num_descr **kill, int side, int 
          memset( &tl, 0, sizeof( tl ) );
          tl.type = X_STRING;
          tl.name = lv;
+         tl.charnr = OO_TEMP_NODE;   /* already traced, see tracing below */
          top = *thisptr;
          top.p[0] = &tl;
+         /* the left operand is no longer a (compound) variable or constant */
+         top.u.flags.lnum = top.u.flags.lsvar = top.u.flags.lcvar = 0;
          numthr = calcul( TSD, &top, NULL, side, operator );
          if ( tl.u.number )
          {
@@ -358,7 +361,7 @@ do_an_add:
          if ( !thisptr->u.number )
             thisptr->u.number = get_a_descr( TSD, NULL, 0, thisptr->name ) ;
 
-         if (TSD->trace_stat=='I')
+         if (TSD->trace_stat=='I' && thisptr->charnr != OO_TEMP_NODE)
             tracenumber( TSD, thisptr->u.number, 'L' ) ;
 
          if (kill)
@@ -628,8 +631,11 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          memset( &tl, 0, sizeof( tl ) );
          tl.type = X_STRING;
          tl.name = lv;
+         tl.charnr = OO_TEMP_NODE;   /* already traced, see tracing below */
          top = *thisptr;
          top.p[0] = &tl;
+         /* the left operand is no longer a (compound) variable or constant */
+         top.u.flags.lnum = top.u.flags.lsvar = top.u.flags.lcvar = 0;
          stmp1 = evaluate( TSD, &top, NULL );
          if ( tl.u.number )
          {
@@ -676,7 +682,7 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          /* fall through */
       case X_STRING:
          cstmp = thisptr->name;
-         if ( TSD->trace_stat == 'I' )
+         if ( TSD->trace_stat == 'I' && thisptr->charnr != OO_TEMP_NODE )
             tracevalue( TSD, cstmp, 'L' );
          if ( kill )
             return (streng *) cstmp; /* and *kill is set to NULL above */
@@ -1008,8 +1014,11 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          memset( &tl, 0, sizeof( tl ) );
          tl.type = X_STRING;
          tl.name = lv;
+         tl.charnr = OO_TEMP_NODE;   /* already traced, see tracing below */
          top = *thisptr;
          top.p[0] = &tl;
+         /* the left operand is no longer a (compound) variable or constant */
+         top.u.flags.lnum = top.u.flags.lsvar = top.u.flags.lcvar = 0;
          tmp = isboolean( TSD, &top, suberror, op );
          if ( tl.u.number )
          {

@@ -4173,14 +4173,16 @@ int oo_stem_tails( tsd_t *TSD, const streng *stemname,
 }
 
 /*
- * oo_pool_copy copies the simple variables with a value of pool from into
- * pool to (used by the COPY method of objects).
+ * oo_pool_copy copies the variables with a value of pool from into pool to
+ * (used by the COPY method of objects): simple variables and stems with
+ * their default value and all tails.
  */
 void oo_pool_copy( const tsd_t *TSD, var_hashtable *from, var_hashtable *to )
 {
-   variableptr p, r;
-   unsigned i;
+   variableptr p, r, t, rt;
+   unsigned i, k;
    int j;
+   streng *full;
 
    for ( i = 0; i < from->size; i++ )
    {
@@ -4188,13 +4190,49 @@ void oo_pool_copy( const tsd_t *TSD, var_hashtable *from, var_hashtable *to )
       {
          for ( j = 0; j < p->name->len && p->name->value[j] != '.'; j++ )
             ;
-         if ( j < p->name->len )
-            continue;
          r = get_realbox( p );
          if ( r->flag & VFLAG_NUM && !( r->flag & VFLAG_STR ) )
             expand_to_str( TSD, r );
+         if ( j == p->name->len )
+         {
+            if ( r->flag & VFLAG_STR )
+               setvalue_simple( TSD, to, p->name, Str_dupTSD( r->value ) );
+            continue;
+         }
+         /* a stem: default value, then the tails */
          if ( r->flag & VFLAG_STR )
-            setvalue_simple( TSD, to, p->name, Str_dupTSD( r->value ) );
+            setvalue_stem( TSD, to, p->name, Str_dupTSD( r->value ) );
+         if ( r->index == NULL )
+            continue;
+         for ( k = 0; k < r->index->size; k++ )
+         {
+            for ( t = r->index->tbl[k]; t; t = t->next )
+            {
+               rt = get_realbox( t );
+               if ( rt->flag & VFLAG_NUM && !( rt->flag & VFLAG_STR ) )
+                  expand_to_str( TSD, rt );
+               if ( !( rt->flag & VFLAG_STR ) )
+                  continue;
+               full = Str_makeTSD( p->name->len + t->name->len );
+               memcpy( full->value, p->name->value, p->name->len );
+               memcpy( full->value + p->name->len, t->name->value, t->name->len );
+               full->len = p->name->len + t->name->len;
+               setdirvalue_compound( (tsd_t *) TSD, to, full, Str_dupTSD( rt->value ) );
+               Free_stringTSD( full );
+            }
+         }
       }
    }
+}
+
+/*
+ * oo_peek_simple returns the value of the simple variable name of the
+ * current procedure without tracing it and without a NOVALUE condition,
+ * or NULL if it has no value.
+ */
+const streng *oo_peek_simple( tsd_t *TSD, const streng *name )
+{
+   if ( KNOWN_RESERVED( name->value, Str_len( name ) ) )
+      return isvariable( TSD, name );
+   return oo_pool_get( TSD, TSD->currlevel->vars, name );
 }

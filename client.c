@@ -333,10 +333,28 @@ static void ScriptCleanup(tsd_t *TSD, jmp_buf *script_exit, streng *environment,
    Free_stringTSD( environment );
    RestoreInterpreterStatus( TSD, InterpreterStatus );
 
+   if ( TSD->oo_active && result )
+   {
+      /* OO extension: the caller gets the STRING of a returned object */
+      streng *s = oo_stringify( TSD, result );
+      if ( s )
+      {
+         Free_stringTSD( result );
+         result = s;
+      }
+   }
+
    IfcPrepareReturnString( result, RetLen, RetString );
 
    if ( result )
       Free_stringTSD( result );
+
+   /*
+    * OO extension: the outermost RexxStart() ends the program; the next
+    * program in this thread must start without classes and objects.
+    */
+   if ( script_exit == NULL && TSD->oo_tsd )
+      oo_end_program( TSD );
 }
 
 int IfcExecScript( tsd_t * volatile TSD, int NameLen, const char *Name,

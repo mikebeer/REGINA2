@@ -552,7 +552,7 @@ expr_stat    : expr                    { nodeptr t = $1->p[0];
                                                   || $1->type == X_SEQUAL
                                                   || $1->type == X_NEQUAL )
                                                 && t != NULL
-                                                && ( ( t->type == X_MSGSEND && t->p[1] == NULL )
+                                                && ( t->type == X_MSGSEND
                                                   || t->type == X_INDEX ) )
                                             /* OO: obj~attr = v, a[i] = v */
                                             $$ = makenode( X_OO_ASSIGN, 2, t, $1->p[1] );
@@ -2309,7 +2309,12 @@ static void transform_do_over( nodeptr dostat, nodeptr var )
 
    init = makenode( X_STRING, 0 );
    init->name = Str_cre_TSD( parser_data.TSD, "1" );
-   over = makenode( X_OO_OVERINIT, 1, coll );
+   /*
+    * p[1] and p[2] let the run time recognize the classic meaning
+    * "DO expr" of "DO x OVER y" (x and OVER empty, y a whole number).
+    */
+   over = makenode( X_OO_OVERINIT, 3, coll, var,
+                    dostat->p[0]->p[1]->p[0]->p[0]->p[1] );
    over->name = Str_dup_TSD( parser_data.TSD, arrname );
    to = makenode( X_DO_TO, 1, over );
    rep = makenode( X_REP, 2, init, to );
@@ -2317,7 +2322,7 @@ static void transform_do_over( nodeptr dostat, nodeptr var )
 
    item = makenode( X_OO_OVERITEM, 2, create_head( abuf ), create_head( ibuf ) );
    Free_string_TSD( parser_data.TSD, arrname );
-   asg = makenode( X_ASSIGN, 2, var, item );
+   asg = makenode( X_OO_OVERSTEP, 2, var, item );
    asg->lineno = dostat->lineno;
    asg->charnr = dostat->charnr;
 
@@ -2328,6 +2333,7 @@ static void transform_do_over( nodeptr dostat, nodeptr var )
    if ( dostat->p[1] && dostat->p[1]->type == X_WHILE )
       dostat->p[1]->p[0] = makenode( X_OO_OVERWHILE, 3, var, item,
                                      dostat->p[1]->p[0] );
+   /* OVERSTEP and OVERWHILE share the item node */
 
    dostat->p[0] = rep;
    dostat->p[2] = optgluelast( asg, dostat->p[2] );

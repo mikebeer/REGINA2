@@ -1,0 +1,10 @@
+use arg in main -> LIT
+A B
+ta tb 2
+db 1
+an Array
+table key class Array ta
+table key class Array tb
+1
+r1 result class Array
+rc=0

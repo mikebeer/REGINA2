@@ -260,6 +260,7 @@
  88,  3,[Methode "%s": Argument %d ist erforderlich]|<name>,<argnumber>
  88,  4,[Methode "%s": Argument %d muss ein Array sein; gefunden "%s"]|<name>,<argnumber>,<value>
  88,  5,[Methode "%s": Argument %d muss eine nicht negative ganze Zahl sein; gefunden "%s"]|<name>,<argnumber>,<value>
+ 88,  6,[Array-Index %s überschreitet das Maximum von 100000000]|<value>
  90,  0,[Nicht-ANSI-Besonderheit mit "OPTIONS STRICT_ANSI" benutzt]
  90,  1,[%s ist eine Erweiterungs-BIF von Regina (BIF = built in function, Standardfunktion)]|<bif>
  90,  2,[%s ist eine Erweiterungsinstruktion von Regina]|<token>
@@ -304,6 +305,7 @@
  98,  7,[Mixin-Klasse "%s" kann keine Instanzen erzeugen]|<name>
  98,  8,[Arrays haben nur eine Dimension]
  98,  9,[Supplier hat keine weiteren Elemente]
+ 98, 10,[Klasse "%s" würde von sich selbst erben]|<name>
  99,  0,[Übersetzungsfehler]
  99,  1,[Unbekannte Direktive "::%s"]|<name>
  99,  2,[Doppelte ::CLASS "%s"]|<name>

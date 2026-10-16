@@ -289,6 +289,7 @@
  88,  3,[Method "%s": argument %d is required]|<name>,<argnumber>
  88,  4,[Method "%s": argument %d must be an Array; found "%s"]|<name>,<argnumber>,<value>
  88,  5,[Method "%s": argument %d must be a non-negative whole number; found "%s"]|<name>,<argnumber>,<value>
+ 88,  6,[Array index %s exceeds the maximum of 100000000]|<value>
  90,  0,["OPTIONS STRICT_ANSI" ile kullanilan ANSI olmayan ozellik soz konusu]
  90,  1,[%s ogesi bir Regina uzanti BIF elemanidir]|<bif>
  90,  2,[%s ogesi bir Regina uzanti buyrugudur]|<token>
@@ -333,6 +334,7 @@
  98,  7,[Mixin class "%s" cannot create instances]|<name>
  98,  8,[Arrays have only one dimension]
  98,  9,[Supplier has no more items]
+ 98, 10,[Class "%s" would inherit from itself]|<name>
  99,  0,[Translation error]
  99,  1,[Unknown directive "::%s"]|<name>
  99,  2,[Duplicate ::CLASS "%s"]|<name>

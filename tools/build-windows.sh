@@ -48,7 +48,7 @@ done
 $CC -c $CFLAGS -o time64.o "$SRC/contrib/time64.c"
 OBJS="$OBJS time64.o"
 
-$CC -static -o rexx.exe $OBJS -lwsock32 -ladvapi32 -lpthread
+$CC -static -Wl,--stack,268435456 -o rexx.exe $OBJS -lwsock32 -ladvapi32 -lpthread
 x86_64-w64-mingw32-strip rexx.exe
 echo "built $OUT/rexx.exe"
 

@@ -343,12 +343,15 @@ streng *buildtinfunc( tsd_t *TSD, nodeptr thisptr )
                      * deallocplink. FGC
                      */
 
-      TSD->bif_first = initplist( TSD, thisptr ) ;
       if ( TSD->oo_active && ( BIFname == NULL || strcmp( BIFname, "VALUE" ) != 0 ) )
       {
-         /* OO extension: built-in functions see the STRING of an object */
-         paramboxptr p;
-         for ( p = TSD->bif_first; p; p = p->next )
+         /*
+          * OO extension: built-in functions see the STRING of an object.
+          * The list stays local until then: a STRING method may call
+          * built-in functions itself, which reuse TSD->bif_first.
+          */
+         paramboxptr p, first = initplist( TSD, thisptr );
+         for ( p = first; p; p = p->next )
          {
             streng *v;
             if ( p->value == NULL || ( v = oo_stringify( TSD, p->value ) ) == NULL )
@@ -358,7 +361,10 @@ streng *buildtinfunc( tsd_t *TSD, nodeptr thisptr )
             p->value = v;
             p->dealloc = 1;
          }
+         TSD->bif_first = first;
       }
+      else
+         TSD->bif_first = initplist( TSD, thisptr ) ;
       TSD->BIFname = BIFname;
       TSD->BIFfunc = (void *) BIFfunc;
       if (vptr)
