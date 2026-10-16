@@ -340,6 +340,7 @@ typedef struct proclevelbox {
    jmp_buf *signal_continue; /* see jump_rexx_signal() */
    unsigned long options;
    int pool;
+   void *oo_ctx;              /* OO: method/routine frame, see oo.c */
 } proclevbox ;
 
 typedef struct _ttree { /* bucket list of treenodes which allows ultra fast
@@ -479,6 +480,7 @@ typedef struct systeminfobox {
    int trace_override;
    internal_parser_type tree;
    int ctrlcounter;
+   int oo_keep_tree;          /* OO: tree is used by classes, keep it */
 } sysinfobox ;
 
 #ifndef DONT_TYPEDEF_PFN

@@ -1,0 +1,4 @@
+     6 +++ method m
+Error 99 running "@WORK@/oo/err_dup_method.rexx", line 6: [Translation error]
+Error 99.3: [Duplicate method "M" in class "A"]
+rc=157

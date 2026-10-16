@@ -314,14 +314,19 @@
  64,  0,[Error de sintaxis en el "parsing"]
  64,  1,[Error de sintaxis en la línea %d]
  64,  2,[Error general de sintaxis en la línea %d, columna %d]|<linenumber>,<columnnumber>
+ 88,  0,[Invalid argument]
+ 88,  1,[Method "%s": argument %d must be a positive whole number; found "%s"]|<name>,<argnumber>,<value>
+ 88,  2,[Method "%s": argument %d must be a class object; found "%s"]|<name>,<argnumber>,<value>
+ 88,  3,[Method "%s": argument %d is required]|<name>,<argnumber>
+ 88,  4,[Method "%s": argument %d must be an Array; found "%s"]|<name>,<argnumber>,<value>
+ 88,  5,[Method "%s": argument %d must be a non-negative whole number; found "%s"]|<name>,<argnumber>,<value>
  90,  0,[Propiedad no-ANSI usada con "OPTIONS STRICT_ANSI"]
  90,  1,[%s es un BIF de la extensión de Regina]|<bif>
  90,  2,[%s es una instrucción de la extensión de Regina]|<token>
  90,  3,[Argumento de %s número %d, opción debe empezar por uno de "%s" con "OPTIONS STRICT_ANSI"; encontrado "%s"; una extension de Regina]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[%s es una operador de la extensión de Regina]|<token>
- 91,  0,[Object-oriented extension not available]
- 91,  1,[%s is an object-oriented extension that is not implemented yet]|<token>
- 91,  2,[Directives are not allowed in INTERPRET data]
+ 91,  0,[No result object]
+ 91,  1,[Message "%s" did not return a result]|<name>
  93,  0,[Llamada incorrecta a rutina]
  93,  1,[El comando %s de STREAM debe estar seguido por uno de "%s"; encontrado "%s"]|<token>,<value>,<value>
  93,  3,[El comando de STREAM debe ser uno de "%s"; encontrado "%s"]|<value>,<value>
@@ -347,6 +352,26 @@
  95,  3,[Argumento de %s número %d: "%s", inválido en modo "seguro" (safe)]|<bif>,<argnumber>,<token>
  95,  4,[Argumento 3 de STREAM: abrir ficheros en modo ESCRITURA es inválido en modo "seguro" (safe)]
  95,  5,[Ejecutar comandos externos es inválido en modo "seguro" (safe)]
+ 97,  0,[Object method not found]
+ 97,  1,[Object "%s" does not understand message "%s"]|<value>,<name>
+ 98,  0,[Execution error]
+ 98,  1,[Class "%s" not found]|<name>
+ 98,  2,[Directives are not allowed in INTERPRET data]
+ 98,  3,[Could not find the required file "%s"]|<name>
+ 98,  4,[%s is only valid in a method]|<token>
+ 98,  5,[DO OVER: "%s" is not a collection]|<value>
+ 98,  6,[Method "%s" is abstract]|<name>
+ 98,  7,[Mixin class "%s" cannot create instances]|<name>
+ 98,  8,[Arrays have only one dimension]
+ 98,  9,[Supplier has no more items]
+ 99,  0,[Translation error]
+ 99,  1,[Unknown directive "::%s"]|<name>
+ 99,  2,[Duplicate ::CLASS "%s"]|<name>
+ 99,  3,[Duplicate method "%s" in class "%s"]|<name>,<name>
+ 99,  4,[::%s must follow a ::CLASS directive]|<name>
+ 99,  5,[Missing name in ::%s directive]|<name>
+ 99,  6,[Invalid option "%s" in ::%s directive]|<token>,<name>
+ 99,  7,[Duplicate ::ROUTINE "%s"]|<name>
 100,  0,[Error desconocido del sistema de ficheros]
 #
 # Extra general phrases requiring translation:

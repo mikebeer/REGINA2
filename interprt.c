@@ -1319,6 +1319,11 @@ endloop: if (s.increment)
       case X_IPRET:
       {
          streng *retval, *tptr = evaluate(TSD,thisptr->p[0],NULL) ;
+         if ( TSD->oo_active )
+         {
+            int owned = 1;
+            oo_stringify_inplace( TSD, &tptr, &owned );
+         }
          retval = dointerpret( TSD, tptr ) ;
          if (retval != NULL) /* we interpreted a RETURN WITH a value */
          {
@@ -1383,6 +1388,14 @@ endloop: if (s.increment)
             stringen = evaluate( TSD, thisptr->p[0], &kill );
          else
             stringen = NULL ;
+
+         if ( TSD->oo_active && stringen )
+         {
+            int owned = ( kill != NULL );
+            oo_stringify_inplace( TSD, &stringen, &owned );
+            if ( owned )
+               kill = stringen;
+         }
 
          if (TSD->systeminfo->hooks & HOOK_MASK(HOOK_STDOUT))
             ok = hookup_output( TSD, HOOK_STDOUT, stringen ) ;
@@ -1482,6 +1495,13 @@ endloop: if (s.increment)
          {
             /* bja - added Free_stringTSD() around perform() */
             stmp = evaluate( TSD, thisptr->p[0], &kill );
+            if ( TSD->oo_active )
+            {
+               int owned = ( kill != NULL );
+               oo_stringify_inplace( TSD, &stmp, &owned );
+               if ( owned )
+                  kill = stmp;
+            }
             Free_stringTSD(perform(TSD, stmp, TSD->currlevel->environment, thisptr, NULL)) ;
             if ( kill )
                Free_stringTSD( kill );
@@ -1771,6 +1791,19 @@ endloop: if (s.increment)
                exiterror( ERR_UNEXISTENT_LABEL, 3, tmpstr_of( TSD, n->name ) );
             thisptr->type = X_IS_INTERNAL;
          }
+         else if ( TSD->oo_active && oo_has_routine( TSD, thisptr->name ) )
+         {
+            /* OO extension: CALL of a ::ROUTINE */
+            paramboxptr args;
+            streng *result;
+
+            no_next_interactive = 1;
+            args = initplist( TSD, thisptr );
+            set_reserved_value( TSD, POOL0_SIGL, NULL, thisptr->lineno, VFLAG_NUM );
+            result = oo_call_routine( TSD, thisptr->name, args );
+            set_reserved_value( TSD, POOL0_RESULT, result, 0, ( result ) ? VFLAG_STR : VFLAG_NONE );
+            break;
+         }
          else
             thisptr->type = X_IS_BUILTIN;
          thisptr->u.node = n;
@@ -2040,11 +2073,46 @@ endloop: if (s.increment)
       }
 
       case X_PUSH:
-         stack_lifo( TSD, (thisptr->p[0]) ? evaluate(TSD,thisptr->p[0],NULL) : nullstringptr(), NULL ) ;
+      case X_QUEUE:
+      {
+         streng *v = (thisptr->p[0]) ? evaluate(TSD,thisptr->p[0],NULL) : nullstringptr();
+         if ( TSD->oo_active )
+         {
+            int owned = 1;
+            oo_stringify_inplace( TSD, &v, &owned );
+         }
+         if ( thisptr->type == X_PUSH )
+            stack_lifo( TSD, v, NULL ) ;
+         else
+            stack_fifo( TSD, v, NULL ) ;
+         break ;
+      }
+
+      /*
+       * OO extension, see oo.c
+       */
+      case X_OO_INIT:
+         oo_exec_init( TSD, thisptr );
          break ;
 
-      case X_QUEUE:
-         stack_fifo( TSD, (thisptr->p[0]) ? evaluate(TSD,thisptr->p[0],NULL) : nullstringptr(), NULL ) ;
+      case X_OO_MSGSTAT:
+         if ( TSD->trace_stat != 'O' && TSD->trace_stat != 'N' && TSD->trace_stat != 'F' )
+            traceline( TSD, thisptr, TSD->trace_stat, 0 );
+         oo_exec_message( TSD, thisptr );
+         break ;
+
+      case X_OO_ASSIGN:
+         if ( TSD->trace_stat != 'O' && TSD->trace_stat != 'N' && TSD->trace_stat != 'F' )
+            traceline( TSD, thisptr, TSD->trace_stat, 0 );
+         oo_exec_assign( TSD, thisptr );
+         break ;
+
+      case X_OO_EXPOSE:
+         oo_exec_expose( TSD, thisptr );
+         break ;
+
+      case X_OO_USEARG:
+         oo_exec_usearg( TSD, thisptr );
          break ;
 
       case X_OPTIONS: /* fixes 1116894 */
@@ -2130,9 +2198,10 @@ endloop: if (s.increment)
              * one exists. We have to keep care for unnamed loops like
              * "do 5 ; say fred ; end".
              */
-            if ( ( iptr->p[0] != NULL ) &&
-                 ( iptr->p[0]->name != NULL ) &&
-                 ( Str_cmp( thisptr->name, iptr->p[0]->name ) == 0 ) )
+            if ( ( ( iptr->p[0] != NULL ) &&
+                   ( iptr->p[0]->name != NULL ) &&
+                   ( Str_cmp( thisptr->name, iptr->p[0]->name ) == 0 ) )
+              || ( iptr->name != NULL && Str_cmp( thisptr->name, iptr->name ) == 0 ) )
             {
                /*
                 * Iterator name equals our argument. Automatically pop one
@@ -2468,6 +2537,12 @@ nodeptr getlabel( const tsd_t *TSD, const streng *name )
    internal_parser_type *ipt = &TSD->systeminfo->tree;
    unsigned i, hash;
 
+   /*
+    * OO extension: inside a method or routine only its own labels count.
+    */
+   if ( TSD->currlevel && TSD->currlevel->oo_ctx )
+      return oo_getlabel( TSD, name );
+
    if (ipt->sort_labels == NULL)
    {
       if (ipt->first_label == NULL)
@@ -2489,6 +2564,9 @@ nodeptr getlabel( const tsd_t *TSD, const streng *name )
    for (i = 0;i < ipt->numlabels;i++)
    {
       if (hash != ipt->sort_labels[i].hash)
+         continue;
+      /* OO extension: labels inside directives are marked in p[3] */
+      if (ipt->sort_labels[i].entry->p[3] != NULL)
          continue;
       if (Str_ccmp(ipt->sort_labels[i].entry->name, name) == 0)
          return(ipt->sort_labels[i].entry);
@@ -2586,6 +2664,7 @@ proclevel newlevel( tsd_t *TSD, proclevel oldlevel )
       level->next = NULL;
       level->args = NULL;
       level->options = 0;
+      level->oo_ctx = NULL;
 
       if ( it->opts_set )
          level->options = it->options;
@@ -2785,4 +2864,51 @@ void jump_script_exit( tsd_t *TSD, streng *result )
                  "script EXIT not registered" );
 
    longjmp( *TSD->systeminfo->script_exit, 1 );
+}
+
+/*
+ * OO extension: runs fn(TSD, data) so that an EXIT inside only ends that
+ * code (the prolog of a ::REQUIRES file). Errors still end the program.
+ * Returns 1 if the code ended with EXIT.
+ */
+int oo_exit_protected( tsd_t *TSD, void (*fn)( tsd_t *, void * ), void *data )
+{
+   jmp_buf jb;
+   jmp_buf * volatile save = TSD->systeminfo->script_exit;
+   proclevel volatile oldlevel = TSD->currlevel;
+   nodeptr volatile savenode = TSD->currentnode;
+   volatile int cstack = TSD->systeminfo->cstackcnt;
+   volatile unsigned nst = nstacktrigger( TSD );
+   volatile unsigned st = stacktrigger( TSD );
+   volatile int errfree = TSD->instore_is_errorfree;
+   volatile int exited = 0;
+
+   TSD->instore_is_errorfree = 1;
+   TSD->systeminfo->script_exit = &jb;
+   if ( setjmp( jb ) == 0 )
+      fn( TSD, data );
+   else
+   {
+      exited = 1;
+      TSD->systeminfo->script_exit = save;
+      nstackcleanup( TSD, nst, NULL );
+      stackcleanup( TSD, st );
+      if ( oldlevel->next )
+         removelevel( TSD, oldlevel->next );
+      TSD->currlevel = oldlevel;
+      oldlevel->next = NULL;
+      TSD->trace_stat = oldlevel->tracestat;
+      TSD->currentnode = savenode;
+      TSD->systeminfo->cstackcnt = cstack;
+      if ( !TSD->instore_is_errorfree )
+         jump_script_exit( TSD, TSD->systeminfo->result );   /* an error */
+      if ( TSD->systeminfo->result )
+      {
+         Free_stringTSD( TSD->systeminfo->result );
+         TSD->systeminfo->result = NULL;
+      }
+   }
+   TSD->systeminfo->script_exit = save;
+   TSD->instore_is_errorfree = errfree;
+   return exited;
 }

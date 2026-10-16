@@ -344,6 +344,21 @@ streng *buildtinfunc( tsd_t *TSD, nodeptr thisptr )
                      */
 
       TSD->bif_first = initplist( TSD, thisptr ) ;
+      if ( TSD->oo_active && ( BIFname == NULL || strcmp( BIFname, "VALUE" ) != 0 ) )
+      {
+         /* OO extension: built-in functions see the STRING of an object */
+         paramboxptr p;
+         for ( p = TSD->bif_first; p; p = p->next )
+         {
+            streng *v;
+            if ( p->value == NULL || ( v = oo_stringify( TSD, p->value ) ) == NULL )
+               continue;
+            if ( p->dealloc )
+               Free_stringTSD( p->value );
+            p->value = v;
+            p->dealloc = 1;
+         }
+      }
       TSD->BIFname = BIFname;
       TSD->BIFfunc = (void *) BIFfunc;
       if (vptr)
@@ -1277,4 +1292,31 @@ const char *BIFname( tsd_t *TSD )
       }
    }
    return "(internal)";
+}
+
+/*
+ * OO extension: returns the built-in function name (uppercase, 0-terminated)
+ * or NULL if it doesn't exist or isn't enabled by the current OPTIONS.
+ */
+streng *(*oo_find_bif( tsd_t *TSD, const char *name ))( tsd_t *, cparamboxptr )
+{
+   int low = 0, up = num_funcs - 1, mid, cmp;
+
+   while ( low <= up )
+   {
+      mid = ( low + up ) / 2;
+      cmp = strcmp( functions[mid].funcname, name );
+      if ( cmp == 0 )
+      {
+         if ( functions[mid].compat
+           && !get_options_flag( TSD->currlevel, functions[mid].compat ) )
+            return NULL;
+         return functions[mid].function;
+      }
+      if ( cmp > 0 )
+         up = mid - 1;
+      else
+         low = mid + 1;
+   }
+   return NULL;
 }

@@ -278,6 +278,7 @@
 
 #include "mt.h"                 /* multi-threading support */
 #include "extern.h"             /* function prototypes */
+#include "oo.h"                 /* object-oriented extension */
 
 #define FREE_IF_DEFINED(a,b) { if (b) Free_TSD(a,b); b=NULL ; }
 
@@ -327,7 +328,7 @@
                                 REGINA_VERSION_THREAD \
                                 " 5.00 " REGINA_VERSION_DATE
 
-#define INSTORE_VERSION 10 /* Must be incremented each time the parser/lexer
+#define INSTORE_VERSION 11 /* Must be incremented each time the parser/lexer
                            * or data structure changes something.
                            */
 

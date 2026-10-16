@@ -89,15 +89,21 @@ static void checkdosyntax( cnodeptr thisptr ) ;
 void newlabel( const tsd_t *TSD, internal_parser_type *ipt, nodeptr thisptr ) ;
 static nodeptr optgluelast( nodeptr p1, nodeptr p2 );
 static void move_labels( nodeptr front, nodeptr end, int level );
+static nodeptr do_over_var( nodeptr rep );
+static void transform_do_over( nodeptr dostat, nodeptr var );
 extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 
 #define IS_EXPRLIST(x) ( ( (x) != NULL )                   \
                       && ( ( (x)->type == X_CEXPRLIST )    \
                         || ( (x)->type == X_EXPRLIST ) ) )
 
+/* OO: message terms and array references carry argument lists in p[1] */
 #define IS_FUNCTION(x) ( ( (x) != NULL )                  \
                       && ( ( (x)->type == X_EX_FUNC )     \
-                        || ( (x)->type == X_IN_FUNC ) ) )
+                        || ( (x)->type == X_IN_FUNC )     \
+                        || ( (x)->type == X_MSGSEND )     \
+                        || ( (x)->type == X_CASCADE )     \
+                        || ( (x)->type == X_INDEX ) ) )
 
 #define AUTO_REDUCE(x,y) { if ( parendepth == 1 )                             \
                            {                                                  \
@@ -130,7 +136,7 @@ extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 %token GTGT LTLT NOTGTGT NOTLTLT GTGTE LTLTE
 %token INPUT OUTPUT ERROR NORMAL APPEND REPLACE STREAM STEM LIFO FIFO NOEOL
 %token LOWER CASELESS
-%token MSGSEND CASCADE DCOLON /* OO extension */
+%token MSGSEND CASCADE DCOLON USEARG MSGSUPER /* OO extension */
 %token PLUSASSIGNMENTVARIABLE MINUSASSIGNMENTVARIABLE MULTASSIGNMENTVARIABLE DIVASSIGNMENTVARIABLE MODULUSASSIGNMENTVARIABLE INTDIVASSIGNMENTVARIABLE ORASSIGNMENTVARIABLE XORASSIGNMENTVARIABLE ANDASSIGNMENTVARIABLE CONCATASSIGNMENTVARIABLE
 
 %start start
@@ -177,11 +183,13 @@ prog         : nlncl stats             { $$ = optgluelast( $1, $2 );
                                          if ( $$ != NULL )
                                             $$->o.last = NULL;
                                          EndProg( $$ ); }
-             | nlncl stats dirsect     { $$ = optgluelast( $1, $2 );
+             | nlncl stats dirsect     { $$ = optgluelast( makenode( X_OO_INIT, 0 ), $1 );
+                                         $$ = optgluelast( $$, $2 );
                                          $$ = optgluelast( $$, $3 );
                                          $$->o.last = NULL;
                                          EndProg( $$ ) ; }
-             | nlncl dirsect           { $$ = optgluelast( $1, $2 );
+             | nlncl dirsect           { $$ = optgluelast( makenode( X_OO_INIT, 0 ), $1 );
+                                         $$ = optgluelast( $$, $2 );
                                          $$->o.last = NULL;
                                          EndProg( $$ ) ; }
              ;
@@ -318,6 +326,35 @@ nclstatement : address_stat
              | andassignment
              | concatassignment
              | assignment
+             | oo_expose_stat
+             | oo_usearg_stat
+             ;
+
+/*
+ * OO extension: EXPOSE and USE ARG. The lexer returns these tokens only in
+ * the code after the first directive.
+ */
+oo_expose_stat : EXPOSE anyvars        { $$ = makenode( X_OO_EXPOSE, 1, $2 );
+                                         $$->lineno = tmplno;
+                                         $$->charnr = tmpchr; }
+               | EXPOSE error          { exiterror( ERR_SYMBOL_EXPECTED, 1, __reginatext ); }
+               ;
+
+oo_usearg_stat : USEARG usevars        { $$ = makenode( X_OO_USEARG, 1, $2 );
+                                         $$->lineno = tmplno;
+                                         $$->charnr = tmpchr; }
+               | USEARG usevars error  { exiterror( ERR_SYMBOL_EXPECTED, 1, __reginatext ); }
+               ;
+
+usevars      : usevar ',' usevars      { $$ = $1;
+                                         $$->p[0] = $3; }
+             | usevar                  { $$ = $1; }
+             ;
+
+usevar       : xsimsymb                { $$ = makenode( X_SIM_SYMBOL, 0 );
+                                         $$->name = (streng *) $1; }
+             |                         { $$ = makenode( X_SIM_SYMBOL, 0 );
+                                         $$->name = NULL; }
              ;
 
 call         : CALL                    { $$ = makenode(X_CALL,0) ;
@@ -506,10 +543,26 @@ call_args    : exprs                   {
              | exprs ')'               { exiterror(ERR_UNEXPECTED_PARAN, 2); }
              ;
 
-expr_stat    : expr                    { $$ = makenode(X_COMMAND,0) ;
+expr_stat    : expr                    { nodeptr t = $1->p[0];
+                                         if ( $1->type == X_MSGSEND
+                                           || $1->type == X_CASCADE )
+                                            /* OO: message instruction */
+                                            $$ = makenode( X_OO_MSGSTAT, 1, $1 );
+                                         else if ( ( $1->type == X_EQUAL
+                                                  || $1->type == X_SEQUAL
+                                                  || $1->type == X_NEQUAL )
+                                                && t != NULL
+                                                && ( ( t->type == X_MSGSEND && t->p[1] == NULL )
+                                                  || t->type == X_INDEX ) )
+                                            /* OO: obj~attr = v, a[i] = v */
+                                            $$ = makenode( X_OO_ASSIGN, 2, t, $1->p[1] );
+                                         else
+                                         {
+                                            $$ = makenode(X_COMMAND,0) ;
+                                            $$->p[0] = $1 ;
+                                         }
                                          $$->charnr = tmpchr ;
-                                         $$->lineno = tmplno;
-                                         $$->p[0] = $1 ; }
+                                         $$->lineno = tmplno; }
              ;
 
 end_stat     : END                     { $$ = makenode(X_END,0) ;
@@ -525,13 +578,25 @@ end          : end_stat simsymb        { $$ = $1 ;
              ;
 
 do_stat      : do repetitor conditional ncl nxstats end
-                                       { $$ = $1;
+                                       { nodeptr overvar;
+                                         $$ = $1;
                                          $$->p[0] = $2;
                                          $$->p[1] = $3;
                                          $$->p[2] = optgluelast( $4, $5 );
                                          if ( $$->p[2] )
                                             $$->p[2]->o.last = NULL;
                                          $$->p[3] = $6;
+                                         overvar = do_over_var( $2 );
+                          if ( overvar )
+                          {
+                             /* OO: DO name OVER collection */
+                             if ( $$->p[3]->name
+                               && Str_cmp( $$->p[3]->name, overvar->name ) != 0 )
+                                exiterror( ERR_UNMATCHED_END, 0 );
+                             transform_do_over( $$, overvar );
+                          }
+                          else
+                          {
                           if (($$->p[0]==NULL || $$->p[0]->name==NULL)
                               && $$->p[3]->name)
                                             exiterror( ERR_UNMATCHED_END, 0 );
@@ -542,6 +607,7 @@ do_stat      : do repetitor conditional ncl nxstats end
                                         $$->p[0]->name->value,
                                         $$->p[0]->name->len))))
                                             exiterror( ERR_UNMATCHED_END, 0 );
+                          }
                                        }
              ;
 
@@ -1357,7 +1423,11 @@ expr        : '('                      { /* We have to accept exprs here even
             | expr '[' bracket_args    { AUTO_REDUCE( $1, "[" );
                                          $$ = makenode( X_INDEX, 2, $1, $3 ); }
             | symbtree                 { $$ = $1 ; }
-            | CONSYMBOL                { $$ = makenode( X_STRING, 0 );
+            | CONSYMBOL                { /* OO: .NAME may be an environment
+                                          * symbol, see OO_IS_ENVSYMBOL */
+                                         $$ = makenode( ( retvalue[0] == '.'
+                                                          && rx_isalpha( retvalue[1] ) )
+                                                        ? X_CON_SYMBOL : X_STRING, 0 );
                                          $$->name = Str_cre_TSD(parser_data.TSD,retvalue) ; }
             | HEXSTRING                { $$ = makenode( X_STRING, 0 );
                                          $$->name = Str_make_TSD(parser_data.TSD,retlength) ;
@@ -1405,14 +1475,28 @@ func_args   :                          { /* ugly fake preservs parendepth */
  * name = method name and p[1] = argument list (NULL without parentheses);
  * the caller sets the type and the receiver in p[0].
  */
-msgtarget   : SIMSYMBOL                { $$ = makenode( X_MSGSEND, 0 );
-                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
+msgtarget   : msgname                  { $$ = makenode( X_MSGSEND, 0 );
+                                         $$->name = (streng *) $1; }
+            | msgname MSGSUPER         { /* ~name:super, see oo.c */
+                                         $$ = makenode( X_MSGSEND, 0 );
+                                         $$->name = (streng *) $1;
+                                         $$->u.nonansi = 1; }
+            | msgname MSGSUPER '(' func_args
+                                       { $$ = makenode( X_MSGSEND, 2, NULL, $4 );
+                                         $$->name = (streng *) $1;
+                                         $$->u.nonansi = 1; }
             | STRING                   { $$ = makenode( X_MSGSEND, 0 );
-                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue );
+                                         mem_upper( $$->name->value, $$->name->len ); }
             | intfunc func_args        { $$ = makenode( X_MSGSEND, 2, NULL, $2 );
-                                         $$->name = (streng *) $1; }
+                                         $$->name = (streng *) $1;
+                                         mem_upper( $$->name->value, $$->name->len ); }
             | extfunc func_args        { $$ = makenode( X_MSGSEND, 2, NULL, $2 );
-                                         $$->name = (streng *) $1; }
+                                         $$->name = (streng *) $1;
+                                         mem_upper( $$->name->value, $$->name->len ); }
+            ;
+
+msgname     : SIMSYMBOL                { $$ = (nodeptr) Str_cre_TSD( parser_data.TSD, retvalue ); }
             ;
 
 bracket_args :                         { /* like func_args, with "]" */
@@ -1937,8 +2021,13 @@ static int is_const( cnodeptr thisptr )
 
    switch (thisptr->type)
    {
-      case X_STRING:
       case X_CON_SYMBOL:
+         /* OO: .NAME is resolved at run time */
+         if ( thisptr->name && thisptr->name->len > 1
+           && thisptr->name->value[0] == '.' && rx_isalpha( thisptr->name->value[1] ) )
+            return 0 ;
+         return 1 ;
+      case X_STRING:
          return 1 ;
 
 #if 0
@@ -2173,3 +2262,77 @@ static void move_labels( nodeptr front, nodeptr end, int level )
       labels = labels->next;
    }
 }
+
+/*
+ * OO extension: "DO name OVER collection" is parsed as "DO expr" with the
+ * expression "name OVER collection". do_over_var returns the variable node
+ * if rep has this form, else NULL.
+ */
+static nodeptr do_over_var( nodeptr rep )
+{
+   nodeptr e, l;
+
+   if ( rep == NULL || rep->type != X_REP || rep->p[0] != NULL
+     || rep->p[1] == NULL || rep->p[1]->type != X_DO_EXPR )
+      return NULL;
+   e = rep->p[1]->p[0];
+   if ( e == NULL || e->type != X_SPACE || ( l = e->p[0] ) == NULL
+     || l->type != X_SPACE || l->p[0] == NULL || l->p[1] == NULL
+     || l->p[1]->type != X_SIM_SYMBOL
+     || l->p[1]->name->len != 4 || memcmp( l->p[1]->name->value, "OVER", 4 ) != 0 )
+      return NULL;
+   if ( l->p[0]->type != X_SIM_SYMBOL && l->p[0]->type != X_HEAD_SYMBOL )
+      return NULL;
+   return l->p[0];
+}
+
+/*
+ * Rewrites the loop into
+ *    DO <idx> = 1 TO <snapshot of the collection, its item count>
+ *       name = <item idx of the snapshot>
+ *       ...
+ * with two hidden variables that a program cannot name.
+ */
+static void transform_do_over( nodeptr dostat, nodeptr var )
+{
+   static unsigned long counter = 0;
+   char abuf[32], ibuf[32];
+   nodeptr coll, rep, init, over, to, asg, item;
+   streng *arrname, *idxname;
+
+   coll = dostat->p[0]->p[1]->p[0]->p[1];
+   counter++;
+   sprintf( abuf, "\001OVERA%lu", counter );
+   arrname = Str_cre_TSD( parser_data.TSD, abuf );
+   sprintf( ibuf, "\001OVERI%lu", counter );
+   idxname = Str_cre_TSD( parser_data.TSD, ibuf );
+
+   init = makenode( X_STRING, 0 );
+   init->name = Str_cre_TSD( parser_data.TSD, "1" );
+   over = makenode( X_OO_OVERINIT, 1, coll );
+   over->name = Str_dup_TSD( parser_data.TSD, arrname );
+   to = makenode( X_DO_TO, 1, over );
+   rep = makenode( X_REP, 2, init, to );
+   rep->name = idxname;
+
+   item = makenode( X_OO_OVERITEM, 2, create_head( abuf ), create_head( ibuf ) );
+   Free_string_TSD( parser_data.TSD, arrname );
+   asg = makenode( X_ASSIGN, 2, var, item );
+   asg->lineno = dostat->lineno;
+   asg->charnr = dostat->charnr;
+
+   /*
+    * WHILE is tested after the control variable is set: the condition
+    * assigns the item itself before it is evaluated.
+    */
+   if ( dostat->p[1] && dostat->p[1]->type == X_WHILE )
+      dostat->p[1]->p[0] = makenode( X_OO_OVERWHILE, 3, var, item,
+                                     dostat->p[1]->p[0] );
+
+   dostat->p[0] = rep;
+   dostat->p[2] = optgluelast( asg, dostat->p[2] );
+   dostat->p[2]->o.last = NULL;
+   /* LEAVE name and ITERATE name use the visible name */
+   dostat->name = Str_dup_TSD( parser_data.TSD, var->name );
+}
+

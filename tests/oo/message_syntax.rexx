@@ -1,50 +1,26 @@
-/* OO syntax that now parses. Until the object system exists, running a
- * message term or array reference raises error 91.1. Each case is run
- * through INTERPRET so one failure does not stop the test. */
-a = 'abc'; b = 0; i = 1
-call try 'x = a~b'
-call try 'x = a~b()'
-call try 'x = a~b(1, 2)'
-call try 'x = a->b'
-call try 'x = a -> b'
-call try 'x = a -> b(1)'
-call try 'x = a~~b'
-call try 'x = a->>b'
-call try 'x = a ->> b(1) ->> c'
-call try 'x = "str"~length'
-call try "x = 'str' -> length"
-call try 'x = (1+2)~abs'
-call try 'x = a~b~c'
-call try 'x = a->b->c'
-call try 'x = a~b + 1'
-call try 'x = -a~b'
-call try 'x = \a~b'
-call try 'x = a~ b'
-call try 'x = a~"+"(1)'
-call try 'x = a[1]'
-call try 'x = a[1, 2]'
-call try 'x = a[i+1]'
-call try 'x = a~b[1]'
-call try 'x = a[1]~b'
-call try 'x = a[1][2]'
-call try 'x = a[]'
-call try 'a~b'
-call try 'a -> b(1)'
-call try 'say a~b'
+/* every spelling of the message operators, on strings and objects */
+a = 'abc'; i = 2
+say a~length a->length a~substr(2, 1) a -> substr(2, 1)
+say a~~reverse a ->> reverse            /* cascades return the receiver */
+say "str"~length 'str' -> length (1 + 2)~abs a~reverse~upper a->reverse->upper
+say a~length + 1 -a~length \a~length~"="(3) a~ length
+say a~"||"('d') '5'~"+"(1)~"="(6) 'x'~"=="('x')
+arr = .array~of(10, 20, 30)
+say arr[1] arr[i] arr[i + 1] arr~makearray[3] arr[1]~"+"(1)
+m = .array~new
+m[1] = .array~of('x', 'y')
+say m[1][2] m[1]~items
+arr[2] = 'twenty'
+say arr~tostring('C', ',')
+arr~append('forty')                     /* message instruction */
+say arr~items result
+q = .queue~new
+q ->> queue(1) ->> queue(2)~~queue(3)   /* no blank before ~~ */
+say q~items
 /* classic meanings that must not change */
-call try 'say a ~b'
-call try 'say a~=b a~ =b a~<b'
-call try 'say ~b ~ b'
-call try 'say~b'
-call try 'if~b then say "if-not ok"'
-exit
-
-try:
-  parse arg code
-  signal on syntax name caught
-  interpret code
-  say '  ok:' code
-  return
-caught:
-  say 'err' rc':' code '=>' condition('D')
-  return
+b = 0
+say a ~b
+say a~=b a~ =b a~<b
+say ~b ~ b
+say~b
+if~b then say "if-not ok"

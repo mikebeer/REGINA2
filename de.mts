@@ -254,14 +254,19 @@
  64,  0,[Syntaxfehler während der Satzanalyse]
  64,  1,[Syntaxfehler in Zeile %d]
  64,  2,[Allgemeiner Sytaxfehler in Zeile %d, Spalte %d]|<linenumber>,<columnnumber>
+ 88,  0,[Ungültiges Argument]
+ 88,  1,[Methode "%s": Argument %d muss eine positive ganze Zahl sein; gefunden "%s"]|<name>,<argnumber>,<value>
+ 88,  2,[Methode "%s": Argument %d muss ein Klassenobjekt sein; gefunden "%s"]|<name>,<argnumber>,<value>
+ 88,  3,[Methode "%s": Argument %d ist erforderlich]|<name>,<argnumber>
+ 88,  4,[Methode "%s": Argument %d muss ein Array sein; gefunden "%s"]|<name>,<argnumber>,<value>
+ 88,  5,[Methode "%s": Argument %d muss eine nicht negative ganze Zahl sein; gefunden "%s"]|<name>,<argnumber>,<value>
  90,  0,[Nicht-ANSI-Besonderheit mit "OPTIONS STRICT_ANSI" benutzt]
  90,  1,[%s ist eine Erweiterungs-BIF von Regina (BIF = built in function, Standardfunktion)]|<bif>
  90,  2,[%s ist eine Erweiterungsinstruktion von Regina]|<token>
  90,  3,[Routine %s, Argument %d: Option muss ein Wert aus "%s" sein, wenn "OPTIONS STRICT_ANSI" vorliegt; Regina-Erweiterung "%s" gefunden]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[%s ist eine Erweiterung Betreiber von Regina]|<token>
- 91,  0,[Objektorientierte Erweiterung nicht verfügbar]
- 91,  1,[%s ist eine objektorientierte Erweiterung, die noch nicht implementiert ist]|<token>
- 91,  2,[Direktiven sind in INTERPRET-Daten nicht erlaubt]
+ 91,  0,[Kein Ergebnisobjekt]
+ 91,  1,[Nachricht "%s" hat kein Ergebnis zurückgegeben]|<name>
  93,  0,[Ungültiger Aufruf einer Routine]
  93,  1,[Das STREAM-Kommando %s fordert als Nachfolger eines der Worte "%s"; "%s" gefunden]|<token>,<value>,<value>
  93,  3,[Das STREAM-Kommando muss eines sein aus "%s"; "%s" gefunden]|<value>,<value>
@@ -287,6 +292,26 @@
  95,  3,[Routine %s, Argument %d: "%s" ungültig im "geschützten" Modus]|<bif>,<argnumber>,<token>
  95,  4,[Routine STREAM, Argument 3: Öffnen von Dateien mit "WRITE"-Zugriff ungültig im "geschützten" Modus]
  95,  5,[Ausführen externer Kommandos ist im "geschützten" Modus nicht erlaubt]
+ 97,  0,[Objektmethode nicht gefunden]
+ 97,  1,[Objekt "%s" versteht die Nachricht "%s" nicht]|<value>,<name>
+ 98,  0,[Ausführungsfehler]
+ 98,  1,[Klasse "%s" nicht gefunden]|<name>
+ 98,  2,[Direktiven sind in INTERPRET-Daten nicht erlaubt]
+ 98,  3,[Die benötigte Datei "%s" wurde nicht gefunden]|<name>
+ 98,  4,[%s ist nur in einer Methode erlaubt]|<token>
+ 98,  5,[DO OVER: "%s" ist keine Sammlung]|<value>
+ 98,  6,[Methode "%s" ist abstrakt]|<name>
+ 98,  7,[Mixin-Klasse "%s" kann keine Instanzen erzeugen]|<name>
+ 98,  8,[Arrays haben nur eine Dimension]
+ 98,  9,[Supplier hat keine weiteren Elemente]
+ 99,  0,[Übersetzungsfehler]
+ 99,  1,[Unbekannte Direktive "::%s"]|<name>
+ 99,  2,[Doppelte ::CLASS "%s"]|<name>
+ 99,  3,[Doppelte Methode "%s" in Klasse "%s"]|<name>,<name>
+ 99,  4,[::%s muss auf eine ::CLASS-Direktive folgen]|<name>
+ 99,  5,[Fehlender Name in der Direktive ::%s]|<name>
+ 99,  6,[Ungültige Option "%s" in der Direktive ::%s]|<token>,<name>
+ 99,  7,[Doppelte ::ROUTINE "%s"]|<name>
 100,  0,[Unbekannter Dateisystemfehler]
 #
 # Error prefix strings

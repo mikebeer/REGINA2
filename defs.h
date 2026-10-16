@@ -167,6 +167,14 @@
 #define X_CASCADE       148 /* like X_MSGSEND, result is the receiver */
 #define X_INDEX         149 /* p[0] receiver, p[1] index list: a[i,j] */
 #define X_DIRECTIVE     150 /* name keyword, p[0] words, p[1] body */
+#define X_OO_INIT       151 /* first statement of a program with directives */
+#define X_OO_MSGSTAT    152 /* message instruction, p[0] X_MSGSEND/X_CASCADE */
+#define X_OO_ASSIGN     153 /* p[0] X_MSGSEND or X_INDEX target, p[1] value */
+#define X_OO_EXPOSE     154 /* p[0] chain of X_SIM_SYMBOL (via p[0]) */
+#define X_OO_USEARG     155 /* p[0] chain of X_SIM_SYMBOL, name NULL = skip */
+#define X_OO_OVERINIT   156 /* DO OVER: name snapshot var, p[0] collection */
+#define X_OO_OVERITEM   157 /* DO OVER: p[0] snapshot var, p[1] index var */
+#define X_OO_OVERWHILE  158 /* DO OVER ... WHILE: p[0] var, p[1] item, p[2] cond */
 
 
 /* The three first two numbers have not errortext attched to them */
@@ -226,7 +234,11 @@
 #define ERR_YACC_SYNTAX         64
 
 #define ERR_NON_ANSI_FEATURE    90
-#define ERR_OO_NOT_AVAILABLE    91 /* OO extension, temporary */
+#define ERR_INVALID_ARGUMENT    88 /* OO extension */
+#define ERR_NO_RESULT_OBJECT    91 /* OO extension */
+#define ERR_METHOD_NOT_FOUND    97 /* OO extension */
+#define ERR_EXECUTION_ERROR     98 /* OO extension */
+#define ERR_TRANSLATION_ERROR   99 /* OO extension */
 #define ERR_STREAM_COMMAND      93
 #define ERR_EXTERNAL_QUEUE      94
 

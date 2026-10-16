@@ -1067,6 +1067,7 @@ sysinfobox *creat_sysinfo( const tsd_t *TSD, streng *envir )
    sinfo->cstackmax = 10;
    sinfo->trace_override = 0;
    sinfo->ctrlcounter = 0;
+   sinfo->oo_keep_tree = 0;
    memset( &sinfo->tree, 0, sizeof( sinfo->tree ) );
 
    return sinfo;

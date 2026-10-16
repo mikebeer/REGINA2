@@ -85,7 +85,7 @@ streng *dointerpret( tsd_t *TSD, streng *string )
          if ( n->type == X_DIRECTIVE )
          {
             DestroyInternalParsingTree( TSD, &parsing );
-            exiterror( ERR_OO_NOT_AVAILABLE, 2 );
+            exiterror( ERR_EXECUTION_ERROR, 2 );
             return NULL;
          }
       }

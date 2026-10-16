@@ -4057,3 +4057,144 @@ void set_reserved_value( tsd_t *TSD, int poolid, streng *val_str, int val_int,
       setshortcut( TSD, &vt->pool0nodes[poolid][1], val_str );
    }
 }
+
+/*
+ * ---------------------------------------------------------------------
+ * OO extension helpers (see oo.c)
+ * ---------------------------------------------------------------------
+ */
+
+/*
+ * oo_pool_new creates a variable pool for the variables of an object.
+ * Unlike create_new_varpool() it must not touch current_valid because the
+ * pool is never killed like a procedure's pool.
+ */
+var_hashtable *oo_pool_new( const tsd_t *TSD )
+{
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+   var_hashtable *retval;
+
+   retval = make_hash_table( TSD, vt->initialHashTableLength );
+   retval->tbl[retval->size] = (variableptr) vt->current_valid;
+   return retval;
+}
+
+/*
+ * oo_pool_get returns the value of the simple variable name in pool or NULL
+ * if it has no value.
+ */
+const streng *oo_pool_get( const tsd_t *TSD, var_hashtable *pool,
+                           const streng *name )
+{
+   variableptr ptr;
+   int expand = 0;
+
+   ptr = findsimple( TSD, pool, name, &expand );
+   if ( expand )
+      reorgHashtable( TSD, pool );
+   if ( ptr == NULL )
+      return NULL;
+   ptr = get_realbox( ptr );
+   if ( ptr->flag & VFLAG_STR )
+      return ptr->value;
+   if ( ptr->flag & VFLAG_NUM )
+   {
+      expand_to_str( TSD, ptr );
+      return ptr->value;
+   }
+   return NULL;
+}
+
+/*
+ * oo_pool_set sets the simple variable name in pool. value is consumed.
+ */
+void oo_pool_set( const tsd_t *TSD, var_hashtable *pool, const streng *name,
+                  streng *value )
+{
+   setvalue_simple( TSD, pool, name, value );
+}
+
+/*
+ * oo_expose links the variable name (simple, stem or compound) of the
+ * object pool src into the current procedure's pool, like PROCEDURE EXPOSE
+ * does with the caller's pool.
+ */
+void oo_expose( tsd_t *TSD, var_hashtable *src, const streng *name )
+{
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+   var_hashtable *own = TSD->currlevel->vars;
+   int i, len = Str_len( name );
+
+   vt->var_table = own;   /* destination */
+   for ( i = 0; ( i < len ) && ( name->value[i] != '.' ); i++ )
+      ;
+   if ( i == len )
+      expose_simple( TSD, src, name );
+   else if ( i + 1 == len )
+      expose_stem( TSD, src, name );
+   else
+      expose_compound( TSD, src, name );
+   vt->var_table = NULL;
+}
+
+/*
+ * oo_stem_tails calls cb for every tail of the stem stemname (uppercase,
+ * with the trailing dot) of the current procedure that has a value.
+ * Returns the number of tails.
+ */
+int oo_stem_tails( tsd_t *TSD, const streng *stemname,
+                   void (*cb)( tsd_t *, void *, const streng *, const streng * ),
+                   void *data )
+{
+   variableptr st, p, r;
+   int expand = 0, count = 0;
+   unsigned i;
+
+   st = findsimple( TSD, TSD->currlevel->vars, stemname, &expand );
+   if ( expand )
+      reorgHashtable( TSD, TSD->currlevel->vars );
+   st = get_realbox( st );
+   if ( st == NULL || st->index == NULL )
+      return 0;
+   for ( i = 0; i < st->index->size; i++ )
+   {
+      for ( p = st->index->tbl[i]; p; p = p->next )
+      {
+         r = get_realbox( p );
+         if ( r->flag & VFLAG_NUM && !( r->flag & VFLAG_STR ) )
+            expand_to_str( TSD, r );
+         if ( !( r->flag & VFLAG_STR ) )
+            continue;
+         cb( TSD, data, p->name, r->value );
+         count++;
+      }
+   }
+   return count;
+}
+
+/*
+ * oo_pool_copy copies the simple variables with a value of pool from into
+ * pool to (used by the COPY method of objects).
+ */
+void oo_pool_copy( const tsd_t *TSD, var_hashtable *from, var_hashtable *to )
+{
+   variableptr p, r;
+   unsigned i;
+   int j;
+
+   for ( i = 0; i < from->size; i++ )
+   {
+      for ( p = from->tbl[i]; p; p = p->next )
+      {
+         for ( j = 0; j < p->name->len && p->name->value[j] != '.'; j++ )
+            ;
+         if ( j < p->name->len )
+            continue;
+         r = get_realbox( p );
+         if ( r->flag & VFLAG_NUM && !( r->flag & VFLAG_STR ) )
+            expand_to_str( TSD, r );
+         if ( r->flag & VFLAG_STR )
+            setvalue_simple( TSD, to, p->name, Str_dupTSD( r->value ) );
+      }
+   }
+}

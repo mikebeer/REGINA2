@@ -250,14 +250,19 @@
  64,  0,[Syntaksfeil under analysering]
  64,  1,[Syntaksfeil på linje %d]
  64,  2,[Generell syntaksfeil på linje %d, kolonne %d]|<linenumber>,<columnnumber>
+ 88,  0,[Invalid argument]
+ 88,  1,[Method "%s": argument %d must be a positive whole number; found "%s"]|<name>,<argnumber>,<value>
+ 88,  2,[Method "%s": argument %d must be a class object; found "%s"]|<name>,<argnumber>,<value>
+ 88,  3,[Method "%s": argument %d is required]|<name>,<argnumber>
+ 88,  4,[Method "%s": argument %d must be an Array; found "%s"]|<name>,<argnumber>,<value>
+ 88,  5,[Method "%s": argument %d must be a non-negative whole number; found "%s"]|<name>,<argnumber>,<value>
  90,  0,[Ikke-ANSI-feature brukt med "OPTIONS STRICT_ANSI"]
  90,  1,[BIF %s er en Regina-utvidelse]|<bif>
  90,  2,[Instruksjon %s er en Regina-utvidelse]|<token>
  90,  3,[%s argument %d, opsjon må starte med en av "%s" med "OPTIONS STRICT_ANSI"; fant "%s"; en Regina-utvidelse]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[Operator %s er en Regina-utvidelse]|<token>
- 91,  0,[Object-oriented extension not available]
- 91,  1,[%s is an object-oriented extension that is not implemented yet]|<token>
- 91,  2,[Directives are not allowed in INTERPRET data]
+ 91,  0,[No result object]
+ 91,  1,[Message "%s" did not return a result]|<name>
  93,  0,[Uriktig kall til rutine]
  93,  1,[STREAM-kommando %s må etterfølges av en av "%s"; fant "%s"]|<token>,<value>,<value>
  93,  3,[STREAM-kommando må være en av "%s"; fant "%s"]|<value>,<value>
@@ -283,6 +288,26 @@
  95,  3,[%s argument %d: "%s", ugyldig i "sikker" modus]|<bif>,<argnumber>,<token>
  95,  4,[STREAM-argument 3: Å åpne filer for WRITE-tilgang er ulovlig i "sikker" modus]
  95,  5,[Det er ulovlig å kjøre eksterne kommandoer i "sikker" modus]
+ 97,  0,[Object method not found]
+ 97,  1,[Object "%s" does not understand message "%s"]|<value>,<name>
+ 98,  0,[Execution error]
+ 98,  1,[Class "%s" not found]|<name>
+ 98,  2,[Directives are not allowed in INTERPRET data]
+ 98,  3,[Could not find the required file "%s"]|<name>
+ 98,  4,[%s is only valid in a method]|<token>
+ 98,  5,[DO OVER: "%s" is not a collection]|<value>
+ 98,  6,[Method "%s" is abstract]|<name>
+ 98,  7,[Mixin class "%s" cannot create instances]|<name>
+ 98,  8,[Arrays have only one dimension]
+ 98,  9,[Supplier has no more items]
+ 99,  0,[Translation error]
+ 99,  1,[Unknown directive "::%s"]|<name>
+ 99,  2,[Duplicate ::CLASS "%s"]|<name>
+ 99,  3,[Duplicate method "%s" in class "%s"]|<name>,<name>
+ 99,  4,[::%s must follow a ::CLASS directive]|<name>
+ 99,  5,[Missing name in ::%s directive]|<name>
+ 99,  6,[Invalid option "%s" in ::%s directive]|<token>,<name>
+ 99,  7,[Duplicate ::ROUTINE "%s"]|<name>
 100,  0,[Ukjent filsystemfeil]
 #
 # Extra general phrases requiring translation:

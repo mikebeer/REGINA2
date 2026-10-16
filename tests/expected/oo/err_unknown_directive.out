@@ -1,0 +1,4 @@
+     4 +++ frob x
+Error 99 running "@WORK@/oo/err_unknown_directive.rexx", line 4: [Translation error]
+Error 99.1: [Unknown directive "::FROB"]
+rc=157

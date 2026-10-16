@@ -8,6 +8,5 @@ say 'last line of main'
 ::attribute balance get
 ::method "+"
 ::constant pi 3.14159
-::requires 'support.rex'
 ::routine helper public
   say 'never printed (routine body)'

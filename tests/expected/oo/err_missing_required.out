@@ -1,0 +1,4 @@
+     4 +++ requires 'no_such_file'
+Error 98 running "@WORK@/oo/err_missing_required.rexx", line 4: [Execution error]
+Error 98.3: [Could not find the required file "no_such_file"]
+rc=158

@@ -71,6 +71,8 @@ typedef struct _tsd_t {
    const char             *BIFname;
    void                   *BIFfunc;
    struct _OS_Dep_funcs   *OS;
+   void *                  oo_tsd;             /* local variables of oo.c */
+   int                     oo_active;          /* set once OO is used     */
 } tsd_t;
 
 #if (defined(POSIX) || defined(_POSIX_SOURCE) || defined(_PTHREAD_SEMANTICS)) && (defined(_REENTRANT) || defined(REENTRANT)) && defined(REGINA_REENTRANT)

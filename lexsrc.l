@@ -131,6 +131,20 @@ static int inhibit_delayed_abuttal=0;
 static int bracket_depth=0;
 
 /*
+ * in_directives is set after the first "::" directive. Only from then on
+ * EXPOSE and USE ARG are instructions; in classic code they stay ordinary
+ * symbols (a command like "use arg x" keeps working).
+ */
+static int in_directives=0;
+
+/*
+ * Tracking of "~name:super": oo_expect_name is set by a message operator,
+ * the prologue of yylex() moves it on so that oo_after_name is set for the
+ * token directly following the message name.
+ */
+static int oo_expect_name=0, oo_in_name=0, oo_after_name=0;
+
+/*
  * The spelling of the last message or cascade operator ("~", "->", "~~",
  * "->>") for error messages of the parser.
  */
@@ -328,6 +342,10 @@ key_with          [wW][iI][tT][hH]
         return retval;
      }
 
+     oo_after_name = oo_in_name ;
+     oo_in_name = oo_expect_name ;
+     oo_expect_name = 0 ;
+
      if (next_numform)
      {
         in_numform = 1 ;
@@ -463,6 +481,24 @@ key_with          [wW][iI][tT][hH]
    in_do = 1 ;
    SET_NEXTSTART() ;
    return DO ; }
+
+<comm>{key_expose}{between} {
+   /* OO extension: EXPOSE instruction in methods */
+   if ( !in_directives )
+      REJECT ;
+   BEGIN other ;
+   in_parse = 1 ;
+   SET_NEXTSTART() ;
+   return EXPOSE ; }
+
+<comm>[uU][sS][eE]{blank}+{key_arg}{between} {
+   /* OO extension: USE ARG instruction in methods and routines */
+   if ( !in_directives )
+      REJECT ;
+   BEGIN other ;
+   in_parse = 1 ;
+   SET_NEXTSTART() ;
+   return USEARG ; }
 
 <comm>{key_drop}{between} {
    BEGIN other ;
@@ -1792,12 +1828,14 @@ key_with          [wW][iI][tT][hH]
     */
 {between}\-\>\>{between} {
    __regina_oo_operator = "->>" ;
+   oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
    return CASCADE ; }
 
 {between}\-\>{between} {
    __regina_oo_operator = "->" ;
+   oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
    return MSGSEND ; }
@@ -1806,6 +1844,7 @@ key_with          [wW][iI][tT][hH]
    if ( !insert_abuttal )
       REJECT ;
    __regina_oo_operator = "~~" ;
+   oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
    return CASCADE ; }
@@ -1814,6 +1853,7 @@ key_with          [wW][iI][tT][hH]
    if ( !insert_abuttal )
       REJECT ;
    __regina_oo_operator = "~" ;
+   oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
    return MSGSEND ; }
@@ -1844,6 +1884,7 @@ key_with          [wW][iI][tT][hH]
     */
 <comm>::{between} {
    BEGIN other ;
+   in_directives = 1 ;
    SET_NEXTSTART() ;
    return DCOLON ; }
 
@@ -1940,6 +1981,18 @@ key_with          [wW][iI][tT][hH]
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
    exiterror( ERR_UNMATCHED_QUOTE, 0 )  ; }
 
+
+:[sS][uU][pP][eE][rR] {
+   /* OO extension: "~name:super" calls the superclass's method */
+   if ( !oo_after_name )
+   {
+      SET_NEXTSTART() ;
+      parser_data.tline = linenr - 1 ; /* set tline for exiterror */
+      exiterror( ERR_SYMBOL_EXPECTED, 1, ":" ) ;
+   }
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return MSGSUPER ; }
 
 : {
    SET_NEXTSTART() ;
@@ -2816,6 +2869,8 @@ static void init_it_all( tsd_t *TSD )
    in_then = 0 ;
    inhibit_delayed_abuttal = 0 ;
    bracket_depth = 0 ;
+   in_directives = 0 ;
+   oo_expect_name = oo_in_name = oo_after_name = 0 ;
    firstln = 0 ;
    in_parse = 0 ;
    in_trace = 0 ;

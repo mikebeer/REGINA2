@@ -309,6 +309,15 @@ do_an_add:
 
       case X_STRING:
       case X_CON_SYMBOL:
+         if ( thisptr->type == X_CON_SYMBOL && TSD->oo_active && OO_IS_ENVSYMBOL( thisptr ) )
+         {
+            sptr = oo_eval_envsymbol( TSD, thisptr );
+            numthr = get_a_descr( TSD, NULL, 0, sptr );
+            Free_stringTSD( sptr );
+            if ( kill )
+               *kill = numthr;
+            return numthr;
+         }
          if ( !thisptr->u.number )
             thisptr->u.number = get_a_descr( TSD, NULL, 0, thisptr->name ) ;
 
@@ -382,6 +391,8 @@ do_an_add:
       case X_MSGSEND:
       case X_CASCADE:
       case X_INDEX:
+      case X_OO_OVERINIT:
+      case X_OO_OVERITEM:
       {
          numthr = get_a_descr( TSD, NULL, 0, evaluate( TSD, thisptr, &sptr ) );
          FREE_TMP_STRING( sptr );
@@ -587,8 +598,16 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
       case X_NULL:
          return NULL ;
 
-      case X_STRING:
       case X_CON_SYMBOL:
+         if ( TSD->oo_active && OO_IS_ENVSYMBOL( thisptr ) )
+         {
+            stmp1 = oo_eval_envsymbol( TSD, thisptr );
+            if ( TSD->trace_stat == 'I' )
+               tracevalue( TSD, stmp1, 'L' );
+            RETURN_NEW( stmp1 );
+         }
+         /* fall through */
+      case X_STRING:
          cstmp = thisptr->name;
          if ( TSD->trace_stat == 'I' )
             tracevalue( TSD, cstmp, 'L' );
@@ -622,7 +641,22 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
             thisptr->u.node = entry;
          }
          else
+         {
             thisptr->u.node = NULL;
+            if ( TSD->oo_active && oo_has_routine( TSD, thisptr->name ) )
+            {
+               paramboxptr args = initplist( TSD, thisptr );
+               streng *ptr;
+
+               set_reserved_value( TSD, POOL0_SIGL, NULL, TSD->currentnode->lineno, VFLAG_NUM );
+               ptr = oo_call_routine( TSD, thisptr->name, args );
+               if ( ptr == NULL )
+                  exiterror( ERR_NO_DATA_RETURNED, 1, tmpstr_of( TSD, thisptr->name ) );
+               if ( TSD->trace_stat == 'I' )
+                  tracevalue( TSD, ptr, 'F' );
+               RETURN_NEW( ptr );
+            }
+         }
       }
 
       case X_IS_INTERNAL:
@@ -774,6 +808,21 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          }
          else
             strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         if ( TSD->oo_active )
+         {
+            /* objects are concatenated with their STRING value */
+            streng *o1 = oo_stringify( TSD, strone ), *o2 = oo_stringify( TSD, strtwo );
+            if ( o1 )
+            {
+               if ( stmp1 ) FREE_TMP_STRING( stmp1 );
+               strone = stmp1 = o1;
+            }
+            if ( o2 )
+            {
+               if ( stmp2 ) FREE_TMP_STRING( stmp2 );
+               strtwo = stmp2 = o2;
+            }
+         }
          strthr = Str_makeTSD(Str_len(strone)+Str_len(strtwo)+1) ;
          cptr = strthr->value ;
          memcpy( cptr, strone->value, strone->len ) ;
@@ -829,19 +878,28 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          RETURN_NEW( stmp1 );
 
       /*
-       * OO extension: parsed, but there is no object system yet.
+       * OO extension, see oo.c
        */
       case X_MSGSEND:
-         exiterror( ERR_OO_NOT_AVAILABLE, 1, "Message send (~ or ->)" );
-         return NULL;
-
       case X_CASCADE:
-         exiterror( ERR_OO_NOT_AVAILABLE, 1, "Message cascade (~~ or ->>)" );
-         return NULL;
+         stmp1 = oo_eval_message( TSD, thisptr, 1 );
+         if ( TSD->trace_stat == 'I' )
+            tracevalue( TSD, stmp1, 'F' );
+         RETURN_NEW( stmp1 );
 
       case X_INDEX:
-         exiterror( ERR_OO_NOT_AVAILABLE, 1, "Array reference ([ ])" );
-         return NULL;
+         stmp1 = oo_eval_index( TSD, thisptr );
+         if ( TSD->trace_stat == 'I' )
+            tracevalue( TSD, stmp1, 'F' );
+         RETURN_NEW( stmp1 );
+
+      case X_OO_OVERINIT:
+         stmp1 = oo_eval_over_init( TSD, thisptr );
+         RETURN_NEW( stmp1 );
+
+      case X_OO_OVERITEM:
+         stmp1 = oo_eval_over_item( TSD, thisptr );
+         RETURN_NEW( stmp1 );
 
       default:
          exiterror( ERR_INTERPRETER_FAILURE, 1, __FILE__, __LINE__, "" )  ;
@@ -887,6 +945,12 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
 
       case X_STRING:
       case X_CON_SYMBOL:
+         if ( thisptr->type == X_CON_SYMBOL && TSD->oo_active && OO_IS_ENVSYMBOL( thisptr ) )
+         {
+            tmp = str_to_bool( evaluate( TSD, thisptr, &stmp1 ) );
+            FREE_TMP_STRING( stmp1 );
+            return tmp;
+         }
          if ( !thisptr->u.number )
             thisptr->u.number = get_a_descr( TSD, NULL, 0, thisptr->name ) ;
          if ( Str_len( thisptr->name ) != 1 )
@@ -967,6 +1031,10 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          tmp = str_to_bool( evaluate( TSD, thisptr, &stmp1 ) );
          FREE_TMP_STRING( stmp1 );
          return tmp;
+
+      case X_OO_OVERWHILE:
+         oo_over_assign( TSD, thisptr );
+         return isboolean( TSD, thisptr->p[2], suberror, op );
 
       case X_LOG_NOT:
          sint = !isboolean( TSD, thisptr->p[0], 6, "\\" ) ;
