@@ -382,6 +382,14 @@ do_an_add:
          {
             /* get value of symbol for error reporting */
             sptr = evaluate( TSD, thisptr, NULL ) ;
+            if ( TSD->oo_active && OO_LOOKS_LIKE_HANDLE( sptr ) )
+            {
+               /* OO extension: an object is used by its string value */
+               nptr = get_a_descr( TSD, NULL, 0, sptr );
+               if ( kill )
+                  *kill = nptr;
+               return nptr;
+            }
             exiterror( ERR_BAD_ARITHMETIC, side, tmpstr_of( TSD, sptr ), getoperator( operator ) );
          }
 
@@ -992,6 +1000,25 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
  * value for true. "thisptr" is the current evaluation tree.
  * Note: This is one of the most time-consuming routines. Be careful.
  */
+/*
+ * OO extension: an object operand of a comparison whose left side is no
+ * object (that case is a message, see oo_operator) is compared by its
+ * string value. Only object handles are touched.
+ */
+#define OO_OPERAND(s,k) if ( TSD->oo_active && (s) && OO_LOOKS_LIKE_HANDLE( s ) ) \
+                           oo_operand_string( TSD, &(s), &(k) )
+static void oo_operand_string( tsd_t *TSD, streng **s, streng **k )
+{
+   streng *v = oo_stringify( TSD, *s );
+
+   if ( v )
+   {
+      if ( *k )
+         Free_stringTSD( *k );
+      *s = *k = v;
+   }
+}
+
 int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
 {
    streng *strone,*strtwo;
@@ -1210,7 +1237,7 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
             lnum = fix_compoundnum( TSD, thisptr->p[0], NULL, NULL );
 
          if (!lnum)
-            lval = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
+            lval = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( lval, stmp1 );
 
          if (flags.rnum)
          {
@@ -1227,7 +1254,7 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
             rnum = fix_compoundnum( TSD, thisptr->p[1], NULL, NULL );
 
          if (!rnum)
-            rval = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+            rval = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( rval, stmp2 );
 
          if (!lnum && !getdescr( TSD, lval, &TSD->ldes ))
             lnum = &TSD->ldes ;
@@ -1296,8 +1323,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          int type ;
 
          type = thisptr->type ;
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
 
          s1 = (unsigned char *) strone->value ;
          s2 = (unsigned char *) strtwo->value ;
@@ -1373,8 +1400,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
       }
 
       case X_S_DIFF:
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
          tmp = Str_cmp(strone,strtwo)!=0 ;
 
          FREE_TMP_STRING( stmp1 );
@@ -1387,8 +1414,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
 
 
       case X_S_EQUAL:
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
          tmp = Str_cmp(strone,strtwo)==0 ;
 
          FREE_TMP_STRING( stmp1 );
@@ -1406,8 +1433,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          int type ;
 
          type = thisptr->type ;
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
 
          s1 = (unsigned char *) strone->value ;
          s2 = (unsigned char *) strtwo->value ;
@@ -1450,8 +1477,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          int type ;
 
          type = thisptr->type ;
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
 
          s1 = (unsigned char *) strone->value ;
          s2 = (unsigned char *) strtwo->value ;
