@@ -332,6 +332,8 @@
  98, 11,[The array has %s dimension(s), but %s index(es) were given]|<value>,<value>
  98, 12,[The list is circular]
  98, 13,[Invalid list: %s]|<description>
+ 98, 14,[Python: %s]|<description>
+ 98, 15,[Python is not available in this build]
  99,  0,[Translation error]
  99,  1,[Unknown directive "::%s"]|<name>
  99,  2,[Duplicate ::CLASS "%s"]|<name>

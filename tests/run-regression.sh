@@ -35,6 +35,8 @@ cp -R "$HERE/oo" "$WORK/oo"
 cp -R "$SRC/demo/oo" "$WORK/samples"   # the sample programs of demo/oo
 ( cd "$WORK/trip" && for p in rc true std filter; do cc -o $p $p.c 2>/dev/null; done )
 PATH="$WORK/trip:$PATH"; export PATH
+# the Python library of the source tree (installed copies are in share/pylib)
+PYLIB="$SRC/python/pylib"; export PYLIB
 
 normalize() {
   sed -e "s#$WORK#@WORK@#g" \

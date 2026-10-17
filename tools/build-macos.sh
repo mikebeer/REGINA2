@@ -116,7 +116,7 @@ SOURCES="funcs builtin error variable interprt debug dbgfuncs memory parsing
  files misc unxfuncs cmsfuncs os2funcs shell rexxext stack tracing interp
  cmath convert strengs library strmath signals macros envir expr extstack
  yaccsrc lexsrc options os_unx rexxbif wrappers mt_notmt instore oo arxfuncs
- rexx nosaa"
+ rexx nosaa pybridge"
 
 DEFS="-DNDEBUG -funsigned-char -DHAVE_CONFIG_H"
 
@@ -154,6 +154,7 @@ rm -f "$DIST/rexx.o"
 cp "$SRC"/*.mtb "$DIST/"
 cp "$SRC"/demo/*.rexx "$DIST/demo/"
 mkdir -p "$DIST/demo/oo"; cp "$SRC"/demo/oo/* "$DIST/demo/oo/"
+cp -R "$SRC/python/pylib" "$DIST/pylib"      # found next to rexx
 for m in "$SRC"/doc/Regina-OO-Manual.*; do [ -f "$m" ] && cp "$m" "$DIST/"; done
 cp "$SRC/README.OO.md" "$DIST/"
 cp "$SRC/COPYING-LIB" "$DIST/COPYING-LIB.txt"
@@ -175,6 +176,7 @@ Regina Rexx 3.9.7 with the OO extension, for macOS 11 or later
      sudo mkdir -p /usr/local/bin /usr/local/share/regina-rexx
      sudo cp rexx /usr/local/bin/
      sudo cp *.mtb /usr/local/share/regina-rexx/
+     sudo cp -R pylib /usr/local/share/regina-rexx/
 
 See README.OO.md for the OO extension, including the --oo and --no-oo
 switches. Readline (line editing in interactive trace) is not included.

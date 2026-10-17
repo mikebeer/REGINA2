@@ -135,6 +135,44 @@ functions). A function passed by name can be an internal routine, a
 `::routine`, a built-in function or a method of the items. See
 `demo/oo/09_lisp.rexx`.
 
+### Python modules
+
+```rexx
+::requires 'python'                     /* optional: .Python is built in */
+stats = .python~import('statistics')
+say stats~mean(.array~of(1, 2, 3, 4))   /* 2.5 */
+np = .python~import('numpy')
+a = np~array(.array~of(1, 2, 3))
+say a * 2 + 1                           /* [3 5 7] */
+json = .python~import('json')
+json~loads('{"city": "Bern"}')~toStem(addr.)
+say addr.city                           /* Bern */
+.python~print('a', 'b', .python~kw('sep', '-'))   /* a-b */
+```
+
+Regina contains the C version of the Python 3 subset interpreter of
+[mikebeer/python](https://github.com/mikebeer/python) (`python/py_all.c`)
+and its library (`python/pylib`: the standard library, NumPy, pandas,
+SciPy, a matplotlib subset that writes SVG). Python starts when a program
+first uses `.Python`.
+
+- `.python~import(name)`, `~eval(expr [, names])`, `~exec(code)`,
+  `~str(s)`, `~bytes(s)`, `~kw(name, value, ...)` (keyword arguments, given
+  last), and any other name: a built-in or a global (`.python~len(x)`).
+- A Python object is a `PyObject`: `obj~name(args)` calls a method or reads
+  an attribute (name in any case), `obj~name = v` sets it, `obj[k]` /
+  `~at(k...)` / `~put(v, k...)` index it (from 0, as in Python), `DO x OVER
+  obj` walks it, `~toRexx` converts lists and dicts to Arrays and
+  Directories, `~toStem(s.)` fills a stem, `~invoke(name, args...)` calls
+  a method with that exact name, and the operators work as in Python.
+- Going in: numbers become int/float, other strings str, `.nil` None,
+  Arrays lists, Directories and stems dicts. Coming back: None is `.nil`,
+  True/False are 1/0, numbers and strings are strings, the rest PyObjects.
+- A Python exception is error 98.14. Modules are found next to the
+  program, in `$PYLIB`, in `pylib` next to the executable and in
+  `share/regina-rexx/pylib`. Build with `-DNO_PYTHON` to leave Python out.
+  See `demo/oo/10_python.rexx` and `python/README.md`.
+
 ### Forcing the mode when starting
 
 | Switch | Environment | Effect |
@@ -280,6 +318,8 @@ English except German.
 - An error in a file loaded by `::requires` names the main program, not the
   required file.
 - A program run through INTERPRET can't contain directives (error 98.2).
+- Python can't call Rexx routines back (no Rexx callbacks for `key=`);
+  define such functions with `.python~exec`.
 - The classic reading of `DO x OVER y` (a counted loop with variables
   named `x` and `OVER`) still works when `y` is a whole number.
 

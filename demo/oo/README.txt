@@ -13,5 +13,6 @@ Run any of them with:   rexx 01_classes.rexx
 07_dynamic.rexx          UNKNOWN (a logging proxy), mixins, SEND/SENDWITH
 08_inventory.rexx        a small stock-keeping application
 09_lisp.rexx             LISP-style lists: an expression evaluator, quicksort
+10_python.rexx           Python libraries: statistics, collections, json
 
 ../oo_demo.rexx          a quick self-test of classic and OO features

@@ -112,6 +112,7 @@ exit
     ['Methods', 'instance and class methods, attributes, constants, private and abstract methods, UNKNOWN, operator methods, mixins and multiple inheritance'],
     ['Stems', 'stems passed by reference with `USE ARG s.`, stems returned with `RETURN x.`'],
     ['Lists', 'LISP-style lists: the Cons class, and with `::requires \'lisp\'` the functions `cons`, `car`, `cdr`, `list`, `mapcar` and more'],
+    ['Python', 'Python modules from Rexx: `.Python~import(\'statistics\')`, NumPy, pandas, json, datetime and more, through a Python interpreter built into Regina'],
     ['Control', 'markers `/* OOREGINA */` and `OPTIONS OOREGINA`, switches `--oo` and `--no-oo`, variable `REGINA_OO`'],
     ['Errors', 'error numbers 88, 91, 97, 98 and 99 as in ooRexx, in all message languages'],
   ], W(1700, 7938), 'What the extension adds'),
@@ -318,6 +319,7 @@ const ch5 = [
     '`->` and `->>` as alternative spellings of `~` and `~~`, with blanks allowed around them.',
     'The markers `OOREGINA` and the switches `--oo` and `--no-oo` (ooRexx has no classic mode).',
     'LISP-style lists: the Cons class and the built-in `lisp` library.',
+    'Python modules through the built-in Python interpreter (`.Python`, `.PyObject`); ooRexx has no Python bridge.',
     '`::requires` anywhere in a program, for example at the top.',
     'Regina\'s classic features remain: its built-in functions, OPTIONS, the external queue, ADDRESS WITH and the Regina API.',
   ]),
@@ -553,6 +555,60 @@ say mapcar('square', l) llength(l)      /* (25 9 64) 3       */
 say read('(a (b c) . d)')               /* (a (b c) . d)     */
 exit
 square: procedure; return arg(1) * arg(1)`, 'Using the lisp library'),
+  H2('Python: .Python and .PyObject'),
+  P('Regina OO contains a Python 3 interpreter (the C version of the Python subset interpreter of github.com/mikebeer/python), so a Rexx program can use Python modules: the standard library (math, statistics, json, re, datetime, collections, csv, random, fractions, decimal, itertools and more), NumPy, pandas, SciPy and a matplotlib subset that writes SVG files. Python starts the first time a program uses `.Python` or `.PyObject`; programs that don\'t use it pay nothing.'),
+  P('`.Python~import(name)` returns a module. Functions, classes and attributes of Python objects are used with messages: `math~sqrt(2)` calls `math.sqrt(2)`, `coll~Counter(words)` creates a Counter, `p~x` reads an attribute and `p~x = 5` sets it. As Rexx message names are in uppercase, the name is looked up as written, then in lowercase, then without regard to case. An attribute that can be called is called with the arguments; any other attribute is returned. `::requires \'python\'` is accepted and documents that a program uses Python; it is not required.'),
+  ...table(['Rexx value', 'Python value'], [
+    ['a string that is a number (`42`, `-1.5`, `1E3`)', 'int or float; whole numbers of any size'],
+    ['any other string', 'str'],
+    ['`.nil`', 'None'],
+    ['Array, List, Queue, Cons list', 'list; an Array with several dimensions as nested lists'],
+    ['Directory, Table, StringTable, Stem object, a stem argument `s.`', 'dict with str keys'],
+    ['a PyObject', 'the Python object itself'],
+    ['`.Python~str(s)`, `.Python~bytes(s)`', 'str or bytes, also when S looks like a number'],
+    ['`.Python~kw(name, value, ...)` as last argument', 'keyword arguments: `name=value`'],
+  ], W(4300, 5338), 'Rexx values passed to Python'),
+  ...table(['Python value', 'Rexx value'], [
+    ['None', '`.nil`'],
+    ['True, False', '1, 0'],
+    ['int, float', 'the number as a string (`2.5`, `1e-05`, `1267650600228229401496703205376`)'],
+    ['str, bytes', 'the string'],
+    ['anything else (list, dict, module, instance, ndarray, DataFrame ...)', 'a PyObject; `~toRexx` and `~toStem(s.)` convert lists and dicts'],
+  ], W(4300, 5338), 'Python values returned to Rexx'),
+  ...table(['Method of .Python', 'Meaning'], [
+    ['`import(name)`', 'The module, also a dotted name such as `\'matplotlib.pyplot\'`.'],
+    ['`eval(expression [, names])`', 'The value of a Python expression; NAMES (a Directory or Stem) gives variables.'],
+    ['`exec(statements)`', 'Runs statements in the main module, for example a `def`; lines are separated by `\'0a\'x`.'],
+    ['`str(s)`, `bytes(s)`, `kw(name, value, ...)`', 'See the first table.'],
+    ['any other name', 'A global of the main module or a built-in: `.python~len(x)`, `.python~sorted(a)`, `.python~repr(x)`, `.python~dict`, `.python~list(a)`.'],
+  ], W(3100, 6538), 'Methods of .Python'),
+  ...table(['Method of a PyObject', 'Meaning'], [
+    ['any name: `obj~name(args)`, `obj~name = v`', 'Attribute or method of the Python object.'],
+    ['`[k]`, `at(k...)`, `[k] = v`, `put(v, k...)`', 'Item access `obj[k]`; several keys make a tuple (`a~at(1, 0)` is `a[1, 0]`). Indexes are those of Python: lists count from 0.'],
+    ['`makeArray`', 'An Array of the items, used by DO OVER: `do x over pylist`; for a dict the keys.'],
+    ['`toRexx`', 'Deep copy: lists, tuples and sets become Arrays, dicts and other mappings Directories.'],
+    ['`toStem(s.)`', 'A mapping fills `s.KEY` (keys in uppercase, as tails of symbols); other items fill `s.1` to `s.n` and `s.0`. Returns the count.'],
+    ['`string`', 'The `str()` of the object, used by SAY.'],
+    ['`pyType`', 'The name of the Python type.'],
+    ['`getAttr(n)`, `setAttr(n, v)`, `invoke(n, args...)`, `call(args...)`', 'An attribute by its exact name, also when its name is a method of Object (`invoke(\'copy\')`); the object called as a function.'],
+    ['`+ - * / % // ** = == \\= < > <= >= & | && -x`', 'Python\'s operators; Rexx `%` is `//` in Python and Rexx `//` is `%`.'],
+  ], W(3600, 6038), 'Methods of PyObject'),
+  P('A Python exception is error 98.14 with the Python message, for example `Error 98.14: [Python: ValueError: math domain error]`; `SIGNAL ON SYNTAX` traps it. Output of Python\'s `print` appears in order with the output of SAY.'),
+  ...screen(`::requires 'python'
+math = .python~import('math')
+stats = .python~import('statistics')
+say math~sqrt(2)                              /* 1.4142135623730951 */
+say stats~mean(.array~of(1, 2, 3, 4))         /* 2.5 */
+np = .python~import('numpy')
+a = np~array(.array~of(1, 2, 3))
+say a * 2 + 1  (a * a)~sum                    /* [3 5 7] 14 */
+json = .python~import('json')
+d = json~loads('{"city": "Bern", "zip": 3000}')
+d~toStem(addr.)
+say addr.city addr.zip                        /* Bern 3000 */
+.python~print('a', 'b', .python~kw('sep', '-'))  /* a-b */`, 'Using Python modules'),
+  H3('Where Python finds modules'),
+  P('Modules are searched in the folder of the Rexx program (so a file `mymod.py` next to the program is imported with `.python~import(\'mymod\')`), in the folders of the environment variable PYLIB, in a folder `pylib` next to the rexx executable, and in `share/regina-rexx/pylib` of the installation (`/usr/share/regina-rexx/pylib` for the Debian package). The packages contain the library; in the source tree it is in `python/pylib`.'),
 ];
 
 // ------------------------------------------------------------------
@@ -568,6 +624,7 @@ const samples = [
   ['07_dynamic', 'Dynamic messages', 'A logging proxy built with UNKNOWN, a mixin class that adds PRINT to two unrelated classes, and messages chosen at run time with SEND and SENDWITH.'],
   ['08_inventory', 'A small application', 'Stock keeping with Product and Inventory classes: orders, a sorted value report and a reorder list.'],
   ['09_lisp', 'LISP-style lists', 'An evaluator for expressions in LISP notation such as `(* 2 (+ 3 4))`, quicksort and flatten written recursively, and an association list.'],
+  ['10_python', 'Python libraries', 'Sales figures analysed with the Python modules statistics, collections and json: mean, median and standard deviation, a Counter, totals in a defaultdict read back as a stem, JSON text, and a Python function defined from Rexx.'],
 ];
 const ch8 = [
   H1('Chapter 8. Sample Programs'),
@@ -607,6 +664,15 @@ const ch9 = [
     'The collection of a DO OVER loop is copied when the loop starts; changes in the body do not affect the loop.',
     'Objects belong to the thread that created them and cannot be shared between threads that run REXX programs at the same time.',
   ]),
+  H2('Python'),
+  ...UL([
+    'The built-in Python is a subset of Python 3 (see the manual of github.com/mikebeer/python): strings are byte strings, there is no `async`, and the libraries are pure-Python versions of the standard library, NumPy, pandas and SciPy. C extension modules of CPython cannot be loaded.',
+    'Python cannot call back into Rexx: a Rexx routine cannot be passed as a callback (for example `key=` of `sorted`). Write such functions in Python with `.python~exec`.',
+    'A string that looks like a number is passed as a number; use `.python~str(s)` for a string such as a postal code `007`.',
+    'An operator with a PyObject on the right and a Rexx string on the left (`2 * a`) uses the string value of the object; write `a * 2`.',
+    'Python objects referred to by Rexx live until the program ends, like all objects.',
+    'There is one Python interpreter per process; it is not shared safely between threads.',
+  ]),
   H2('Errors and tracing'),
   ...UL([
     'An error in a file loaded by `::requires` names the main program in the error message, not the required file.',
@@ -644,15 +710,16 @@ const appB = [
     ['`REGINA_OO`', '`on`, `1`, `yes` or `oo` act like `--oo`; `off`, `0`, `no` or `classic` like `--no-oo`. A command-line switch wins.'],
     ['`REGINA_MACROS`', 'Folders searched for external routines and for `::requires` files.'],
     ['`REGINA_LANG`, `REGINA_LANG_DIR`', 'Language of the error messages and the folder of the `*.mtb` files.'],
+    ['`PYLIB`', 'Folders searched for Python modules, separated by `:` (`;` on Windows), before the library of the installation.'],
   ], W(3100, 6538), 'Switches and environment variables'),
   P('All other switches of Regina 3.9.7 work as before; `rexx -h` lists them.'),
 ];
 const appC = [
   H1('Appendix C. Contents of the Packages'),
   ...table(['Package', 'Contents'], [
-    ['Debian', '`/usr/bin`: rexx, regina, rxstack, rxqueue, regina-config\n`/usr/lib/<arch>`: libregina.so, libregina.a, add-on libraries\n`/usr/share/regina-rexx`: message files and the classic examples\n`/usr/share/doc/regina-rexx-oo`: README.OO.md, this manual, examples (the OO samples)\n`/usr/share/man/man1`: man pages'],
-    ['Windows', '`rexx.exe`, `*.mtb`, `README.txt`, `README.OO.md`, this manual, `COPYING-LIB.txt`, `demo` with the classic examples and `demo\\oo` with the OO samples'],
-    ['macOS', '`rexx` (universal), `*.mtb`, `INSTALL-macOS.txt`, `README.OO.md`, this manual, `COPYING-LIB.txt`, `demo` and `demo/oo`'],
+    ['Debian', '`/usr/bin`: rexx, regina, rxstack, rxqueue, regina-config\n`/usr/lib/<arch>`: libregina.so, libregina.a, add-on libraries\n`/usr/share/regina-rexx`: message files, the classic examples and `pylib` (the Python library)\n`/usr/share/doc/regina-rexx-oo`: README.OO.md, this manual, examples (the OO samples)\n`/usr/share/man/man1`: man pages'],
+    ['Windows', '`rexx.exe`, `*.mtb`, `pylib` (the Python library), `README.txt`, `README.OO.md`, this manual, `COPYING-LIB.txt`, `demo` with the classic examples and `demo\\oo` with the OO samples'],
+    ['macOS', '`rexx` (universal), `*.mtb`, `pylib`, `INSTALL-macOS.txt`, `README.OO.md`, this manual, `COPYING-LIB.txt`, `demo` and `demo/oo`'],
   ], W(1600, 8038), 'Package contents'),
 ];
 

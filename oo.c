@@ -15,6 +15,7 @@
  */
 
 #include "rexx.h"
+#include "pybridge.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,7 +82,8 @@ int oo_mode( void )
 
 enum {
    OK_PLAIN = 0, OK_CLASS, OK_NIL, OK_ARRAY, OK_DIRECTORY, OK_TABLE,
-   OK_QUEUE, OK_BUFFER, OK_SUPER, OK_SUPPLIER, OK_STRING, OK_STEM, OK_CONS
+   OK_QUEUE, OK_BUFFER, OK_SUPER, OK_SUPPLIER, OK_STRING, OK_STEM, OK_CONS,
+   OK_PYOBJ
 };
 
 #define MF_CLASS     0x0001   /* class method                    */
@@ -177,6 +179,7 @@ typedef struct oo_object {
       struct { struct oo_object *items, *indexes; long pos; } sp;
       var_hashtable *pool;      /* Stem: private pool with stem "S." */
       struct { streng *car, *cdr; } cons;   /* Cons: a LISP cell     */
+      long pyref;               /* PyObject: see pybridge.h          */
    } u;
 } oo_object;
 
@@ -222,6 +225,7 @@ typedef struct oo_tsd {
    const streng **pend_argv;
    paramboxptr pend_plist;
    struct oo_program *loading;  /* ::REQUIRES file being loaded */
+   struct oo_object *cPython, *cPyObject;   /* the Python bridge     */
 } oo_tsd;
 
 /* ------------------------------------------------------------------ */
@@ -2839,6 +2843,9 @@ oo_object *oo_copy_object( tsd_t *TSD, oo_object *o )
       case OK_SUPPLIER:
          n->u.sp = o->u.sp;
          break;
+      case OK_PYOBJ:
+         n->u.pyref = pyb_dup( o->u.pyref );   /* the same Python object */
+         break;
       default:
          break;
    }
@@ -3918,6 +3925,770 @@ static void init_lisp( tsd_t *TSD, oo_tsd *ot )
       ot->nclasses--;
 }
 
+/* ------------------------------------------------------------------ */
+/* Python: .Python and .PyObject on top of pybridge.c                 */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Values crossing to Python: a plain string that is a number becomes an
+ * int or float, any other string a str; .nil becomes None; Array, List,
+ * Queue and Cons lists become lists; Directory, Table and Stem become
+ * dicts; a PyObject is the Python object itself. Results coming back:
+ * None is .nil, True/False are 1/0, numbers, str and bytes are strings,
+ * everything else is a PyObject.
+ */
+
+static void py_start( tsd_t *TSD )
+{
+   static int started = 0;
+   const char *script = NULL;
+
+   if ( started )
+      return;
+   if ( !pyb_available() )
+      exiterror( ERR_EXECUTION_ERROR, 15 );
+   if ( TSD->systeminfo && TSD->systeminfo->input_file )
+      script = TSD->systeminfo->input_file->value;
+   fflush( stdout );
+   if ( pyb_init( script, NULL ) != 0 )
+      exiterror( ERR_EXECUTION_ERROR, 14, pyb_error() );
+   started = 1;
+}
+
+static void py_fail( tsd_t *TSD )
+{
+   fflush( stdout );
+   exiterror( ERR_EXECUTION_ERROR, 14, pyb_error() );
+}
+
+static pyref py_check( tsd_t *TSD, pyref r )
+{
+   if ( r < 0 )
+      py_fail( TSD );
+   return r;
+}
+
+static streng *py_wrap( tsd_t *TSD, pyref r )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *o = new_object( TSD, ot->cPyObject, OK_PYOBJ );
+   o->u.pyref = r;
+   return hdup( TSD, o );
+}
+
+static pyref to_py( tsd_t *TSD, const streng *s, int depth );
+
+static pyref py_list_of( tsd_t *TSD, const streng **v, long n, int depth )
+{
+   pyref *items = (pyref *) MallocTSD( ( n + 1 ) * sizeof( pyref ) ), r;
+   long i;
+
+   for ( i = 0; i < n; i++ )
+      items[i] = v[i] ? to_py( TSD, v[i], depth + 1 ) : pyb_none();
+   r = pyb_list( n, items );
+   for ( i = 0; i < n; i++ )
+      pyb_release( items[i] );
+   FreeTSD( items );
+   return py_check( TSD, r );
+}
+
+/* rows of a multi-dimensional array as nested lists */
+static pyref py_array_dim( tsd_t *TSD, oo_object *a, int dim, long *pos, int depth )
+{
+   long n = a->u.a.dims[dim], i;
+   pyref *items = (pyref *) MallocTSD( ( n + 1 ) * sizeof( pyref ) ), r;
+
+   for ( i = 0; i < n; i++ )
+   {
+      if ( dim + 1 < a->u.a.ndims )
+         items[i] = py_array_dim( TSD, a, dim + 1, pos, depth + 1 );
+      else
+      {
+         const streng *v = *pos < a->u.a.size ? a->u.a.v[*pos] : NULL;
+         items[i] = v ? to_py( TSD, v, depth + 1 ) : pyb_none();
+         ( *pos )++;
+      }
+   }
+   r = pyb_list( n, items );
+   for ( i = 0; i < n; i++ )
+      pyb_release( items[i] );
+   FreeTSD( items );
+   return py_check( TSD, r );
+}
+
+static pyref py_dict_of( tsd_t *TSD, streng **keys, const streng **vals, long n, int depth )
+{
+   pyref *k = (pyref *) MallocTSD( ( n + 1 ) * sizeof( pyref ) );
+   pyref *v = (pyref *) MallocTSD( ( n + 1 ) * sizeof( pyref ) ), r;
+   long i;
+
+   for ( i = 0; i < n; i++ )
+   {
+      k[i] = pyb_str( keys[i]->value, keys[i]->len );
+      v[i] = vals[i] ? to_py( TSD, vals[i], depth + 1 ) : pyb_none();
+   }
+   r = pyb_dict( n, k, v );
+   for ( i = 0; i < n; i++ )
+   {
+      pyb_release( k[i] );
+      pyb_release( v[i] );
+   }
+   FreeTSD( k );
+   FreeTSD( v );
+   return py_check( TSD, r );
+}
+
+/* the stem in box b as dict, tails in DO OVER order */
+static pyref py_stem_dict( tsd_t *TSD, variableptr b, int depth )
+{
+   stemlist l;
+   const streng **v;
+   long i;
+   pyref r;
+
+   l.t = l.v = NULL;
+   l.n = l.cap = 0;
+   oo_stem_each( TSD, b, stemlist_cb, &l );
+   if ( l.n )
+      qsort( l.t, l.n, sizeof( streng * ), cmp_tails );
+   v = (const streng **) MallocTSD( ( l.n + 1 ) * sizeof( streng * ) );
+   for ( i = 0; i < l.n; i++ )
+      v[i] = oo_stem_get( TSD, b, l.t[i] );
+   r = py_dict_of( TSD, l.t, v, l.n, depth );
+   for ( i = 0; i < l.n; i++ )
+      Free_stringTSD( l.t[i] );
+   if ( l.t )
+      FreeTSD( l.t );
+   FreeTSD( (void *) v );
+   return r;
+}
+
+/* an argument; q is its parameter box when the caller passed a stem ("s.") */
+static pyref py_arg( tsd_t *TSD, const streng *v, paramboxptr q )
+{
+   if ( q && q->stempool && q->stemname )
+      return py_stem_dict( TSD, oo_stem_box( TSD, q->stempool, q->stemname ), 0 );
+   return v ? to_py( TSD, v, 0 ) : pyb_none();
+}
+
+static pyref to_py( tsd_t *TSD, const streng *s, int depth )
+{
+   oo_object *o;
+   pyref r;
+
+   if ( depth > 100 )
+      exiterror( ERR_EXECUTION_ERROR, 14, "Rexx value nested too deeply for Python" );
+   if ( s == NULL )
+      return pyb_none();
+   o = obj_of( TSD, s );
+   if ( o == NULL )
+   {
+      if ( ( r = pyb_number( s->value, s->len ) ) >= 0 )
+         return r;
+      return pyb_str( s->value, s->len );
+   }
+   switch ( o->kind )
+   {
+      case OK_PYOBJ:
+         return pyb_dup( o->u.pyref );
+      case OK_NIL:
+         return pyb_none();
+      case OK_ARRAY:
+      case OK_QUEUE:
+         if ( ARR_MULTI( o ) )
+         {
+            long pos = 0;
+            return py_array_dim( TSD, o, 0, &pos, depth );
+         }
+         return py_list_of( TSD, (const streng **) o->u.a.v, o->u.a.size, depth );
+      case OK_CONS:
+      {
+         long n;
+         const streng **v = list_items( TSD, o, &n );
+         r = py_list_of( TSD, v, n, depth );
+         FreeTSD( (void *) v );
+         return r;
+      }
+      case OK_DIRECTORY:
+      case OK_TABLE:
+      {
+         long n = o->u.h->count, i = 0;
+         streng **k = (streng **) MallocTSD( ( n + 1 ) * sizeof( streng * ) );
+         const streng **v = (const streng **) MallocTSD( ( n + 1 ) * sizeof( streng * ) );
+         oo_entry *e;
+         for ( e = o->u.h->first; e && i < n; e = e->onext, i++ )
+         {
+            k[i] = oo_stringify( TSD, e->key );
+            if ( k[i] == NULL )
+               k[i] = Str_dupTSD( e->key );
+            v[i] = e->value;
+         }
+         r = py_dict_of( TSD, k, v, i, depth );
+         while ( i-- > 0 )
+            Free_stringTSD( k[i] );
+         FreeTSD( k );
+         FreeTSD( (void *) v );
+         return r;
+      }
+      case OK_STEM:
+         return py_stem_dict( TSD, stem_box( TSD, o ), depth );
+      default:
+      {
+         streng *t = oo_stringify( TSD, s );
+         if ( t == NULL )
+            t = Str_dupTSD( s );
+         r = pyb_str( t->value, t->len );
+         Free_stringTSD( t );
+         return r;
+      }
+   }
+}
+
+/* a Python result as Rexx value; takes over r */
+static streng *from_py( tsd_t *TSD, pyref r )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   streng *s;
+   char *t;
+   long len;
+
+   py_check( TSD, r );
+   switch ( pyb_kind( r ) )
+   {
+      case PYK_NONE:
+         pyb_release( r );
+         return hdup( TSD, ot->nil );
+      case PYK_BOOL:
+         s = mkbool( TSD, pyb_truth( r ) == 1 );
+         pyb_release( r );
+         return s;
+      case PYK_INT:
+      case PYK_FLOAT:
+      case PYK_STR:
+      case PYK_BYTES:
+         t = pyb_text( r, &len );
+         pyb_release( r );
+         if ( t == NULL )
+            py_fail( TSD );
+         s = Str_makeTSD( len );
+         memcpy( s->value, t, len );
+         s->len = len;
+         free( t );
+         return s;
+      default:
+         return py_wrap( TSD, r );
+   }
+}
+
+/* deep conversion: lists, tuples and sets to Arrays, dicts to Directories */
+static streng *py_to_rexx( tsd_t *TSD, pyref r, int depth )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   int kind = pyb_kind( r );
+   pyref *k, *v;
+   long n, i;
+
+   if ( depth > 100 )
+      exiterror( ERR_EXECUTION_ERROR, 14, "Python value nested too deeply for Rexx" );
+   if ( kind == PYK_LIST || kind == PYK_TUPLE || kind == PYK_SET )
+   {
+      oo_object *arr = new_object( TSD, ot->cArray, OK_ARRAY );
+      n = pyb_items( r, &v );
+      pyb_release( r );
+      if ( n < 0 )
+         py_fail( TSD );
+      for ( i = 0; i < n; i++ )
+         oo_array_put( TSD, arr, i + 1, py_to_rexx( TSD, v[i], depth + 1 ) );
+      free( v );
+      return hdup( TSD, arr );
+   }
+   if ( kind == PYK_DICT || ( kind == PYK_OTHER && pyb_is_mapping( r ) == 1 ) )
+   {
+      oo_object *d = new_object( TSD, ot->cDirectory, OK_DIRECTORY );
+      d->u.h = (oo_hash *) MallocTSD( sizeof( oo_hash ) );
+      memset( d->u.h, 0, sizeof( oo_hash ) );
+      n = pyb_dict_items( r, &k, &v );
+      pyb_release( r );
+      if ( n < 0 )
+         py_fail( TSD );
+      for ( i = 0; i < n; i++ )
+      {
+         long len;
+         char *t = pyb_text( k[i], &len );
+         streng *key;
+         pyb_release( k[i] );
+         if ( t == NULL )
+            py_fail( TSD );
+         key = Str_makeTSD( len );
+         memcpy( key->value, t, len );
+         key->len = len;
+         free( t );
+         h_put( TSD, d->u.h, key, py_to_rexx( TSD, v[i], depth + 1 ) );
+         Free_stringTSD( key );
+      }
+      free( k );
+      free( v );
+      return hdup( TSD, d );
+   }
+   return from_py( TSD, r );
+}
+
+static oo_object *py_self( tsd_t *TSD, oo_call *c )
+{
+   if ( c->self == NULL || c->self->kind != OK_PYOBJ )
+      err_nomethod( TSD, c->selfstr, c->name );
+   py_start( TSD );
+   return c->self;
+}
+
+/* the arguments from..argc-1 as new Python references */
+static pyref *py_args( tsd_t *TSD, oo_call *c, int from, long *n )
+{
+   pyref *a = (pyref *) MallocTSD( ( c->argc + 1 ) * sizeof( pyref ) );
+   int i;
+   int pend = ( c->argv == ot_pend_argv( TSD ) );
+
+   *n = 0;
+   for ( i = from; i < c->argc; i++ )
+      a[( *n )++] = py_arg( TSD, c->argv[i], pend ? ot_pend_box( TSD, i ) : NULL );
+   return a;
+}
+
+/* the items of an Array (UNKNOWN's second argument) as Python references */
+static pyref *py_array_args( tsd_t *TSD, const streng *arr, long *n )
+{
+   oo_object *a = obj_of( TSD, arr );
+   pyref *v;
+   long i;
+
+   *n = 0;
+   if ( a == NULL || ( a->kind != OK_ARRAY && a->kind != OK_QUEUE ) )
+      return (pyref *) MallocTSD( sizeof( pyref ) );
+   v = (pyref *) MallocTSD( ( a->u.a.size + 1 ) * sizeof( pyref ) );
+   for ( i = 0; i < a->u.a.size; i++ )
+   {
+      /* UNKNOWN gets the arguments in an array; stems come from the send */
+      paramboxptr q = ( (oo_tsd *) TSD->oo_tsd )->pend_argv ? ot_pend_box( TSD, i ) : NULL;
+      if ( q && !( q->value && a->u.a.v[i] && str_eq( q->value, a->u.a.v[i] ) ) )
+         q = NULL;
+      v[i] = py_arg( TSD, a->u.a.v[i], q );
+   }
+   *n = a->u.a.size;
+   return v;
+}
+
+static void py_free_args( pyref *a, long n )
+{
+   long i;
+   for ( i = 0; i < n; i++ )
+      pyb_release( a[i] );
+}
+
+static char *py_cname( tsd_t *TSD, const streng *s )
+{
+   char *p = (char *) MallocTSD( s->len + 1 );
+   memcpy( p, s->value, s->len );
+   p[s->len] = '\0';
+   return p;
+}
+
+/* obj~name(args): the attribute name, called if it is callable */
+static streng *m_py_unknown( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   const streng *nm = need_arg( TSD, c, 0 );
+   char *name = py_cname( TSD, nm );
+   pyref *a, r;
+   long n;
+
+   a = py_array_args( TSD, opt_arg( c, 1 ), &n );
+   if ( nm->len > 1 && name[nm->len - 1] == '=' )
+   {
+      int rc;
+      name[nm->len - 1] = '\0';
+      if ( n == 0 )
+         a[n++] = pyb_none();
+      rc = pyb_setattr( o->u.pyref, name, a[0] );
+      py_free_args( a, n );
+      FreeTSD( a );
+      FreeTSD( name );
+      if ( rc != 0 )
+         py_fail( TSD );
+      return NULL;
+   }
+   r = pyb_send( o->u.pyref, name, n, a );
+   py_free_args( a, n );
+   FreeTSD( a );
+   FreeTSD( name );
+   return from_py( TSD, r );
+}
+
+static streng *m_py_string( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   long len;
+   char *t = pyb_text( o->u.pyref, &len );
+   streng *s;
+
+   if ( t == NULL )
+      py_fail( TSD );
+   s = Str_makeTSD( len );
+   memcpy( s->value, t, len );
+   s->len = len;
+   free( t );
+   return s;
+}
+
+static streng *m_py_type( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   char *t = pyb_typename( o->u.pyref );
+   streng *s;
+
+   if ( t == NULL )
+      py_fail( TSD );
+   s = Str_creTSD( t );
+   free( t );
+   return s;
+}
+
+/* at(key...) and []: o[key] or o[k1, k2, ...] */
+static streng *m_py_at( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   long n;
+   pyref *k = py_args( TSD, c, 0, &n ), r;
+
+   r = pyb_getitem( o->u.pyref, n, k );
+   py_free_args( k, n );
+   FreeTSD( k );
+   return from_py( TSD, r );
+}
+
+/* put(value, key...) and []= */
+static streng *m_py_put( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   long n;
+   pyref v = to_py( TSD, need_arg( TSD, c, 0 ), 0 );
+   pyref *k = py_args( TSD, c, 1, &n );
+   int rc = pyb_setitem( o->u.pyref, n, k, v );
+
+   py_free_args( k, n );
+   FreeTSD( k );
+   pyb_release( v );
+   if ( rc != 0 )
+      py_fail( TSD );
+   return NULL;
+}
+
+static streng *m_py_makearray( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *o = py_self( TSD, c );
+   oo_object *arr = new_object( TSD, ot->cArray, OK_ARRAY );
+   pyref *v;
+   long n = pyb_items( o->u.pyref, &v ), i;
+
+   if ( n < 0 )
+      py_fail( TSD );
+   for ( i = 0; i < n; i++ )
+      oo_array_put( TSD, arr, i + 1, from_py( TSD, v[i] ) );
+   free( v );
+   return hdup( TSD, arr );
+}
+
+static streng *m_py_torexx( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   return py_to_rexx( TSD, pyb_dup( o->u.pyref ), 0 );
+}
+
+/* toStem(s.): a dict fills s.KEY (uppercased like a tail), anything else s.0 and s.1..s.n */
+static streng *m_py_tostem( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   paramboxptr q = ( c->argc > 0 && c->argv == ot_pend_argv( TSD ) ) ? ot_pend_box( TSD, 0 ) : NULL;
+   pyref *k = NULL, *v = NULL;
+   long n, i;
+
+   if ( q == NULL || q->stempool == NULL || q->stemname == NULL )
+      exiterror( ERR_EXECUTION_ERROR, 14, "TypeError: toStem needs a stem as argument, like s." );
+   if ( pyb_is_mapping( o->u.pyref ) == 1 )
+   {
+      n = pyb_dict_items( o->u.pyref, &k, &v );
+      if ( n < 0 )
+         py_fail( TSD );
+      for ( i = 0; i < n; i++ )
+      {
+         streng *t = from_py( TSD, k[i] );
+         streng *t2 = oo_stringify( TSD, t );
+         if ( t2 )
+         {
+            Free_stringTSD( t );
+            t = t2;
+         }
+         mem_upper( t->value, t->len );   /* u.name finds the key "name" */
+         oo_stem_put( TSD, q->stempool, q->stemname, t, from_py( TSD, v[i] ) );
+         Free_stringTSD( t );
+      }
+   }
+   else
+   {
+      n = pyb_items( o->u.pyref, &v );
+      if ( n < 0 )
+         py_fail( TSD );
+      for ( i = 0; i < n; i++ )
+      {
+         streng *t = mkint( TSD, i + 1 );
+         oo_stem_put( TSD, q->stempool, q->stemname, t, from_py( TSD, v[i] ) );
+         Free_stringTSD( t );
+      }
+      {
+         streng *t = mkint( TSD, 0 );
+         oo_stem_put( TSD, q->stempool, q->stemname, t, mkint( TSD, n ) );
+         Free_stringTSD( t );
+      }
+   }
+   if ( k )
+      free( k );
+   if ( v )
+      free( v );
+   return mkint( TSD, n );
+}
+
+static streng *m_py_getattr( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   char *name = py_cname( TSD, need_arg( TSD, c, 0 ) );
+   pyref r = pyb_getattr( o->u.pyref, name );
+
+   FreeTSD( name );
+   return from_py( TSD, r );
+}
+
+static streng *m_py_setattr( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   char *name = py_cname( TSD, need_arg( TSD, c, 0 ) );
+   pyref v = to_py( TSD, need_arg( TSD, c, 1 ), 0 );
+   int rc = pyb_setattr( o->u.pyref, name, v );
+
+   FreeTSD( name );
+   pyb_release( v );
+   if ( rc != 0 )
+      py_fail( TSD );
+   return NULL;
+}
+
+/* call(args...): the object itself called */
+static streng *m_py_call( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   long n;
+   pyref *a = py_args( TSD, c, 0, &n ), r;
+
+   r = pyb_call( o->u.pyref, n, a );
+   py_free_args( a, n );
+   FreeTSD( a );
+   return from_py( TSD, r );
+}
+
+/* invoke(name, args...): a method by its exact name (copy, items, ...) */
+static streng *m_py_invoke( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   char *name = py_cname( TSD, need_arg( TSD, c, 0 ) );
+   long n;
+   pyref *a = py_args( TSD, c, 1, &n ), r;
+
+   r = pyb_send( o->u.pyref, name, n, a );
+   py_free_args( a, n );
+   FreeTSD( a );
+   FreeTSD( name );
+   return from_py( TSD, r );
+}
+
+/* operators: a + b, a = b, -a, ... with Python's meaning */
+static streng *m_py_operator( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = py_self( TSD, c );
+   char *op = py_cname( TSD, c->name );
+   pyref b = -1, r;
+
+   if ( c->argc > 0 && c->argv[0] )
+      b = to_py( TSD, c->argv[0], 0 );
+   r = pyb_op( op, o->u.pyref, b );
+   FreeTSD( op );
+   if ( b >= 0 )
+      pyb_release( b );
+   return from_py( TSD, r );
+}
+
+/* .PyObject~new(value): value converted to Python */
+static streng *m_py_new( tsd_t *TSD, oo_call *c )
+{
+   py_start( TSD );
+   return py_wrap( TSD, py_check( TSD, to_py( TSD, opt_arg( c, 0 ), 0 ) ) );
+}
+
+/* .Python~import(name) */
+static streng *m_python_import( tsd_t *TSD, oo_call *c )
+{
+   char *name;
+   pyref r;
+
+   py_start( TSD );
+   name = py_cname( TSD, need_arg( TSD, c, 0 ) );
+   r = pyb_import( name );
+   FreeTSD( name );
+   return from_py( TSD, r );
+}
+
+/* .Python~eval(expression [, names]) */
+static streng *m_python_eval( tsd_t *TSD, oo_call *c )
+{
+   const streng *src;
+   pyref names = -1, r;
+
+   py_start( TSD );
+   src = need_arg( TSD, c, 0 );
+   if ( opt_arg( c, 1 ) )
+   {
+      names = to_py( TSD, opt_arg( c, 1 ), 0 );
+      if ( pyb_kind( names ) != PYK_DICT )
+         exiterror( ERR_EXECUTION_ERROR, 14,
+                    "TypeError: the names for eval must be a Directory or Stem" );
+   }
+   r = pyb_eval( src->value, src->len, names );
+   if ( names >= 0 )
+      pyb_release( names );
+   return from_py( TSD, r );
+}
+
+/* .Python~exec(statements) */
+static streng *m_python_exec( tsd_t *TSD, oo_call *c )
+{
+   const streng *src;
+
+   py_start( TSD );
+   src = need_arg( TSD, c, 0 );
+   if ( pyb_exec( src->value, src->len ) != 0 )
+      py_fail( TSD );
+   return NULL;
+}
+
+/* .Python~str(s): s as Python str, even when it looks like a number */
+static streng *m_python_str( tsd_t *TSD, oo_call *c )
+{
+   const streng *s;
+   streng *t;
+   pyref r;
+
+   py_start( TSD );
+   s = need_arg( TSD, c, 0 );
+   t = oo_stringify( TSD, s );
+   r = t ? pyb_str( t->value, t->len ) : pyb_str( s->value, s->len );
+   if ( t )
+      Free_stringTSD( t );
+   return py_wrap( TSD, py_check( TSD, r ) );
+}
+
+/* .Python~bytes(s): s as Python bytes */
+static streng *m_python_bytes( tsd_t *TSD, oo_call *c )
+{
+   const streng *s;
+
+   py_start( TSD );
+   s = need_arg( TSD, c, 0 );
+   return py_wrap( TSD, py_check( TSD, pyb_bytes( s->value, s->len ) ) );
+}
+
+/* .Python~kw(name, value, ...): keyword arguments, given last in a call */
+static streng *m_python_kw( tsd_t *TSD, oo_call *c )
+{
+   long n = c->argc / 2, i;
+   pyref *k, *v, r;
+
+   py_start( TSD );
+   if ( c->argc % 2 )
+      exiterror( ERR_EXECUTION_ERROR, 14,
+                 "TypeError: kw() needs pairs of name and value" );
+   k = (pyref *) MallocTSD( ( n + 1 ) * sizeof( pyref ) );
+   v = (pyref *) MallocTSD( ( n + 1 ) * sizeof( pyref ) );
+   for ( i = 0; i < n; i++ )
+   {
+      const streng *nm = need_arg( TSD, c, 2 * i );
+      streng *low = Str_dupTSD( nm );
+      mem_lower( low->value, low->len );
+      k[i] = pyb_str( low->value, low->len );
+      Free_stringTSD( low );
+      v[i] = to_py( TSD, c->argv[2 * i + 1], 0 );
+   }
+   r = pyb_kwargs( n, k, v );
+   py_free_args( k, n );
+   py_free_args( v, n );
+   FreeTSD( k );
+   FreeTSD( v );
+   return py_wrap( TSD, py_check( TSD, r ) );
+}
+
+/* .Python~name(args): a global of __main__ or a built-in (len, range, ...) */
+static streng *m_python_unknown( tsd_t *TSD, oo_call *c )
+{
+   char *name;
+   pyref *a, f, r;
+   long n;
+
+   py_start( TSD );
+   name = py_cname( TSD, need_arg( TSD, c, 0 ) );
+   f = pyb_global( name );
+   FreeTSD( name );
+   py_check( TSD, f );
+   a = py_array_args( TSD, opt_arg( c, 1 ), &n );
+   if ( n == 0 && pyb_kind( f ) != PYK_OTHER )
+      r = f;   /* a value, not a function */
+   else
+   {
+      r = pyb_call( f, n, a );
+      pyb_release( f );
+   }
+   py_free_args( a, n );
+   FreeTSD( a );
+   return from_py( TSD, r );
+}
+
+static void init_python( tsd_t *TSD, oo_tsd *ot )
+{
+   oo_object *c;
+
+   ot->cPython = c = new_class( TSD, "Python", NULL, ot->cObject, OK_PLAIN );
+   add_methods( TSD, c, "IMPORT", m_python_import, MF_CLASS );
+   add_methods( TSD, c, "EVAL", m_python_eval, MF_CLASS );
+   add_methods( TSD, c, "EXEC", m_python_exec, MF_CLASS );
+   add_methods( TSD, c, "STR", m_python_str, MF_CLASS );
+   add_methods( TSD, c, "BYTES", m_python_bytes, MF_CLASS );
+   add_methods( TSD, c, "KW", m_python_kw, MF_CLASS );
+   add_methods( TSD, c, "UNKNOWN", m_python_unknown, MF_CLASS );
+
+   ot->cPyObject = c = new_class( TSD, "PyObject", NULL, ot->cObject, OK_PYOBJ );
+   add_methods( TSD, c, "NEW", m_py_new, MF_CLASS );
+   add_methods( TSD, c, "UNKNOWN", m_py_unknown, 0 );
+   add_methods( TSD, c, "STRING MAKESTRING", m_py_string, 0 );
+   add_methods( TSD, c, "PYTYPE", m_py_type, 0 );
+   add_methods( TSD, c, "[] AT", m_py_at, 0 );
+   add_methods( TSD, c, "[]= PUT", m_py_put, 0 );
+   add_methods( TSD, c, "MAKEARRAY", m_py_makearray, 0 );
+   add_methods( TSD, c, "TOREXX", m_py_torexx, 0 );
+   add_methods( TSD, c, "TOSTEM", m_py_tostem, 0 );
+   add_methods( TSD, c, "GETATTR", m_py_getattr, 0 );
+   add_methods( TSD, c, "SETATTR", m_py_setattr, 0 );
+   add_methods( TSD, c, "CALL", m_py_call, 0 );
+   add_methods( TSD, c, "INVOKE", m_py_invoke, 0 );
+   add_methods( TSD, c, "+ - * / % // ** = == \\= \\== > < >= <= >> << >>= <<= & | && \\",
+                m_py_operator, 0 );
+}
+
 static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
 {
    int i;
@@ -3940,6 +4711,7 @@ static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
    ot->cSupplier = new_class( TSD, "Supplier", NULL, ot->cObject, OK_SUPPLIER );
    ot->cStem = new_class( TSD, "Stem", NULL, ot->cObject, OK_STEM );
    init_lisp( TSD, ot );
+   init_python( TSD, ot );
 
    /* Object */
    add_methods( TSD, ot->cObject, "INIT", m_nothing, 0 );
@@ -4624,14 +5396,34 @@ static const char lisp_library[] =
    "  return .cons~read(s)\n"
    "\n";
 
-/* the built-in library for name ("lisp", "lisp.cls"), or NULL */
-static const char *builtin_library( const streng *name )
+/* the built-in libraries: lisp (LISP routines) and python (.Python is built in) */
+static const char python_library[] = "/* .Python and .PyObject are built-in classes */\n";
+static const struct { const char *name; const char *src; } builtin_libs[] = {
+   { "LISP", lisp_library }, { "PYTHON", python_library }
+};
+
+/* the built-in library for name ("lisp", "lisp.cls", ...), or NULL; *base its name */
+static const char *builtin_library_named( const streng *name, const char **base )
 {
-   if ( ( name->len == 4 || ( name->len == 8 && memcmp( name->value + 4, ".cls", 4 ) == 0 )
-       || ( name->len == 8 && memcmp( name->value + 4, ".CLS", 4 ) == 0 ) )
-     && rx_toupper( name->value[0] ) == 'L' && rx_toupper( name->value[1] ) == 'I'
-     && rx_toupper( name->value[2] ) == 'S' && rx_toupper( name->value[3] ) == 'P' )
-      return lisp_library;
+   int i, k, n;
+
+   for ( i = 0; i < (int) ( sizeof( builtin_libs ) / sizeof( builtin_libs[0] ) ); i++ )
+   {
+      n = (int) strlen( builtin_libs[i].name );
+      if ( name->len != n && !( name->len == n + 4 && name->value[n] == '.'
+           && rx_toupper( name->value[n + 1] ) == 'C' && rx_toupper( name->value[n + 2] ) == 'L'
+           && rx_toupper( name->value[n + 3] ) == 'S' ) )
+         continue;
+      for ( k = 0; k < n; k++ )
+         if ( rx_toupper( name->value[k] ) != builtin_libs[i].name[k] )
+            break;
+      if ( k == n )
+      {
+         if ( base )
+            *base = builtin_libs[i].name;
+         return builtin_libs[i].src;
+      }
+   }
    return NULL;
 }
 
@@ -4640,14 +5432,15 @@ static void load_required( tsd_t *TSD, const streng *name, oo_program *from, nod
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
    streng *path, *look;
    oo_program *p;
-   const char *builtin = builtin_library( name );
+   const char *bname = NULL;
+   const char *builtin = builtin_library_named( name, &bname );
 
    /*
     * A built-in library is replaced only by a file of its name with .cls
     * (lisp.cls), so that a program lisp.rexx doesn't hide it.
     */
    look = Str_dupTSD( name );
-   if ( builtin && name->len == 4 )
+   if ( builtin && name->len == (int) strlen( bname ) )
       look = catc( TSD, look, ".cls" );
    path = find_required( TSD, look, from );
    if ( path == NULL )
@@ -4678,7 +5471,12 @@ static void load_required( tsd_t *TSD, const streng *name, oo_program *from, nod
    prolog_data pd;
 
    if ( path == NULL && builtin != NULL )
-      path = Str_creTSD( "<built-in lisp>" );
+   {
+      char lname[40];
+      sprintf( lname, "<built-in %s>", bname );
+      mem_lower( lname, (int) strlen( lname ) );
+      path = Str_creTSD( lname );
+   }
    if ( path == NULL )
       exiterror( ERR_EXECUTION_ERROR, 3, tmpstr_of( TSD, name ) );
    for ( p = ot->programs; p; p = p->next )

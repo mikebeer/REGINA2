@@ -309,6 +309,8 @@
  98, 11,[Das Array hat %s Dimension(en), aber %s Index(e) wurden angegeben]|<value>,<value>
  98, 12,[Die Liste ist zirkulär]
  98, 13,[Ungültige Liste: %s]|<description>
+ 98, 14,[Python: %s]|<description>
+ 98, 15,[Python ist in diesem Build nicht verfügbar]
  99,  0,[Übersetzungsfehler]
  99,  1,[Unbekannte Direktive "::%s"]|<name>
  99,  2,[Doppelte ::CLASS "%s"]|<name>

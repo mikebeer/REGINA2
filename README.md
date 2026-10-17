@@ -22,6 +22,14 @@ exit
   balance = balance + amount
 ```
 
+Python libraries can be used from Rexx through a built-in Python
+interpreter (from [mikebeer/python](https://github.com/mikebeer/python)):
+
+```rexx
+stats = .python~import('statistics')
+say stats~mean(.array~of(1, 2, 3, 4))      /* 2.5 */
+```
+
 ## Downloads
 
 | System | File |

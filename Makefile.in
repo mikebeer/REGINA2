@@ -216,7 +216,7 @@ OFILES = funcs.$(OBJ) builtin.$(OBJ) error.$(OBJ) variable.$(OBJ) \
 	tracing.$(OBJ) interp.$(OBJ) cmath.$(OBJ) convert.$(OBJ) strengs.$(OBJ) library.$(OBJ) \
 	strmath.$(OBJ) signals.$(OBJ) macros.$(OBJ) envir.$(OBJ) expr.$(OBJ) extstack.$(OBJ) \
 	yaccsrc.$(OBJ) lexsrc.$(OBJ) options.$(OBJ) os_unx.$(OBJ) rexxbif.$(OBJ) \
-	wrappers.$(OBJ) $(ALLOCA) mt_notmt.$(OBJ) instore.$(OBJ) oo.$(OBJ) arxfuncs.$(OBJ) @MY_GETOPT_O@
+	wrappers.$(OBJ) $(ALLOCA) mt_notmt.$(OBJ) instore.$(OBJ) oo.$(OBJ) pybridge.$(OBJ) arxfuncs.$(OBJ) @MY_GETOPT_O@
 
 SHOFILES = funcs.so.$(OBJ) builtin.so.$(OBJ) error.so.$(OBJ) variable.so.$(OBJ) \
 	interprt.so.$(OBJ) debug.so.$(OBJ) dbgfuncs.so.$(OBJ) memory.so.$(OBJ) parsing.so.$(OBJ) files.so.$(OBJ) \
@@ -224,7 +224,7 @@ SHOFILES = funcs.so.$(OBJ) builtin.so.$(OBJ) error.so.$(OBJ) variable.so.$(OBJ) 
 	tracing.so.$(OBJ) interp.so.$(OBJ) cmath.so.$(OBJ) convert.so.$(OBJ) strengs.so.$(OBJ) library.so.$(OBJ) \
 	strmath.so.$(OBJ) signals.so.$(OBJ) macros.so.$(OBJ) envir.so.$(OBJ) expr.so.$(OBJ) extstack.so.$(OBJ) \
 	yaccsrc.so.$(OBJ) lexsrc.so.$(OBJ) wrappers.so.$(OBJ) options.so.$(OBJ) os_unx.so.$(OBJ) rexxbif.so.$(OBJ) \
-	drexx.so.$(OBJ) client.so.$(OBJ) rexxsaa.so.$(OBJ) $(ALLOCA_SHO) $(STATICLD_SHO) $(MT_FILE).so.$(OBJ) instore.so.$(OBJ) oo.so.$(OBJ) arxfuncs.so.$(OBJ) \
+	drexx.so.$(OBJ) client.so.$(OBJ) rexxsaa.so.$(OBJ) $(ALLOCA_SHO) $(STATICLD_SHO) $(MT_FILE).so.$(OBJ) instore.so.$(OBJ) oo.so.$(OBJ) pybridge.so.$(OBJ) arxfuncs.so.$(OBJ) \
 	$(GCI_SHO) @MY_GETOPT_SO_O@
 
 REGUTILOBJ = inifile.$(OBJ) regcrypt.$(OBJ) regfilesys.$(OBJ) regini.$(OBJ) regmacrospace.$(OBJ) @REGSCREENUX@ regsemux.$(OBJ) regstem.$(OBJ) regunicode.$(OBJ) regutil.$(OBJ) rxsupport.$(OBJ) regtrig.$(OBJ) $(FNMATCH_SHO)
@@ -370,12 +370,12 @@ $(LIBPRE)$(LIBFILE)$(SHLPST)$(LIBPST): $(SHOFILES)
 
 ##$(SHLPRE)$(SHLFILE)$(SHLPST): $(SHOFILES) $(REGINAEXP)
 $(SHL_NAME_REGINA): $(SHOFILES) $(REGINAEXP)
-	$(SHL_LD) $(LIBREGINA_BINARY_LIBS)
+	$(SHL_LD) $(LIBREGINA_BINARY_LIBS) -lm
 	$(RANLIB_DYNAMIC)
 
 ##$(SHLPRE)$(SHLFILE)$(SHLPST).$(ABI): $(SHOFILES)
 $(SHL_NAME_REGINA).$(ABI): $(SHOFILES)
-	$(SHL_LD) $(LIBREGINA_BINARY_LIBS)
+	$(SHL_LD) $(LIBREGINA_BINARY_LIBS) -lm
 	-rm -f $(SHL_NAME_REGINA).$(ABI_MAJOR)
 	-$(LN_S) $(SHL_NAME_REGINA).$(ABI) $(SHL_NAME_REGINA).$(ABI_MAJOR)
 	-rm -f $(SHL_NAME_REGINA)
@@ -564,8 +564,11 @@ nosaa.$(OBJ) : $(srcdir)/nosaa.c $(srcdir)/rexx.h
 instore.$(OBJ) : $(srcdir)/instore.c $(srcdir)/rexx.h
 	$(CC) $(COPT) $(CC2O) -c $(srcdir)/instore.c
 
-oo.$(OBJ) : $(srcdir)/oo.c $(srcdir)/oo.h $(srcdir)/rexx.h
+oo.$(OBJ) : $(srcdir)/oo.c $(srcdir)/oo.h $(srcdir)/rexx.h $(srcdir)/pybridge.h
 	$(CC) $(COPT) $(CC2O) -c $(srcdir)/oo.c
+
+pybridge.$(OBJ) : $(srcdir)/pybridge.c $(srcdir)/pybridge.h $(srcdir)/python/py_all.c
+	$(CC) $(COPT) $(CC2O) -c $(srcdir)/pybridge.c
 
 extstack.$(OBJ) : $(srcdir)/extstack.c $(srcdir)/extstack.h $(srcdir)/rexxbif.h $(srcdir)/rexx.h
 	$(CC) $(COPT) $(CC2O) -c $(srcdir)/extstack.c
@@ -879,9 +882,15 @@ instore.so.$(OBJ) : $(srcdir)/instore.c $(srcdir)/rexx.h
 	$(O2SHO)
 	$(SAVE2O)
 
-oo.so.$(OBJ) : $(srcdir)/oo.c $(srcdir)/oo.h $(srcdir)/rexx.h
+oo.so.$(OBJ) : $(srcdir)/oo.c $(srcdir)/oo.h $(srcdir)/rexx.h $(srcdir)/pybridge.h
 	$(O2SAVE)
 	$(CC) $(TSCOPT) $(CC2O) $(DYN_COMP) -c $(srcdir)/oo.c
+	$(O2SHO)
+	$(SAVE2O)
+
+pybridge.so.$(OBJ) : $(srcdir)/pybridge.c $(srcdir)/pybridge.h $(srcdir)/python/py_all.c
+	$(O2SAVE)
+	$(CC) $(TSCOPT) $(CC2O) $(DYN_COMP) -c $(srcdir)/pybridge.c
 	$(O2SHO)
 	$(SAVE2O)
 
@@ -1098,6 +1107,8 @@ installbase: all
 	$(INSTALL) -m 644 -c $(srcdir)/pl.mtb $(DESTDIR)$(sharedir)/pl.mtb
 	$(INSTALL) -m 644 -c $(srcdir)/tr.mtb $(DESTDIR)$(sharedir)/tr.mtb
 	$(INSTALL) -m 644 -c $(srcdir)/sv.mtb $(DESTDIR)$(sharedir)/sv.mtb
+	(cd $(srcdir)/python && find pylib -type d) | while read d; do $(INSTALL) -m 755 -d $(DESTDIR)$(sharedir)/$$d; done
+	(cd $(srcdir)/python && find pylib -type f -name '*.py') | while read f; do $(INSTALL) -m 644 -c $(srcdir)/python/$$f $(DESTDIR)$(sharedir)/$$f; done
 	$(INSTALL) -m 755 -c $(srcdir)/demo/rexxcps.rexx  $(DESTDIR)$(examplesdir)/rexxcps.rexx
 	$(INSTALL) -m 755 -c $(srcdir)/demo/rexxtry.rexx  $(DESTDIR)$(examplesdir)/rexxtry.rexx
 	$(INSTALL) -m 755 -c $(srcdir)/demo/animal.rexx   $(DESTDIR)$(examplesdir)/animal.rexx

@@ -47,6 +47,9 @@ for f in $SOURCES; do
 done
 $CC -c $CFLAGS -o time64.o "$SRC/contrib/time64.c"
 OBJS="$OBJS time64.o"
+# the Python interpreter: its own flags (version_defs.h defines min/max)
+$CC -c -O2 -DNDEBUG -w -I"$SRC" -o pybridge.o "$SRC/pybridge.c"
+OBJS="$OBJS pybridge.o"
 
 $CC -static -Wl,--stack,268435456 -o rexx.exe $OBJS -lwsock32 -ladvapi32 -lpthread
 x86_64-w64-mingw32-strip rexx.exe
@@ -59,6 +62,8 @@ cp rexx.exe "$DIST/"
 cp "$SRC"/*.mtb "$DIST/"
 cp "$SRC"/demo/*.rexx "$DIST/demo/"
 mkdir -p "$DIST/demo/oo"; cp "$SRC"/demo/oo/* "$DIST/demo/oo/"
+# the Python library, found next to rexx.exe
+cp -R "$SRC/python/pylib" "$DIST/pylib"
 for m in "$SRC"/doc/Regina-OO-Manual.*; do [ -f "$m" ] && cp "$m" "$DIST/"; done
 cp "$SRC/COPYING-LIB" "$DIST/COPYING-LIB.txt"
 cp "$SRC/README.OO.md" "$DIST/README.OO.md"
@@ -73,6 +78,8 @@ classes and methods (::class, ::method, ::attribute, ::routine,
 ::requires), messages (obj~method, obj -> method, cascades ~~ and ->>),
 collections (Array, Directory, Table, Queue, Stem, ...), DO ... OVER,
 DO WITH INDEX/ITEM, USE ARG and stems passed by reference.
+Python modules (statistics, json, numpy, pandas, ...) are used with
+.Python~import; the Python library is the folder pylib next to rexx.exe.
 
   rexx.exe --oo prog.rexx      OO keywords on in every program
   rexx.exe --no-oo prog.rexx   OO extension off (classic Regina 3.9.7)
