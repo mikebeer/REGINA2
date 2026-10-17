@@ -2562,7 +2562,12 @@ nodeptr getlabel( const tsd_t *TSD, const streng *name )
     * OO extension: inside a method or routine only its own labels count.
     */
    if ( TSD->currlevel && TSD->currlevel->oo_ctx )
-      return oo_getlabel( TSD, name );
+   {
+      nodeptr n = oo_getlabel( TSD, name );
+      /* a block made in the main program also sees the program's labels */
+      if ( n || !oo_label_main( TSD ) )
+         return n;
+   }
 
    if (ipt->sort_labels == NULL)
    {
@@ -2605,6 +2610,9 @@ void removelevel( tsd_t *TSD, proclevel level )
       removelevel( TSD, level->next ) ;
 /*      level->next = NULL; */
    }
+
+   if ( level->oo_blocks )
+      oo_level_ends( TSD, level ) ;   /* blocks keep its variables */
 
    if (level->varflag==1) /* does not belong *here* !!! */
       kill_variables( TSD, level->vars ) ;
@@ -2774,6 +2782,11 @@ proclevel newlevel( tsd_t *TSD, proclevel oldlevel )
       level->pool++;
    }
 
+   {
+      static unsigned long serial = 0;
+      level->oo_serial = ++serial;
+      level->oo_blocks = NULL;
+   }
    TSD->trace_stat = level->tracestat;
    return level;
 }
@@ -2979,8 +2992,31 @@ static long oo_stack_budget( void )
 #endif
 }
 
+static streng *run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                          void (*setup)( tsd_t *, void * ), void *data,
+                          var_hashtable *share );
+
 streng *oo_run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
                       void (*setup)( tsd_t *, void * ), void *data )
+{
+   return run_level( TSD, body, args, ctx, setup, data, NULL );
+}
+
+/*
+ * Runs the body of a block. share is the variable pool of the activation
+ * that created the block: the block sees its variables like an internal
+ * routine without PROCEDURE, and may begin with PROCEDURE [EXPOSE ...].
+ * NUMERIC settings are those of the caller.
+ */
+streng *oo_run_block( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                      var_hashtable *share, void (*setup)( tsd_t *, void * ), void *data )
+{
+   return run_level( TSD, body, args, ctx, setup, data, share );
+}
+
+static streng *run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                          void (*setup)( tsd_t *, void * ), void *data,
+                          var_hashtable *share )
 {
    jmp_buf jb;
    proclevel volatile oldlevel = TSD->currlevel;
@@ -3014,13 +3050,22 @@ streng *oo_run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
 
    TSD->currlevel = newlevel( TSD, oldlevel );
    TSD->currlevel->args = args;
-   TSD->currlevel->vars = create_new_varpool( TSD, 0 );
-   TSD->currlevel->varflag = 1;
+   if ( share )
+   {
+      /* a block: the variables of its creator; PROCEDURE is allowed */
+      TSD->currlevel->vars = share;
+      TSD->currlevel->varflag = 0;
+   }
+   else
+   {
+      TSD->currlevel->vars = create_new_varpool( TSD, 0 );
+      TSD->currlevel->varflag = 1;
+      TSD->currlevel->numfuzz = DEFAULT_NUMERIC_FUZZ;
+      TSD->currlevel->currnumsize = DEFAULT_NUMERIC_SIZE;
+      TSD->currlevel->numform = DEFAULT_NUMFORM;
+   }
    TSD->currlevel->oo_ctx = ctx;
    TSD->currlevel->oo_propagate = propagate ? (void *) &jb : NULL;
-   TSD->currlevel->numfuzz = DEFAULT_NUMERIC_FUZZ;
-   TSD->currlevel->currnumsize = DEFAULT_NUMERIC_SIZE;
-   TSD->currlevel->numform = DEFAULT_NUMFORM;
    nt = (trap *) MallocTSD( sizeof( trap ) * SIGNALS );
    for ( i = 0; i < SIGNALS; i++ )
    {

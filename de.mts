@@ -311,6 +311,7 @@
  98, 13,[Ungültige Liste: %s]|<description>
  98, 14,[Python: %s]|<description>
  98, 15,[Python ist in diesem Build nicht verfügbar]
+ 98, 16,[Der Block wird verwendet, nachdem die Routine, die ihn erzeugt hat, beendet ist; der Block muss mit PROCEDURE beginnen]
  99,  0,[Übersetzungsfehler]
  99,  1,[Unbekannte Direktive "::%s"]|<name>
  99,  2,[Doppelte ::CLASS "%s"]|<name>
@@ -319,6 +320,8 @@
  99,  5,[Fehlender Name in der Direktive ::%s]|<name>
  99,  6,[Ungültige Option "%s" in der Direktive ::%s]|<token>,<name>
  99,  7,[Doppelte ::ROUTINE "%s"]|<name>
+ 99,  8,[Block nicht abgeschlossen: "}" erwartet]
+ 99,  9,[Ungültige Block-Parameter: auf ":name ..." müssen ein senkrechter Strich und ein Ausdruck folgen]
 100,  0,[Unbekannter Dateisystemfehler]
 #
 # Error prefix strings

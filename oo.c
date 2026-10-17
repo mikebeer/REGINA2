@@ -83,7 +83,7 @@ int oo_mode( void )
 enum {
    OK_PLAIN = 0, OK_CLASS, OK_NIL, OK_ARRAY, OK_DIRECTORY, OK_TABLE,
    OK_QUEUE, OK_BUFFER, OK_SUPER, OK_SUPPLIER, OK_STRING, OK_STEM, OK_CONS,
-   OK_PYOBJ
+   OK_PYOBJ, OK_BLOCK
 };
 
 #define MF_CLASS     0x0001   /* class method                    */
@@ -180,6 +180,11 @@ typedef struct oo_object {
       var_hashtable *pool;      /* Stem: private pool with stem "S." */
       struct { streng *car, *cdr; } cons;   /* Cons: a LISP cell     */
       long pyref;               /* PyObject: see pybridge.h          */
+      struct { struct oo_blockcode *code; proclevel home; unsigned long serial;
+               struct oo_frame *homeframe;
+               var_hashtable *kept;          /* variables after home ended */
+               struct oo_object *nextblock;  /* blocks of the same home */
+             } blk;   /* Block */
    } u;
 } oo_object;
 
@@ -187,7 +192,21 @@ typedef struct oo_frame {        /* stored in proclevel->oo_ctx       */
    oo_object *self;             /* NULL in a routine                 */
    oo_object *scope;
    oo_labels *labels;
+   int block;                   /* a block: labels of outer count too */
+   struct oo_frame *outer;      /* frame of the block's creator      */
 } oo_frame;
+
+typedef struct oo_blockcode {    /* a parsed block, one per { } node   */
+   struct oo_blockcode *next;
+   nodeptr node;
+   streng *src;
+   internal_parser_type tree;
+   oo_labels labels;
+   nodeptr body;
+   int procedure;               /* begins with PROCEDURE             */
+   int nparams;                 /* names of its first USE ARG        */
+   streng **params;
+} oo_blockcode;
 
 typedef struct oo_routine {
    struct oo_routine *next;
@@ -226,6 +245,8 @@ typedef struct oo_tsd {
    paramboxptr pend_plist;
    struct oo_program *loading;  /* ::REQUIRES file being loaded */
    struct oo_object *cPython, *cPyObject;   /* the Python bridge     */
+   struct oo_object *cBlock;
+   oo_blockcode *blocks;
 } oo_tsd;
 
 /* ------------------------------------------------------------------ */
@@ -307,6 +328,13 @@ static streng *cats( tsd_t *TSD, streng *base, const streng *s )
 /* ------------------------------------------------------------------ */
 
 static streng *hdup( tsd_t *TSD, oo_object *o );
+
+static oo_frame *new_frame( tsd_t *TSD )
+{
+   oo_frame *f = (oo_frame *) MallocTSD( sizeof( oo_frame ) );
+   memset( f, 0, sizeof( oo_frame ) );
+   return f;
+}
 
 static oo_object *new_object( tsd_t *TSD, oo_object *cls, int kind )
 {
@@ -879,7 +907,7 @@ static streng *invoke( tsd_t *TSD, oo_method *m, oo_object *scope,
       return NULL;
    }
 
-   frame = (oo_frame *) MallocTSD( sizeof( oo_frame ) );
+   frame = new_frame( TSD );
    frame->self = self;
    frame->scope = scope;
    frame->labels = &m->labels;
@@ -3265,12 +3293,30 @@ static streng *list_from( tsd_t *TSD, const streng **v, long n, const streng *ta
  * routine of the program, a ::ROUTINE, a built-in function, or else the
  * message fname sent to argv[0] with the other arguments.
  */
-static streng *lisp_call( tsd_t *TSD, const streng *fname, int argc, const streng **argv )
+static streng *call_block( tsd_t *TSD, oo_object *b, int argc, const streng **argv );
+static void collect_labels( tsd_t *TSD, nodeptr n, oo_labels *L, nodeptr owner );
+
+/*
+ * Calls the function f: a Block, or the name of an internal routine, a
+ * ::routine, a built-in function or a method of the first argument.
+ * need: the result is required (error 44 if there is none).
+ */
+static streng *fn_call( tsd_t *TSD, const streng *fname, int argc, const streng **argv,
+                        int need )
 {
-   streng *u = oo_stringify( TSD, fname ), *r;
+   streng *u, *r;
    nodeptr entry;
    char bif[64];
+   oo_object *bo = obj_of( TSD, fname );
 
+   if ( bo && bo->kind == OK_BLOCK )
+   {
+      r = call_block( TSD, bo, argc, argv );
+      if ( r == NULL && need )
+         exiterror( ERR_NO_DATA_RETURNED, 1, "a block" );
+      return r;
+   }
+   u = oo_stringify( TSD, fname );
    if ( u == NULL )
       u = Str_dupTSD( fname );
    mem_upper( u->value, u->len );
@@ -3328,10 +3374,15 @@ static streng *lisp_call( tsd_t *TSD, const streng *fname, int argc, const stren
       }
    }
 called:
-   if ( r == NULL )
+   if ( r == NULL && need )
       exiterror( ERR_NO_DATA_RETURNED, 1, tmpstr_of( TSD, u ) );
    Free_stringTSD( u );
    return r;
+}
+
+static streng *lisp_call( tsd_t *TSD, const streng *fname, int argc, const streng **argv )
+{
+   return fn_call( TSD, fname, argc, argv, 1 );
 }
 
 /* the result of a FILTER function must be 0 or 1, as for IF (error 34) */
@@ -3923,6 +3974,743 @@ static void init_lisp( tsd_t *TSD, oo_tsd *ot )
    /* keep the hidden class out of the environment and .classes */
    if ( ot->nclasses > 0 && ot->classes[ot->nclasses - 1] == nl )
       ot->nclasses--;
+}
+
+/* ------------------------------------------------------------------ */
+/* Blocks: { clauses } and the collection methods that use them        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A block is an unnamed internal routine written where it is used:
+ *
+ *    double = { use arg x; return x * 2 }
+ *    big = numbers~select({ :x | x > 100 })
+ *
+ * Like an internal routine without PROCEDURE it sees the variables of
+ * the code that created it; it may begin with PROCEDURE [EXPOSE ...].
+ * "{ :a :b | expression }" is short for "{ use arg a, b; return expression }",
+ * "{ | expression }" for "{ return expression }".
+ * The source is parsed once per { } in the program.
+ */
+
+/* the first statement of a block, skipping labels */
+static nodeptr first_statement( nodeptr n )
+{
+   while ( n && ( n->type == X_LABEL || n->type == X_NULL ) )
+      n = n->next;
+   return n;
+}
+
+static int blank_char( char c )
+{
+   return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+/* "{ :x :y | expr }" as "use arg x, y; return expr", "{ | expr }" as
+   "return expr"; NULL for other blocks */
+static streng *block_shorthand( tsd_t *TSD, const streng *src )
+{
+   const char *p = src->value, *e = p + src->len, *bar;
+   streng *r;
+
+   while ( p < e && blank_char( *p ) )
+      p++;
+   if ( p < e && *p == '|' )
+   {
+      /* "{ | expression }": no parameters */
+      streng *t = Str_ncreTSD( p + 1, (int) ( e - p - 1 ) );
+      r = Str_creTSD( "return " );
+      r = cats( TSD, r, t );
+      Free_stringTSD( t );
+      return r;
+   }
+   if ( p >= e || *p != ':' )
+      return NULL;
+   for ( bar = p; bar < e && *bar != '|'; bar++ )
+      ;
+   if ( bar >= e )
+      exiterror( ERR_TRANSLATION_ERROR, 9 );
+   r = Str_makeTSD( src->len + 32 );
+   r->len = 0;
+   r = catc( TSD, r, "use arg " );
+   while ( p < bar )
+   {
+      const char *n;
+      while ( p < bar && ( blank_char( *p ) ) )
+         p++;
+      if ( p >= bar )
+         break;
+      if ( *p != ':' )
+         exiterror( ERR_TRANSLATION_ERROR, 9 );
+      p++;
+      for ( n = p; p < bar && !blank_char( *p ) && *p != ':'; p++ )
+         ;
+      if ( p == n )
+         exiterror( ERR_TRANSLATION_ERROR, 9 );
+      if ( r->len > 8 )
+         r = catc( TSD, r, ", " );
+      {
+         streng *t = Str_ncreTSD( n, (int) ( p - n ) );
+         r = cats( TSD, r, t );
+         Free_stringTSD( t );
+      }
+   }
+   r = catc( TSD, r, "; return " );
+   {
+      streng *t = Str_ncreTSD( bar + 1, (int) ( e - bar - 1 ) );
+      r = cats( TSD, r, t );
+      Free_stringTSD( t );
+   }
+   return r;
+}
+
+/* line numbers of a block's statements as lines of the program */
+static void block_lines( nodeptr n, int offset, int depth )
+{
+   int i;
+
+   if ( depth > 1000 )
+      return;
+   for ( ; n; n = n->next )
+   {
+      if ( n->lineno > 0 )
+         n->lineno += offset;
+      for ( i = 0; i < 4; i++ )
+         if ( n->p[i] && !( n->type == X_LABEL && i == 3 ) )
+            block_lines( n->p[i], offset, depth + 1 );
+   }
+}
+
+static oo_blockcode *block_code( tsd_t *TSD, nodeptr node )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_blockcode *b;
+   streng *text, *body;
+   internal_parser_type parsing;
+
+   for ( b = ot->blocks; b; b = b->next )
+      if ( b->node == node )
+         return b;
+   body = block_shorthand( TSD, node->name );
+   /* the marker switches the OO keywords on for the block's own parse */
+   text = Str_creTSD( "/* OOREGINA */ " );
+   text = cats( TSD, text, body ? body : node->name );
+   if ( body )
+      Free_stringTSD( body );
+   fetch_string( TSD, text, &parsing );
+   if ( parsing.result != 0 )
+   {
+      Free_stringTSD( text );
+      TSD->currentnode = node;
+      exiterror( ERR_YACC_SYNTAX, 1, parsing.tline );
+   }
+   if ( node->lineno > 1 )
+      block_lines( parsing.root, node->lineno - 1, 0 );
+   b = (oo_blockcode *) MallocTSD( sizeof( oo_blockcode ) );
+   memset( b, 0, sizeof( oo_blockcode ) );
+   b->node = node;
+   b->src = text;
+   b->tree = parsing;
+   b->body = parsing.root;
+   collect_labels( TSD, parsing.root, &b->labels, NULL );
+   {
+      /* the parameters: the variables of a first USE ARG are local */
+      nodeptr first = first_statement( b->body ), n;
+      if ( first && first->type == X_PROC )
+         b->procedure = 1;
+      else if ( first && first->type == X_OO_USEARG )
+      {
+         for ( n = first->p[0]; n; n = n->p[0] )
+            b->nparams++;
+         b->params = (streng **) MallocTSD( ( b->nparams + 1 ) * sizeof( streng * ) );
+         b->nparams = 0;
+         for ( n = first->p[0]; n; n = n->p[0] )
+            if ( n->name )
+               b->params[b->nparams++] = n->name;
+      }
+   }
+   b->next = ot->blocks;
+   ot->blocks = b;
+   return b;
+}
+
+static oo_object *bind_block( tsd_t *TSD, oo_blockcode *code )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *o = new_object( TSD, ot->cBlock, OK_BLOCK );
+   proclevel home = TSD->currlevel;
+
+   o->u.blk.code = code;
+   o->u.blk.home = home;
+   o->u.blk.serial = home->oo_serial;
+   o->u.blk.homeframe = (oo_frame *) home->oo_ctx;
+   o->u.blk.nextblock = (oo_object *) home->oo_blocks;
+   home->oo_blocks = o;
+   return o;
+}
+
+/* evaluates "{ ... }": a new Block bound to the current activation */
+streng *oo_eval_block( tsd_t *TSD, nodeptr thisptr )
+{
+   get_ot( TSD );
+   TSD->oo_active = 1;
+   return hdup( TSD, bind_block( TSD, block_code( TSD, thisptr ) ) );
+}
+
+/*
+ * The activation of level ends (see removelevel). Its blocks keep its
+ * variables: a copy of them, shared by all its blocks. If the level used
+ * its caller's variables (an internal routine without PROCEDURE), the
+ * blocks move to the caller.
+ */
+void oo_level_ends( tsd_t *TSD, proclevel level )
+{
+   oo_object *b, *next;
+   var_hashtable *copy = NULL;
+
+   for ( b = (oo_object *) level->oo_blocks; b; b = next )
+   {
+      next = b->u.blk.nextblock;
+      if ( b->u.blk.home != level )
+         continue;
+      if ( level->varflag == 0 && level->prev )
+      {
+         b->u.blk.home = level->prev;
+         b->u.blk.serial = level->prev->oo_serial;
+         b->u.blk.nextblock = (oo_object *) level->prev->oo_blocks;
+         level->prev->oo_blocks = b;
+         continue;
+      }
+      if ( copy == NULL )
+      {
+         extern void oo_pool_copy( const tsd_t *TSD, var_hashtable *from, var_hashtable *to );
+         copy = create_new_varpool( TSD, 0 );
+         oo_pool_copy( TSD, level->vars, copy );
+      }
+      b->u.blk.home = NULL;
+      b->u.blk.homeframe = NULL;
+      b->u.blk.kept = copy;
+      b->u.blk.nextblock = NULL;
+   }
+   level->oo_blocks = NULL;
+}
+
+/*
+ * The variables of a block: those of its creator, except its parameters
+ * (the names of a first USE ARG, or of "{ :x | ... }") and RESULT, RC and
+ * SIGL, which are its own. New variables are local too.
+ */
+static int block_keeps_local( const streng *name, void *data )
+{
+   oo_blockcode *code = (oo_blockcode *) data;
+   int i;
+
+   if ( str_eqc( name, "RESULT" ) || str_eqc( name, "RC" ) || str_eqc( name, "SIGL" ) )
+      return 1;
+   for ( i = 0; i < code->nparams; i++ )
+      if ( str_eq( name, code->params[i] ) )
+         return 1;
+   return 0;
+}
+
+static void block_setup( tsd_t *TSD, void *data )
+{
+   extern void oo_expose_except( tsd_t *TSD, int ( *keep )( const streng *, void * ),
+                                 void *data );
+   oo_expose_except( TSD, block_keeps_local, data );
+}
+
+static streng *call_block( tsd_t *TSD, oo_object *b, int argc, const streng **argv )
+{
+   proclevel lev;
+   oo_frame *frame;
+   oo_blockcode *code = b->u.blk.code;
+   var_hashtable *share = NULL;
+   streng *r;
+   int alive = 0;
+
+   for ( lev = TSD->currlevel; lev && b->u.blk.home; lev = lev->prev )
+      if ( lev == b->u.blk.home )
+      {
+         alive = ( lev->oo_serial == b->u.blk.serial );
+         break;
+      }
+   if ( alive )
+      share = b->u.blk.home->vars;
+   else if ( b->u.blk.kept )
+      share = b->u.blk.kept;
+   else
+      exiterror( ERR_EXECUTION_ERROR, 16 );
+   frame = new_frame( TSD );
+   frame->block = 1;
+   frame->labels = &code->labels;
+   frame->outer = alive ? b->u.blk.homeframe : NULL;
+   if ( frame->outer )
+   {
+      frame->self = frame->outer->self;
+      frame->scope = frame->outer->scope;
+   }
+   r = oo_run_block( TSD, code->body, make_plist( TSD, argc, argv ), frame, share,
+                     code->procedure ? NULL : block_setup, code );
+   FreeTSD( frame );
+   return r;
+}
+
+static oo_object *block_self( tsd_t *TSD, oo_call *c )
+{
+   if ( c->self == NULL || c->self->kind != OK_BLOCK )
+      err_nomethod( TSD, c->selfstr, c->name );
+   return c->self;
+}
+
+/* b~call(args...), b~value(args...) */
+static streng *m_block_call( tsd_t *TSD, oo_call *c )
+{
+   return call_block( TSD, block_self( TSD, c ), c->argc, c->argv );
+}
+
+static streng *m_block_source( tsd_t *TSD, oo_call *c )
+{
+   return Str_dupTSD( block_self( TSD, c )->u.blk.code->node->name );
+}
+
+static streng *m_block_string( tsd_t *TSD, oo_call *c )
+{
+   streng *r = Str_creTSD( "{" );
+   r = cats( TSD, r, block_self( TSD, c )->u.blk.code->node->name );
+   return catc( TSD, r, "}" );
+}
+
+/* b~whileTrue(body): calls body as long as b returns 1 */
+static streng *m_block_while( tsd_t *TSD, oo_call *c )
+{
+   oo_object *b = block_self( TSD, c );
+   const streng *body = opt_arg( c, 0 );
+   int want = str_eqc( c->name, "WHILETRUE" );
+
+   for ( ; ; )
+   {
+      streng *t = call_block( TSD, b, 0, NULL );
+      int v;
+      if ( t == NULL )
+         exiterror( ERR_NO_DATA_RETURNED, 1, "a block" );
+      v = lisp_bool( TSD, t );
+      Free_stringTSD( t );
+      if ( v != want )
+         break;
+      if ( body )
+      {
+         streng *x = fn_call( TSD, body, 0, NULL, 0 );
+         if ( x )
+            Free_stringTSD( x );
+      }
+   }
+   return NULL;
+}
+
+/* .Block~new(source): a block from a string, bound to the caller */
+static streng *m_block_new( tsd_t *TSD, oo_call *c )
+{
+   const streng *src = need_arg( TSD, c, 0 );
+   oo_blockcode *b;
+   oo_object *o;
+   nodeptr n;
+
+   /* a node of its own keys the parsed code; it lives until the end */
+   n = (nodeptr) MallocTSD( sizeof( treenode ) );
+   memset( n, 0, sizeof( treenode ) );
+   n->type = X_OO_BLOCK;
+   n->name = Str_dupTSD( src );
+   n->lineno = TSD->currentnode ? TSD->currentnode->lineno : 0;
+   b = block_code( TSD, n );
+   o = bind_block( TSD, b );
+   return hdup( TSD, o );
+}
+
+/*
+ * The collection methods. The items of the receiver are visited in order
+ * with their indexes; the function (a block or a routine name) gets
+ * (item, index).
+ */
+typedef struct {
+   long n;
+   streng **item;    /* copies */
+   streng **index;   /* copies */
+} coll_items;
+
+static void coll_free( tsd_t *TSD, coll_items *ci )
+{
+   long i;
+   for ( i = 0; i < ci->n; i++ )
+   {
+      Free_stringTSD( ci->item[i] );
+      Free_stringTSD( ci->index[i] );
+   }
+   if ( ci->item )
+      FreeTSD( ci->item );
+   if ( ci->index )
+      FreeTSD( ci->index );
+}
+
+static oo_object *coll_self( tsd_t *TSD, oo_call *c, coll_items *ci )
+{
+   oo_object *o = c->self;
+   long i, n = 0;
+
+   ci->n = 0;
+   ci->item = ci->index = NULL;
+   if ( o == NULL )
+      err_nomethod( TSD, c->selfstr, c->name );
+   switch ( o->kind )
+   {
+      case OK_ARRAY:
+      case OK_QUEUE:
+         ci->item = (streng **) MallocTSD( ( o->u.a.size + 1 ) * sizeof( streng * ) );
+         ci->index = (streng **) MallocTSD( ( o->u.a.size + 1 ) * sizeof( streng * ) );
+         for ( i = 0; i < o->u.a.size; i++ )
+            if ( o->u.a.v[i] )
+            {
+               ci->item[n] = Str_dupTSD( o->u.a.v[i] );
+               ci->index[n++] = ARR_MULTI( o ) ? arr_index_value( TSD, o, i ) : mkint( TSD, i + 1 );
+            }
+         break;
+      case OK_DIRECTORY:
+      case OK_TABLE:
+      {
+         oo_entry *e;
+         ci->item = (streng **) MallocTSD( ( o->u.h->count + 1 ) * sizeof( streng * ) );
+         ci->index = (streng **) MallocTSD( ( o->u.h->count + 1 ) * sizeof( streng * ) );
+         for ( e = o->u.h->first; e; e = e->onext )
+         {
+            ci->item[n] = Str_dupTSD( e->value );
+            ci->index[n++] = Str_dupTSD( e->key );
+         }
+         break;
+      }
+      case OK_STEM:
+      {
+         stemlist l;
+         variableptr b = stem_box( TSD, o );
+         stem_sorted_tails( TSD, o, &l );
+         ci->item = (streng **) MallocTSD( ( l.n + 1 ) * sizeof( streng * ) );
+         ci->index = l.t ? l.t : (streng **) MallocTSD( sizeof( streng * ) );
+         for ( i = 0; i < l.n; i++ )
+         {
+            const streng *v = oo_stem_get( TSD, b, l.t[i] );
+            ci->item[i] = v ? Str_dupTSD( v ) : nullstringptr();
+         }
+         n = l.n;
+         break;
+      }
+      case OK_CONS:
+      case OK_NIL:
+      {
+         const streng **v = list_items( TSD, o->kind == OK_CONS ? o : NULL, &n );
+         ci->item = (streng **) MallocTSD( ( n + 1 ) * sizeof( streng * ) );
+         ci->index = (streng **) MallocTSD( ( n + 1 ) * sizeof( streng * ) );
+         for ( i = 0; i < n; i++ )
+         {
+            ci->item[i] = Str_dupTSD( v[i] );
+            ci->index[i] = mkint( TSD, i + 1 );
+         }
+         FreeTSD( (void *) v );
+         break;
+      }
+      default:
+         err_nomethod( TSD, c->selfstr, c->name );
+   }
+   ci->n = n;
+   return o;
+}
+
+/* a new, empty collection of the receiver's class */
+static oo_object *coll_like( tsd_t *TSD, oo_object *o )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *r;
+
+   switch ( o->kind )
+   {
+      case OK_ARRAY:
+      case OK_QUEUE:
+         return new_object( TSD, ARR_MULTI( o ) ? ot->cArray : o->cls, o->kind );
+      case OK_DIRECTORY:
+      case OK_TABLE:
+         r = new_object( TSD, o->cls, o->kind );
+         r->u.h = (oo_hash *) MallocTSD( sizeof( oo_hash ) );
+         memset( r->u.h, 0, sizeof( oo_hash ) );
+         return r;
+      case OK_STEM:
+         return new_object( TSD, ot->cStem, OK_STEM );
+      default:
+         return NULL;   /* a LISP list: built with list_from */
+   }
+}
+
+/* adds item (taken over) to r, a collection made by coll_like */
+static void coll_add( tsd_t *TSD, oo_object *r, const streng *index, streng *item )
+{
+   switch ( r->kind )
+   {
+      case OK_ARRAY:
+      case OK_QUEUE:
+         oo_array_put( TSD, r, r->u.a.size + 1, item );
+         break;
+      case OK_DIRECTORY:
+      case OK_TABLE:
+         h_put( TSD, r->u.h, index, item );
+         break;
+      case OK_STEM:
+         oo_stem_put( TSD, r->u.pool, ( (oo_tsd *) TSD->oo_tsd )->s_stem, index, item );
+         break;
+   }
+}
+
+static streng *coll_call( tsd_t *TSD, const streng *f, coll_items *ci, long i, int need )
+{
+   const streng *argv[2];
+   argv[0] = ci->item[i];
+   argv[1] = ci->index[i];
+   return fn_call( TSD, f, 2, argv, need );
+}
+
+/* do(f), each(f): f(item, index) for every item */
+static streng *m_coll_do( tsd_t *TSD, oo_call *c )
+{
+   coll_items ci;
+   const streng *f = need_arg( TSD, c, 0 );
+   long i;
+
+   coll_self( TSD, c, &ci );
+   for ( i = 0; i < ci.n; i++ )
+   {
+      streng *r = coll_call( TSD, f, &ci, i, 0 );
+      if ( r )
+         Free_stringTSD( r );
+   }
+   coll_free( TSD, &ci );
+   return NULL;
+}
+
+/* select(f), reject(f), collect(f): a new collection of the same class */
+static streng *m_coll_select( tsd_t *TSD, oo_call *c )
+{
+   coll_items ci;
+   const streng *f = need_arg( TSD, c, 0 );
+   int mode = str_eqc( c->name, "SELECT" ) ? 1 : ( str_eqc( c->name, "REJECT" ) ? 0 : 2 );
+   oo_object *o = coll_self( TSD, c, &ci ), *res = coll_like( TSD, o );
+   const streng **lv = NULL;
+   long i, nl = 0;
+   streng *out;
+
+   if ( res == NULL )
+      lv = (const streng **) MallocTSD( ( ci.n + 1 ) * sizeof( streng * ) );
+   for ( i = 0; i < ci.n; i++ )
+   {
+      streng *r = coll_call( TSD, f, &ci, i, 1 ), *v;
+      if ( mode == 2 )
+         v = r;
+      else
+      {
+         int b = lisp_bool( TSD, r );
+         Free_stringTSD( r );
+         if ( b != mode )
+            continue;
+         v = Str_dupTSD( ci.item[i] );
+      }
+      if ( res )
+         coll_add( TSD, res, ci.index[i], v );
+      else
+         lv[nl++] = v;
+   }
+   if ( res )
+      out = hdup( TSD, res );
+   else
+   {
+      out = list_from( TSD, lv, nl, NULL );
+      for ( i = 0; i < nl; i++ )
+         Free_stringTSD( (streng *) lv[i] );
+      FreeTSD( (void *) lv );
+   }
+   coll_free( TSD, &ci );
+   return out;
+}
+
+/* detect(f [, none]): the first item for which f is 1, else none (.nil) */
+static streng *m_coll_detect( tsd_t *TSD, oo_call *c )
+{
+   coll_items ci;
+   const streng *f = need_arg( TSD, c, 0 ), *none = opt_arg( c, 1 );
+   streng *found = NULL;
+   long i;
+
+   coll_self( TSD, c, &ci );
+   for ( i = 0; i < ci.n && found == NULL; i++ )
+   {
+      streng *r = coll_call( TSD, f, &ci, i, 1 );
+      if ( lisp_bool( TSD, r ) )
+         found = Str_dupTSD( ci.item[i] );
+      Free_stringTSD( r );
+   }
+   coll_free( TSD, &ci );
+   if ( found )
+      return found;
+   if ( none )
+   {
+      oo_object *bo = obj_of( TSD, none );
+      if ( bo && bo->kind == OK_BLOCK )
+         return fn_call( TSD, none, 0, NULL, 1 );
+      return Str_dupTSD( none );
+   }
+   return nil_handle( TSD );
+}
+
+/* inject(initial, f): f(f(initial, item1, index1), item2, index2) ... */
+static streng *m_coll_inject( tsd_t *TSD, oo_call *c )
+{
+   coll_items ci;
+   const streng *f = need_arg( TSD, c, 1 );
+   streng *acc = Str_dupTSD( need_arg( TSD, c, 0 ) );
+   long i;
+
+   coll_self( TSD, c, &ci );
+   for ( i = 0; i < ci.n; i++ )
+   {
+      const streng *argv[3];
+      streng *r;
+      argv[0] = acc;
+      argv[1] = ci.item[i];
+      argv[2] = ci.index[i];
+      r = fn_call( TSD, f, 3, argv, 1 );
+      Free_stringTSD( acc );
+      acc = r;
+   }
+   coll_free( TSD, &ci );
+   return acc;
+}
+
+/* anySatisfy(f), allSatisfy(f), count(f) */
+static streng *m_coll_test( tsd_t *TSD, oo_call *c )
+{
+   coll_items ci;
+   const streng *f = need_arg( TSD, c, 0 );
+   int any = str_eqc( c->name, "ANYSATISFY" ), all = str_eqc( c->name, "ALLSATISFY" );
+   long i, count = 0;
+
+   coll_self( TSD, c, &ci );
+   for ( i = 0; i < ci.n; i++ )
+   {
+      streng *r = coll_call( TSD, f, &ci, i, 1 );
+      int b = lisp_bool( TSD, r );
+      Free_stringTSD( r );
+      count += b;
+      if ( ( any && b ) || ( all && !b ) )
+         break;
+   }
+   coll_free( TSD, &ci );
+   if ( any )
+      return mkbool( TSD, count > 0 );
+   if ( all )
+      return mkbool( TSD, i == ci.n );
+   return mkint( TSD, count );
+}
+
+/* sortWith(f): sorts an Array or List in place; f(a, b) is 1 if a goes first */
+static const streng *sort_fn;
+
+static void merge_sort( tsd_t *TSD, streng **v, streng **tmp, long n )
+{
+   long h = n / 2, i = 0, j = h, k = 0;
+
+   if ( n < 2 )
+      return;
+   merge_sort( TSD, v, tmp, h );
+   merge_sort( TSD, v + h, tmp, n - h );
+   while ( i < h && j < n )
+   {
+      const streng *argv[2];
+      streng *r;
+      int left;
+      argv[0] = v[i];
+      argv[1] = v[j];
+      r = fn_call( TSD, sort_fn, 2, argv, 1 );
+      left = lisp_bool( TSD, r );
+      Free_stringTSD( r );
+      tmp[k++] = left ? v[i++] : v[j++];
+   }
+   while ( i < h )
+      tmp[k++] = v[i++];
+   while ( j < n )
+      tmp[k++] = v[j++];
+   memcpy( v, tmp, n * sizeof( streng * ) );
+}
+
+static streng *m_coll_sortwith( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = c->self;
+   const streng *f = need_arg( TSD, c, 0 ), *save = sort_fn;
+   streng **v, **tmp;
+   long n = 0, i;
+
+   if ( o == NULL || ( o->kind != OK_ARRAY && o->kind != OK_QUEUE ) )
+      err_nomethod( TSD, c->selfstr, c->name );
+   if ( ARR_MULTI( o ) )
+      exiterror( ERR_EXECUTION_ERROR, 8, tmpstr_of( TSD, c->name ) );
+   /* items without holes, sorted, then stored back from 1 */
+   v = (streng **) MallocTSD( ( o->u.a.size + 1 ) * sizeof( streng * ) );
+   tmp = (streng **) MallocTSD( ( o->u.a.size + 1 ) * sizeof( streng * ) );
+   for ( i = 0; i < o->u.a.size; i++ )
+      if ( o->u.a.v[i] )
+         v[n++] = Str_dupTSD( o->u.a.v[i] );
+   sort_fn = f;
+   merge_sort( TSD, v, tmp, n );
+   sort_fn = save;
+   for ( i = 0; i < o->u.a.size; i++ )
+      if ( o->u.a.v[i] )
+      {
+         Free_stringTSD( o->u.a.v[i] );
+         o->u.a.v[i] = NULL;
+      }
+   o->u.a.size = 0;
+   for ( i = 0; i < n; i++ )
+      oo_array_put( TSD, o, i + 1, v[i] );
+   FreeTSD( v );
+   FreeTSD( tmp );
+   return Str_dupTSD( c->selfstr );
+}
+
+static void add_coll_methods( tsd_t *TSD, oo_object *c )
+{
+   add_methods( TSD, c, "DO EACH", m_coll_do, 0 );
+   add_methods( TSD, c, "SELECT REJECT COLLECT", m_coll_select, 0 );
+   add_methods( TSD, c, "DETECT", m_coll_detect, 0 );
+   add_methods( TSD, c, "INJECT", m_coll_inject, 0 );
+   add_methods( TSD, c, "ANYSATISFY ALLSATISFY COUNT", m_coll_test, 0 );
+}
+
+static void init_blocks( tsd_t *TSD, oo_tsd *ot )
+{
+   oo_object *c;
+
+   ot->cBlock = c = new_class( TSD, "Block", NULL, ot->cObject, OK_BLOCK );
+   add_methods( TSD, c, "NEW", m_block_new, MF_CLASS );
+   add_methods( TSD, c, "CALL VALUE", m_block_call, 0 );
+   add_methods( TSD, c, "SOURCE", m_block_source, 0 );
+   add_methods( TSD, c, "STRING", m_block_string, 0 );
+   add_methods( TSD, c, "WHILETRUE WHILEFALSE", m_block_while, 0 );
+
+   add_coll_methods( TSD, ot->cArray );
+   add_coll_methods( TSD, ot->cQueue );
+   add_coll_methods( TSD, ot->cList );
+   add_coll_methods( TSD, ot->cDirectory );
+   add_coll_methods( TSD, ot->cStringTable );
+   add_coll_methods( TSD, ot->cTable );
+   add_coll_methods( TSD, ot->cStem );
+   add_coll_methods( TSD, ot->cCons );
+   add_coll_methods( TSD, ot->cNilList );
+   add_methods( TSD, ot->cArray, "SORTWITH", m_coll_sortwith, 0 );
+   add_methods( TSD, ot->cList, "SORTWITH", m_coll_sortwith, 0 );
+   add_methods( TSD, ot->cQueue, "SORTWITH", m_coll_sortwith, 0 );
 }
 
 /* ------------------------------------------------------------------ */
@@ -4711,6 +5499,7 @@ static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
    ot->cSupplier = new_class( TSD, "Supplier", NULL, ot->cObject, OK_SUPPLIER );
    ot->cStem = new_class( TSD, "Stem", NULL, ot->cObject, OK_STEM );
    init_lisp( TSD, ot );
+   init_blocks( TSD, ot );
    init_python( TSD, ot );
 
    /* Object */
@@ -5513,7 +6302,7 @@ static void load_required( tsd_t *TSD, const streng *name, oo_program *from, nod
    collect_labels( TSD, parsing.root, &p->labels, NULL );
 
    /* run the prolog; its X_OO_INIT sets up the classes of the file */
-   frame = (oo_frame *) MallocTSD( sizeof( oo_frame ) );
+   frame = new_frame( TSD );
    frame->self = NULL;
    frame->scope = NULL;
    frame->labels = &p->labels;
@@ -5534,12 +6323,27 @@ nodeptr oo_getlabel( const tsd_t *TSD, const streng *name )
    oo_frame *f = (oo_frame *) TSD->currlevel->oo_ctx;
    int i;
 
-   if ( f == NULL || f->labels == NULL )
-      return NULL;
-   for ( i = 0; i < f->labels->n; i++ )
-      if ( Str_ccmp( f->labels->v[i]->name, name ) == 0 )
-         return f->labels->v[i];
+   /* a block sees its own labels, then those of the code that created it */
+   for ( ; f; f = f->block ? f->outer : NULL )
+   {
+      if ( f->labels )
+         for ( i = 0; i < f->labels->n; i++ )
+            if ( Str_ccmp( f->labels->v[i]->name, name ) == 0 )
+               return f->labels->v[i];
+      if ( !f->block )
+         break;
+   }
    return NULL;
+}
+
+/* 1 if getlabel() must also search the main program (a block made there) */
+int oo_label_main( const tsd_t *TSD )
+{
+   oo_frame *f = (oo_frame *) TSD->currlevel->oo_ctx;
+
+   while ( f && f->block && f->outer )
+      f = f->outer;
+   return f && f->block && f->outer == NULL;
 }
 
 static oo_routine *find_routine( tsd_t *TSD, const streng *name )
@@ -5568,7 +6372,7 @@ streng *oo_call_routine( tsd_t *TSD, const streng *name, paramboxptr args )
 
    if ( r == NULL )
       return NOFUNC;
-   frame = (oo_frame *) MallocTSD( sizeof( oo_frame ) );
+   frame = new_frame( TSD );
    frame->self = NULL;
    frame->scope = NULL;
    frame->labels = &r->labels;

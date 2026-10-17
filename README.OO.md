@@ -135,7 +135,39 @@ functions). A function passed by name can be an internal routine, a
 `::routine`, a built-in function or a method of the items. See
 `demo/oo/09_lisp.rexx`.
 
-### Python modules
+### Blocks and collection methods
+
+```rexx
+limit = 100
+big   = numbers~select({ :x | x > limit })          /* short form */
+total = numbers~inject(0, { :sum :x | sum + x })
+names~sortWith({ :a :b | length(a) <= length(b) })
+numbers~do({ use arg x, i; say i':' x })            /* long form  */
+next = counter(0); say next~call next~call           /* 1 2 */
+exit
+counter: procedure
+  use arg n
+  return { n = n + 1; return n }                    /* a closure  */
+```
+
+A block `{ ... }` is an unnamed routine written where it is used;
+`b~call(args)` or `b~value(args)` runs it. `{ :x :y | expr }` is short for
+`{ use arg x, y; return expr }`, `{ | expr }` for `{ return expr }`. A
+block sees and changes the variables of the code that created it, except
+its parameters (the names of a first `USE ARG`) and variables the creator
+does not have, which are local. After the creator has returned, the block
+keeps its variables (a closure). A block can begin with `PROCEDURE
+[EXPOSE ...]`, contain labels, and call the program's internal routines.
+
+Array, List, Queue, Directory, StringTable, Table, Stem and LISP lists
+have `do`/`each`, `select`, `reject`, `collect`, `detect(f [, none])`,
+`inject(initial, f)`, `anySatisfy`, `allSatisfy` and `count`; Array, List
+and Queue also `sortWith(f)` (stable; `f(a, b)` is 1 if `a` may come first).
+The function gets the item and its index; it can also be a routine name.
+LISP functions (`mapcar`, `map`, `filter`, `reduce`) take blocks too.
+`{` is an invalid character in classic Rexx; `--no-oo` keeps it so. See
+`demo/oo/11_blocks.rexx`.
+
 
 ```rexx
 ::requires 'python'                     /* optional: .Python is built in */

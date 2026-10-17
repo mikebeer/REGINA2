@@ -371,6 +371,7 @@
  98, 13,[Invalid list: %s]|<description>
  98, 14,[Python: %s]|<description>
  98, 15,[Python is not available in this build]
+ 98, 16,[The block is used after the routine that created it has ended; begin the block with PROCEDURE]
  99,  0,[Translation error]
  99,  1,[Unknown directive "::%s"]|<name>
  99,  2,[Duplicate ::CLASS "%s"]|<name>
@@ -379,6 +380,8 @@
  99,  5,[Missing name in ::%s directive]|<name>
  99,  6,[Invalid option "%s" in ::%s directive]|<token>,<name>
  99,  7,[Duplicate ::ROUTINE "%s"]|<name>
+ 99,  8,[Block not closed: "}" expected]
+ 99,  9,[Invalid block parameters: ":name ..." must be followed by a vertical bar and an expression]
 100,  0,[Error desconocido del sistema de ficheros]
 #
 # Extra general phrases requiring translation:

@@ -110,6 +110,11 @@ void oo_end_program( tsd_t *TSD );
 
 /* label lookup inside methods and routines; see getlabel() */
 nodeptr oo_getlabel( const tsd_t *TSD, const streng *name );
+int oo_label_main( const tsd_t *TSD );
+void oo_level_ends( tsd_t *TSD, proclevel level );
+streng *oo_eval_block( tsd_t *TSD, nodeptr thisptr );
+streng *oo_run_block( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                      var_hashtable *share, void (*setup)( tsd_t *, void * ), void *data );
 
 /* true if the X_CON_SYMBOL is an environment symbol like .NIL */
 #define OO_IS_ENVSYMBOL(n) ( (n)->name && (n)->name->len > 1 \

@@ -4437,3 +4437,33 @@ void oo_stem_assign( tsd_t *TSD, var_hashtable *vars, const streng *name, variab
    c.name = name;
    oo_stem_each( TSD, from, oo_copy_cb, &c );
 }
+
+/*
+ * OO blocks: like PROCEDURE EXPOSE with every variable of the current
+ * pool except those for which keep() returns 1; they become local.
+ */
+void oo_expose_except( tsd_t *TSD, int ( *keep )( const streng *, void * ), void *data )
+{
+   var_hashtable *from = TSD->currlevel->vars;
+   variableptr p;
+   streng **names;
+   unsigned i;
+   long n = 0, k;
+
+   for ( i = 0; i < from->size; i++ )
+      for ( p = from->tbl[i]; p; p = p->next )
+         n++;
+   names = (streng **) MallocTSD( ( n + 1 ) * sizeof( streng * ) );
+   n = 0;
+   for ( i = 0; i < from->size; i++ )
+      for ( p = from->tbl[i]; p; p = p->next )
+         if ( !keep( p->name, data ) )
+            names[n++] = Str_dupTSD( p->name );
+   for ( k = 0; k < n; k++ )
+   {
+      expose_var( TSD, names[k] );
+      Free_stringTSD( names[k] );
+   }
+   expose_var( TSD, NULL );
+   FreeTSD( names );
+}

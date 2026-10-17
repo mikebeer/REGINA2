@@ -95,6 +95,7 @@ static nodeptr split_requires( nodeptr *dirs );
 extern int __regina_do_is_loop; /* lexsrc.l: the DO token was LOOP */
 extern int __regina_oo_keywords( void ); /* lexsrc.l: OO keywords are on */
 extern int __regina_oo_off( void );      /* lexsrc.l: --no-oo, classic only */
+extern streng *__regina_block_take( int *line );  /* lexsrc.l: source of a { block } */
 extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 
 #define IS_EXPRLIST(x) ( ( (x) != NULL )                   \
@@ -141,7 +142,7 @@ extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 %token GTGT LTLT NOTGTGT NOTLTLT GTGTE LTLTE
 %token INPUT OUTPUT ERROR NORMAL APPEND REPLACE STREAM STEM LIFO FIFO NOEOL
 %token LOWER CASELESS
-%token MSGSEND CASCADE DCOLON USEARG MSGSUPER /* OO extension */
+%token MSGSEND CASCADE DCOLON USEARG MSGSUPER BLOCK /* OO extension */
 %token PLUSASSIGNMENTVARIABLE MINUSASSIGNMENTVARIABLE MULTASSIGNMENTVARIABLE DIVASSIGNMENTVARIABLE MODULUSASSIGNMENTVARIABLE INTDIVASSIGNMENTVARIABLE ORASSIGNMENTVARIABLE XORASSIGNMENTVARIABLE ANDASSIGNMENTVARIABLE CONCATASSIGNMENTVARIABLE
 
 %start start
@@ -1472,6 +1473,11 @@ expr        : '('                      { /* We have to accept exprs here even
                                                     $$->name->len=retlength); }
             | STRING                   { $$ = makenode( X_STRING, 0 );
                                          $$->name = Str_cre_TSD(parser_data.TSD,retvalue) ; }
+            | BLOCK                    { /* OO: { clauses }, see oo.c */
+                                         int line;
+                                         $$ = makenode( X_OO_BLOCK, 0 );
+                                         $$->name = __regina_block_take( &line );
+                                         $$->lineno = line; }
             | function                 { $$ = $1 ; }
             | '+' expr %prec UPLUS     { AUTO_REDUCE( $2, rxnullptr );
                                          $$ = makenode( X_U_PLUSS, 1, $2 ); }

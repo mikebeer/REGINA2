@@ -112,6 +112,7 @@ exit
     ['Methods', 'instance and class methods, attributes, constants, private and abstract methods, UNKNOWN, operator methods, mixins and multiple inheritance'],
     ['Stems', 'stems passed by reference with `USE ARG s.`, stems returned with `RETURN x.`'],
     ['Lists', 'LISP-style lists: the Cons class, and with `::requires \'lisp\'` the functions `cons`, `car`, `cdr`, `list`, `mapcar` and more'],
+    ['Blocks', '`{ :x | x * 2 }` and `{ use arg x; ... }`: routines written where they are used, with the collection methods `do`, `select`, `reject`, `collect`, `detect`, `inject`, `count`, `anySatisfy`, `allSatisfy` and `sortWith`'],
     ['Python', 'Python modules from Rexx: `.Python~import(\'statistics\')`, NumPy, pandas, json, datetime and more, through a Python interpreter built into Regina'],
     ['Control', 'markers `/* OOREGINA */` and `OPTIONS OOREGINA`, switches `--oo` and `--no-oo`, variable `REGINA_OO`'],
     ['Errors', 'error numbers 88, 91, 97, 98 and 99 as in ooRexx, in all message languages'],
@@ -320,6 +321,7 @@ const ch5 = [
     'The markers `OOREGINA` and the switches `--oo` and `--no-oo` (ooRexx has no classic mode).',
     'LISP-style lists: the Cons class and the built-in `lisp` library.',
     'Python modules through the built-in Python interpreter (`.Python`, `.PyObject`); ooRexx has no Python bridge.',
+    'Blocks `{ ... }` see and keep the variables of the code that created them (closures), and have the short form `{ :x | expression }`. In ooRexx 5 a source literal `{ ... }` is a Routine without access to those variables. The collection methods `do`, `select`, `collect`, `inject` and the others come from Smalltalk.',
     '`::requires` anywhere in a program, for example at the top.',
     'Regina\'s classic features remain: its built-in functions, OPTIONS, the external queue, ADDRESS WITH and the Regina API.',
   ]),
@@ -395,6 +397,25 @@ const ch6 = [
   P('WHILE and UNTIL work with all forms. In an OVER loop, WHILE is tested after the variables have been set to the next item. The collection is copied when the loop starts, so changes to it in the body do not change the loop. LABEL and COUNTER come first, in either order: `DO LABEL outer COUNTER n i = 1 TO 10`.'),
   H3('RETURN with a stem'),
   P('In code with the OO keywords on, `RETURN x.` returns a new Stem object with a copy of all tails and the default value of `x.`. Assigned to a stem (`r. = f()`), it replaces `r.` with that copy; assigned to a simple variable, it is an object (see Stem in Chapter 7).'),
+  H2('Blocks'),
+  ...screen(`{ clauses }
+{ :name1 :name2 ... | expression }
+{ | expression }`),
+  P('A block is a routine without a name, written as a term in an expression. Its value is a Block object; `b~call(args)` (or `b~value(args)`) runs it with the arguments and returns what it returns. Collection methods such as `select` and the LISP functions call the blocks they are given.'),
+  P('The short forms are the Smalltalk notation: `{ :x :y | x + y }` means `{ use arg x, y; return x + y }`, and `{ | i < 10 }` means `{ return i < 10 }`. The expression ends at the closing brace. In the long form the clauses are separated by `;` or line ends, as in a program; a block can contain labels, loops and other blocks.'),
+  ...table(['Variables in a block', 'Rule'], [
+    ['Variables of the creator', 'A block sees the variables of the routine or method that evaluated `{ ... }` and can change them, like an internal routine without PROCEDURE. Inside a method that includes SELF and the exposed variables.'],
+    ['Parameters', 'The names of a first `USE ARG` (and of `:x` in the short form) are the block\'s own, even when the creator has variables of that name.'],
+    ['New variables', 'Variables that the creator did not have when the block was called are local to the call, as are RESULT, RC and SIGL.'],
+    ['After the creator has returned', 'The block keeps the variables the creator had when it returned, and changes them: a block returned by a routine works as a closure (see `counter` in `11_blocks.rexx`).'],
+    ['PROCEDURE', 'A block that begins with `PROCEDURE [EXPOSE ...]` has only its own variables and the exposed ones, like an internal routine.'],
+  ], W(2700, 6938), 'Variables in blocks'),
+  P('Labels inside a block belong to the block; a CALL or function call to a name that is not a label of the block finds the labels of the code that created it, so a block can call the program\'s internal routines. Errors in a block are reported with the line numbers of the program. `.Block~new(source)` makes a block from a string.'),
+  ...screen(`limit = 100
+big = numbers~select({ :x | x > limit })
+total = numbers~inject(0, { :sum :x | sum + x })
+names~sortWith({ :a :b | length(a) <= length(b) })
+numbers~do({ use arg x, i; say i':' x })`, 'Blocks'),
   H2('Directives'),
   P('Directives start with `::` at the beginning of a clause. The main program ends at the first directive, except `::requires` and `::options`, which can stand anywhere: the statements after them continue what came before, the main program or the body of the last method or routine.'),
   ...table(['Directive', 'Options and meaning'], [
@@ -555,6 +576,24 @@ say mapcar('square', l) llength(l)      /* (25 9 64) 3       */
 say read('(a (b c) . d)')               /* (a (b c) . d)     */
 exit
 square: procedure; return arg(1) * arg(1)`, 'Using the lisp library'),
+  H2('Block and the collection methods'),
+  ...table(['Method of Block', 'Meaning'], [
+    ['`new(source)` (class)', 'A block made from a string, bound to the caller like `{ ... }`.'],
+    ['`call(args...)`, `value(args...)`', 'Runs the block; returns its result.'],
+    ['`whileTrue(body)`, `whileFalse(body)`', 'Calls the block, and the block or routine BODY, as long as the block returns 1 (0).'],
+    ['`source`, `string`', 'The text between the braces; the text with braces.'],
+  ], W(3100, 6538), 'Methods of Block'),
+  P('The collections Array, List, Queue, Directory, StringTable, Table, Stem and Cons (and `.nil` as the empty list) have these methods. F is a block or the name of a routine, a built-in function or a method, as for the LISP functions. F is called with the item and its index: the position in an Array, List, Queue or LISP list, the key of a Directory or Table, the tail of a Stem.'),
+  ...table(['Method', 'Result'], [
+    ['`do(f)`, `each(f)`', 'Calls F for every item; no result.'],
+    ['`select(f)`, `reject(f)`', 'A new collection of the same class with the items for which F returns 1 (0). A Directory keeps the keys.'],
+    ['`collect(f)`', 'A new collection of the same class with the results of F.'],
+    ['`detect(f [, none])`', 'The first item for which F returns 1; else NONE (a block is called) or `.nil`.'],
+    ['`inject(initial, f)`', 'F(F(INITIAL, item1, index1), item2, index2) and so on: sums, maxima, joined strings.'],
+    ['`anySatisfy(f)`, `allSatisfy(f)`, `count(f)`', '1 if F is 1 for some (every) item; how many items F accepts.'],
+    ['`sortWith(f)` (Array, List, Queue)', 'Sorts in place and returns the collection. F(a, b) returns 1 if A may come before B, as in `{ :a :b | a <= b }`. The sort is stable.'],
+  ], W(3100, 6538), 'Collection methods'),
+  P('A result of F that must be 0 or 1 and is not is error 34.'),
   H2('Python: .Python and .PyObject'),
   P('Regina OO contains a Python 3 interpreter (the C version of the Python subset interpreter of github.com/mikebeer/python), so a Rexx program can use Python modules: the standard library (math, statistics, json, re, datetime, collections, csv, random, fractions, decimal, itertools and more), NumPy, pandas, SciPy and a matplotlib subset that writes SVG files. Python starts the first time a program uses `.Python` or `.PyObject`; programs that don\'t use it pay nothing.'),
   P('`.Python~import(name)` returns a module. Functions, classes and attributes of Python objects are used with messages: `math~sqrt(2)` calls `math.sqrt(2)`, `coll~Counter(words)` creates a Counter, `p~x` reads an attribute and `p~x = 5` sets it. As Rexx message names are in uppercase, the name is looked up as written, then in lowercase, then without regard to case. An attribute that can be called is called with the arguments; any other attribute is returned. `::requires \'python\'` is accepted and documents that a program uses Python; it is not required.'),
@@ -625,6 +664,7 @@ const samples = [
   ['08_inventory', 'A small application', 'Stock keeping with Product and Inventory classes: orders, a sorted value report and a reorder list.'],
   ['09_lisp', 'LISP-style lists', 'An evaluator for expressions in LISP notation such as `(* 2 (+ 3 4))`, quicksort and flatten written recursively, and an association list.'],
   ['10_python', 'Python libraries', 'Sales figures analysed with the Python modules statistics, collections and json: mean, median and standard deviation, a Counter, totals in a defaultdict read back as a stem, JSON text, and a Python function defined from Rexx.'],
+  ['11_blocks', 'Blocks', 'A small book list processed with blocks: select, collect, inject, count, anySatisfy, detect, reject with a variable of the program, sortWith, a counter that keeps its state in a block, and a block with several clauses.'],
 ];
 const ch8 = [
   H1('Chapter 8. Sample Programs'),
@@ -654,7 +694,7 @@ const ch9 = [
     'The ooRexx features listed in Chapter 5 under "Not available" are missing, notably RAISE, FORWARD, GUARD, REPLY, START and many classes.',
     'An array can have up to 64 dimensions and at most 100,000,000 places in all (error 88.6).',
     'A function given by name to `map`, `filter`, `reduce`, `mapcar` or `apply` must be an internal routine, a `::routine`, a built-in function or a method; external routines are not searched. LISP lists use the CAR/CDR recursion of LISP, so very long lists are better handled with `DO x OVER` than with deep recursion.',
-    '`sort` orders the string values of the items; there are no comparators.',
+    '`sort` orders the string values of the items; use `sortWith` with a block for other orders.',
     'The new keywords need a marker, a directive, an earlier message operator or `--oo` (Chapter 3). A program that uses objects only through routine arguments, without any of these, must add a marker to use them.',
     'Directives are not allowed in INTERPRET data (error 98.2).',
     'Only a plain stem argument (`st.`) is passed by reference; a compound variable or an expression is passed by value. `RETURN x.` returns a copy, and `EXIT x.` returns the stem\'s string value as in classic REXX.',
@@ -662,12 +702,14 @@ const ch9 = [
     'Class IDs of classes defined with `::class` are in uppercase.',
     'PUBLIC and PRIVATE on `::class` and `::routine` are accepted but have no effect: all classes and routines of a file loaded with `::requires` are visible to the program that loads it.',
     'The collection of a DO OVER loop is copied when the loop starts; changes in the body do not affect the loop.',
+    'In a block only the names of a first `USE ARG` are parameters; `ARG` and `PARSE ARG` in a block set variables of the creator if it has them.',
+    'A block keeps the variables of its creator as a copy made when the creator returns; two routines cannot share variables through a block after both have returned.',
     'Objects belong to the thread that created them and cannot be shared between threads that run REXX programs at the same time.',
   ]),
   H2('Python'),
   ...UL([
     'The built-in Python is a subset of Python 3 (see the manual of github.com/mikebeer/python): strings are byte strings, there is no `async`, and the libraries are pure-Python versions of the standard library, NumPy, pandas and SciPy. C extension modules of CPython cannot be loaded.',
-    'Python cannot call back into Rexx: a Rexx routine cannot be passed as a callback (for example `key=` of `sorted`). Write such functions in Python with `.python~exec`.',
+    'Python cannot call back into Rexx: a Rexx routine or block cannot be passed as a callback (for example `key=` of `sorted`). Write such functions in Python with `.python~exec`.',
     'A string that looks like a number is passed as a number; use `.python~str(s)` for a string such as a postal code `007`.',
     'An operator with a PyObject on the right and a Rexx string on the left (`2 * a`) uses the string value of the object; write `a * 2`.',
     'Python objects referred to by Rexx live until the program ends, like all objects.',

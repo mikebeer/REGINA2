@@ -22,6 +22,13 @@ exit
   balance = balance + amount
 ```
 
+Blocks in the style of Smalltalk work with all collections:
+
+```rexx
+big = numbers~select({ :x | x > 100 })
+sum = numbers~inject(0, { :s :x | s + x })
+```
+
 Python libraries can be used from Rexx through a built-in Python
 interpreter (from [mikebeer/python](https://github.com/mikebeer/python)):
 

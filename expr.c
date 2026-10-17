@@ -442,6 +442,7 @@ do_an_add:
       case X_OO_OVERINIT:
       case X_OO_OVERITEM:
       case X_OO_STEMOBJ:
+      case X_OO_BLOCK:
       {
          numthr = get_a_descr( TSD, NULL, 0, evaluate( TSD, thisptr, &sptr ) );
          FREE_TMP_STRING( sptr );
@@ -977,6 +978,10 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
 
       case X_OO_STEMOBJ:
          stmp1 = oo_eval_stemobj( TSD, thisptr );
+         RETURN_NEW( stmp1 );
+
+      case X_OO_BLOCK:
+         stmp1 = oo_eval_block( TSD, thisptr );
          RETURN_NEW( stmp1 );
 
       case X_OO_OVERINIT:

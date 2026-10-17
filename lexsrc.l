@@ -168,6 +168,38 @@ static int oo_expect_name=0, oo_in_name=0, oo_after_name=0;
  */
 const char *__regina_oo_operator = "~";
 
+/*
+ * Sources of blocks "{ ... }" in the order the lexer found them; the
+ * parser takes them in the same order (it may look one token ahead).
+ */
+static streng *block_fifo[8];
+static int block_line[8];
+static int block_head = 0, block_count = 0;
+
+void __regina_block_push( streng *src, int line )
+{
+   int i;
+   if ( block_count == 8 )
+      exiterror( ERR_INTERPRETER_FAILURE, 1, __FILE__, __LINE__, "block queue" );
+   i = ( block_head + block_count++ ) % 8;
+   block_fifo[i] = src;
+   block_line[i] = line;
+}
+
+/* the source of the next block; *line is the line of its "{" */
+streng *__regina_block_take( int *line )
+{
+   streng *s;
+   *line = 0;
+   if ( block_count == 0 )
+      return Str_cre_TSD( parser_data.TSD, "" );
+   s = block_fifo[block_head];
+   *line = block_line[block_head];
+   block_head = ( block_head + 1 ) % 8;
+   block_count--;
+   return s;
+}
+
 static char ch;
 static int kill_this_space=0, kill_next_space=1 ;
 static int extnextline = -1, extnextstart; /* for a delayed line increment */
@@ -1960,6 +1992,85 @@ key_with          [wW][iI][tT][hH]
    return MSGSEND ; }
 
    /*
+    * OO extension: a block "{ clauses }". "{" is an invalid character in
+    * classic Rexx. The text up to the matching "}" (outside strings and
+    * comments) is kept as the source of the block, see __regina_block_take.
+    */
+\{ {
+   int depth = 1, c, quote = 0, newlines = 0, col = 0;
+   int startline = nextline;
+   streng *src;
+
+   if ( OO_OFF )
+      REJECT ;
+   src = Str_make_TSD( parser_data.TSD, 256 ) ;
+   src->len = 0 ;
+   for ( ; ; )
+   {
+#ifdef __cplusplus
+      c = yyinput() ;
+#else
+      c = input() ;
+#endif
+      if ( c == EOF || c == 0 )
+      {
+         parser_data.tline = linenr - 1 ;
+         Free_string_TSD( parser_data.TSD, src ) ;
+         /* without the OO keywords an open "{" stays an invalid character */
+         if ( !OO_KEYWORDS )
+            exiterror( ERR_INVALID_CHAR, 1, '{', '{' ) ;
+         exiterror( ERR_TRANSLATION_ERROR, 8 ) ;
+      }
+      if ( quote )
+      {
+         if ( c == quote )
+            quote = 0 ;
+      }
+      else if ( c == '\'' || c == '"' )
+         quote = c ;
+      else if ( c == '{' )
+         depth++ ;
+      else if ( c == '}' && --depth == 0 )
+         break ;
+      if ( c == '`' && !quote )
+         c = ' ' ;                       /* what is left of a comment */
+      if ( c == '\n' )
+      {
+         newlines++ ;
+         col = 0 ;
+         nextline++ ;
+         if ( extnextline != -1 )
+            extnextline++ ;
+      }
+      else
+         col++ ;
+      if ( src->len >= src->max )
+      {
+         streng *n = Str_make_TSD( parser_data.TSD, src->max * 2 ) ;
+         memcpy( n->value, src->value, src->len ) ;
+         n->len = src->len ;
+         Free_string_TSD( parser_data.TSD, src ) ;
+         src = n ;
+      }
+      src->value[src->len++] = (char) c ;
+   }
+   /* input() has destroyed the yytext-terminator re-set it */
+   yytext[yyleng] = '\0';
+   __regina_block_push( src, startline ) ;
+   oo_seen = 1 ;
+   BEGIN other ;
+   if ( newlines )
+      nextstart = col + 2 ;
+   else
+      nextstart += col + 2 ;
+   if ( insert_abuttal && !in_parse && !in_signal && !in_call ) {
+      delayed_symbol = BLOCK ;
+      expression_ended = 1 ;
+      return CONCATENATE ; }
+   expression_ended = 1 ;
+   return BLOCK ; }
+
+   /*
     * OO extension: array references "term[index, ...]". The "[" must
     * directly follow a term; anything else stays an invalid character.
     */
@@ -2993,6 +3104,7 @@ static void init_it_all( tsd_t *TSD )
    bracket_depth = 0 ;
    in_directives = 0 ;
    oo_seen = do_over_pending = 0 ;
+   block_head = block_count = 0 ;
    __regina_do_is_loop = 0 ;
    oo_expect_name = oo_in_name = oo_after_name = 0 ;
    firstln = 0 ;
