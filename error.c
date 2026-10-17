@@ -577,6 +577,18 @@ int oo_set_error_capture( int on )
    return old;
 }
 
+/* the text of the next error's sub-message, see oo_reraise_error() */
+static const char *oo_forced_text = NULL;
+
+/* raises a captured error again (Block~ensure): same numbers and text */
+void oo_reraise_error( int no, int sub, const char *text )
+{
+   static char copy[600];
+   strncpy( copy, text, sizeof( copy ) - 1 );
+   oo_forced_text = sub ? copy : NULL;
+   exiterror( no, sub );
+}
+
 const char *oo_captured_error( int *no, int *sub )
 {
    *no = oo_captured_no;
@@ -655,7 +667,12 @@ void exiterror( int errorno, int suberrorno, ... )
     * Expanded the sub-error text and pass this to condition_hook for
     * condition('D') to return the expanded string.
     */
-   if ( ( errorno <= ERR_MAX_NUMBER ) && ( suberrorno != 0 ) )
+   if ( oo_forced_text )
+   {
+      suberror_streng = Str_creTSD( oo_forced_text );
+      oo_forced_text = NULL;
+   }
+   else if ( ( errorno <= ERR_MAX_NUMBER ) && ( suberrorno != 0 ) )
    {
       fmt = errortext( TSD, errorno, suberrorno, 0, 0 );
       len = Str_len( fmt );

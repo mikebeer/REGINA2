@@ -250,6 +250,7 @@ typedef struct oo_tsd {
    struct oo_object *cBlock;
    struct oo_object *cInterval, *cSet, *cBag, *cSorted;
    struct oo_object *extending;   /* class of the current ::EXTENSION */
+   struct oo_object *cMessage;
    oo_blockcode *blocks;
 } oo_tsd;
 
@@ -5349,6 +5350,196 @@ static void init_blocks( tsd_t *TSD, oo_tsd *ot )
 }
 
 /* ------------------------------------------------------------------ */
+/* condition('O'), Block~ensure, Message                               */
+/* ------------------------------------------------------------------ */
+
+/* condition('O'): the current condition as a Directory, or .nil */
+streng *oo_condition_object( tsd_t *TSD, const sigtype *sig )
+{
+   oo_tsd *ot = get_ot( TSD );
+   oo_object *d;
+   char buf[40];
+   const streng *argv[1];
+   streng *t;
+
+   TSD->oo_active = 1;
+   if ( sig == NULL )
+      return hdup( TSD, ot->nil );
+   d = new_object( TSD, ot->cDirectory, OK_DIRECTORY );
+   d->u.h = (oo_hash *) MallocTSD( sizeof( oo_hash ) );
+   memset( d->u.h, 0, sizeof( oo_hash ) );
+#define DPUT( k, v ) do { streng *k_ = Str_creTSD( k ); h_put( TSD, d->u.h, k_, v ); \
+                          Free_stringTSD( k_ ); } while ( 0 )
+   DPUT( "CONDITION", Str_creTSD( signalnames[sig->type] ) );
+   DPUT( "INSTRUCTION", Str_creTSD( sig->invoke ? "SIGNAL" : "CALL" ) );
+   DPUT( "DESCRIPTION", sig->descr ? Str_dupTSD( sig->descr ) : nullstringptr() );
+   if ( sig->type == SIGNAL_SYNTAX )
+   {
+      if ( sig->subrc )
+         sprintf( buf, "%d.%d", sig->rc, sig->subrc );
+      else
+         sprintf( buf, "%d", sig->rc );
+      DPUT( "CODE", Str_creTSD( buf ) );
+      DPUT( "RC", mkint( TSD, sig->rc ) );
+      sprintf( buf, "%d", sig->rc );
+      t = Str_creTSD( buf );
+      argv[0] = t;
+      DPUT( "ERRORTEXT", call_bif( TSD, "ERRORTEXT", 1, argv, NULL ) );
+      Free_stringTSD( t );
+   }
+   else if ( sig->rc )
+      DPUT( "RC", mkint( TSD, sig->rc ) );
+   if ( sig->lineno > 0 )
+      DPUT( "POSITION", mkint( TSD, sig->lineno ) );
+#undef DPUT
+   return hdup( TSD, d );
+}
+
+typedef struct { oo_object *block; streng *result; } ensure_data;
+
+static void ensure_run( tsd_t *TSD, void *data )
+{
+   ensure_data *d = (ensure_data *) data;
+   d->result = call_block( TSD, d->block, 0, NULL );
+}
+
+/*
+ * b~ensure(cleanup): runs b, then cleanup (a block or routine), also when
+ * b ends with an error or EXIT; the error or EXIT then goes on.
+ * b~ifCurtailed(cleanup): cleanup only in that case.
+ */
+static streng *m_block_ensure( tsd_t *TSD, oo_call *c )
+{
+   extern int oo_try_call( tsd_t *TSD, void (*fn)( tsd_t *, void * ), void *data );
+   extern const char *oo_captured_error( int *no, int *sub );
+   extern void oo_reraise_error( int no, int sub, const char *text );
+   extern void jump_script_exit( tsd_t *TSD, streng *result );
+   ensure_data d;
+   const streng *cleanup = need_arg( TSD, c, 0 );
+   int status, always = str_eqc( c->name, "ENSURE" ), no = 0, sub = 0;
+   char text[600];
+   streng *exitval = NULL, *r;
+
+   d.block = block_self( TSD, c );
+   d.result = NULL;
+   status = oo_try_call( TSD, ensure_run, &d );
+   if ( status == 1 )
+   {
+      exitval = TSD->systeminfo->result;
+      TSD->systeminfo->result = NULL;
+   }
+   else if ( status == 2 )
+   {
+      strncpy( text, oo_captured_error( &no, &sub ), sizeof( text ) - 1 );
+      text[sizeof( text ) - 1] = '\0';
+   }
+   if ( always || status )
+   {
+      r = fn_call( TSD, cleanup, 0, NULL, 0 );
+      if ( r )
+         Free_stringTSD( r );
+   }
+   if ( status == 1 )
+   {
+      TSD->instore_is_errorfree = 1;   /* as the EXIT instruction does */
+      jump_script_exit( TSD, exitval );
+   }
+   if ( status == 2 )
+      oo_reraise_error( no, sub, text );
+   return d.result;
+}
+
+/*
+ * Message: a message as an object. .message~new(target, name, args...);
+ * send([target]) sends it, result is its last result.
+ */
+static oo_object *msg_self( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   if ( c->self == NULL || c->self->kind != OK_ARRAY || !is_subclass( c->self->cls, ot->cMessage ) )
+      err_nomethod( TSD, c->selfstr, c->name );
+   return c->self;
+}
+
+static streng *m_msg_init( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = msg_self( TSD, c );
+   streng *name;
+   int i;
+
+   oo_array_put( TSD, o, 1, Str_dupTSD( need_arg( TSD, c, 0 ) ) );
+   name = oo_stringify( TSD, need_arg( TSD, c, 1 ) );
+   if ( name == NULL )
+      name = Str_dupTSD( need_arg( TSD, c, 1 ) );
+   mem_upper( name->value, name->len );
+   oo_array_put( TSD, o, 2, name );
+   for ( i = 2; i < c->argc; i++ )
+      oo_array_put( TSD, o, i + 1, c->argv[i] ? Str_dupTSD( c->argv[i] ) : NULL );
+   /* the number of arguments, so that omitted ones stay omitted */
+   o->snapshot = 0;
+   if ( o->aux )
+      Free_stringTSD( o->aux );
+   o->aux = NULL;
+   o->u.a.dims = NULL;
+   return NULL;
+}
+
+static streng *m_msg_send( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = msg_self( TSD, c );
+   const streng *target = opt_arg( c, 0 ) ? opt_arg( c, 0 ) : o->u.a.v[0];
+   long argc = o->u.a.size - 2, i;
+   const streng **argv = (const streng **) MallocTSD( ( argc + 1 ) * sizeof( streng * ) );
+   streng *r;
+
+   for ( i = 0; i < argc; i++ )
+      argv[i] = o->u.a.v[i + 2];
+   r = send_msg( TSD, target, o->u.a.v[1], (int) argc, argv );
+   FreeTSD( (void *) argv );
+   if ( o->aux )
+      Free_stringTSD( o->aux );
+   o->aux = r ? Str_dupTSD( r ) : NULL;
+   return r;
+}
+
+static streng *m_msg_parts( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *o = msg_self( TSD, c );
+
+   if ( str_eqc( c->name, "TARGET" ) )
+      return Str_dupTSD( o->u.a.v[0] );
+   if ( str_eqc( c->name, "MESSAGENAME" ) )
+      return Str_dupTSD( o->u.a.v[1] );
+   if ( str_eqc( c->name, "RESULT" ) )
+      return o->aux ? Str_dupTSD( o->aux ) : hdup( TSD, ot->nil );
+   if ( str_eqc( c->name, "STRING" ) )
+   {
+      streng *r = Str_creTSD( "a Message " );
+      return cats( TSD, r, o->u.a.v[1] );
+   }
+   {
+      /* ARGUMENTS */
+      oo_object *a = new_object( TSD, ot->cArray, OK_ARRAY );
+      long i;
+      for ( i = 2; i < o->u.a.size; i++ )
+         oo_array_put( TSD, a, i - 1, o->u.a.v[i] ? Str_dupTSD( o->u.a.v[i] ) : NULL );
+      return hdup( TSD, a );
+   }
+}
+
+static void init_condition_classes( tsd_t *TSD, oo_tsd *ot )
+{
+   oo_object *c;
+
+   add_methods( TSD, ot->cBlock, "ENSURE IFCURTAILED", m_block_ensure, 0 );
+   ot->cMessage = c = new_class( TSD, "Message", NULL, ot->cObject, OK_ARRAY );
+   add_methods( TSD, c, "INIT", m_msg_init, 0 );
+   add_methods( TSD, c, "SEND VALUE", m_msg_send, 0 );
+   add_methods( TSD, c, "TARGET MESSAGENAME RESULT ARGUMENTS STRING", m_msg_parts, 0 );
+}
+
+/* ------------------------------------------------------------------ */
 /* Python: .Python and .PyObject on top of pybridge.c                 */
 /* ------------------------------------------------------------------ */
 
@@ -5393,6 +5584,7 @@ static void py_fail( tsd_t *TSD )
       /* EXIT in a block that Python called: now that Python is left */
       extern void jump_script_exit( tsd_t *TSD, streng *result );
       py_exit_pending = 0;
+      TSD->instore_is_errorfree = 1;
       jump_script_exit( TSD, py_pending_exit );
    }
    fflush( stdout );
@@ -6231,6 +6423,7 @@ static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
    init_lisp( TSD, ot );
    init_blocks( TSD, ot );
    init_more_collections( TSD, ot );
+   init_condition_classes( TSD, ot );
    init_python( TSD, ot );
 
    /* Object */

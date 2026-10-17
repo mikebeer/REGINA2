@@ -111,6 +111,7 @@ void oo_end_program( tsd_t *TSD );
 /* label lookup inside methods and routines; see getlabel() */
 nodeptr oo_getlabel( const tsd_t *TSD, const streng *name );
 int oo_label_main( const tsd_t *TSD );
+streng *oo_condition_object( tsd_t *TSD, const sigtype *sig );
 void oo_level_ends( tsd_t *TSD, proclevel level );
 streng *oo_eval_block( tsd_t *TSD, nodeptr thisptr );
 streng *oo_run_block( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
