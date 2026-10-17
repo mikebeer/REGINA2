@@ -350,8 +350,7 @@ English except German.
 - An error in a file loaded by `::requires` names the main program, not the
   required file.
 - A program run through INTERPRET can't contain directives (error 98.2).
-- Python can't call Rexx routines back (no Rexx callbacks for `key=`);
-  define such functions with `.python~exec`.
+- Python calls Rexx code only as blocks (`{ :x | myroutine(x) }`).
 - The classic reading of `DO x OVER y` (a counted loop with variables
   named `x` and `OVER`) still works when `y` is a whole number.
 
