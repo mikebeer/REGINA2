@@ -147,7 +147,7 @@ const ch2 = [
     ['macOS 11 or later', '`regina-rexx-oo-3.9.7-macos.tar.gz`', 'One universal `rexx` for Apple Silicon and Intel Macs.'],
     ['Any other system', 'the source', 'See "Building from source" below.'],
   ], W(2200, 3238, 4200), 'Installation packages'),
-  P('The packages are attached to the release on the project\'s GitHub page and are also kept in the `dist` folder of the repository.'),
+  P('The packages are in the `dist` folder of the repository, github.com/mikebeer/REGINA2, together with a file of SHA-256 checksums.'),
   H2('Linux'),
   P('Install the package with `dpkg`. If the distribution\'s Regina is installed, it is replaced; remove the package again to go back to it.'),
   ...screen(`sudo dpkg -i regina-rexx-oo_3.9.7+oo1_amd64.deb
