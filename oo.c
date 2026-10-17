@@ -34,6 +34,48 @@ streng *oo_run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
                       void (*setup)( tsd_t *, void * ), void *data );
 
 /* ------------------------------------------------------------------ */
+/* OO mode: --oo, --no-oo, REGINA_OO                                  */
+/* ------------------------------------------------------------------ */
+
+static int oo_cmdline_mode = 0;
+
+void oo_set_mode( int mode )
+{
+   oo_cmdline_mode = mode;
+}
+
+static int oo_word_is( const char *e, const char *w )
+{
+   for ( ; *e && *w; e++, w++ )
+      if ( rx_toupper( *e ) != *w )
+         return 0;
+   return *e == '\0' && *w == '\0';
+}
+
+int oo_mode( void )
+{
+   static int env_mode = 2;      /* 2: REGINA_OO not read yet */
+
+   if ( oo_cmdline_mode )
+      return oo_cmdline_mode;
+   if ( env_mode == 2 )
+   {
+      const char *e = getenv( "REGINA_OO" );
+      env_mode = 0;
+      if ( e )
+      {
+         if ( oo_word_is( e, "1" ) || oo_word_is( e, "ON" ) || oo_word_is( e, "YES" )
+           || oo_word_is( e, "OO" ) )
+            env_mode = 1;
+         else if ( oo_word_is( e, "0" ) || oo_word_is( e, "OFF" ) || oo_word_is( e, "NO" )
+                || oo_word_is( e, "CLASSIC" ) )
+            env_mode = -1;
+      }
+   }
+   return env_mode;
+}
+
+/* ------------------------------------------------------------------ */
 /* data structures                                                    */
 /* ------------------------------------------------------------------ */
 

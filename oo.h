@@ -70,6 +70,15 @@ variableptr oo_stem_object_box( tsd_t *TSD, const streng *s );
 /* "RETURN x." in OO code: a Stem object with a copy of the stem */
 streng *oo_eval_stemobj( tsd_t *TSD, nodeptr thisptr );
 
+/*
+ * The OO mode of the process: 1 forces the extension on everywhere, -1
+ * switches it off completely (Regina 3.9.7 behaviour), 0 decides per
+ * program. Set by the --oo / --no-oo switches, else by the environment
+ * variable REGINA_OO (1/on/yes/oo or 0/off/no/classic).
+ */
+int oo_mode( void );
+void oo_set_mode( int mode );
+
 /* expression nodes */
 streng *oo_eval_message( tsd_t *TSD, nodeptr thisptr, int need_result );
 streng *oo_eval_index( tsd_t *TSD, nodeptr thisptr );

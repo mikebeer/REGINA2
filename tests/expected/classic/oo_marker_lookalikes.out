@@ -1,6 +1,6 @@
-/* REGINA-OO */
-options regina-oo
-a options regina-oo
+/* OOREGINA */
+options ooregina
+a options ooregina
 do counter: 2
 still a variable
 rc=0

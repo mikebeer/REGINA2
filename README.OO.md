@@ -95,23 +95,42 @@ for the extension:
 
 | In the program | Effect |
 |---|---|
-| `/* REGINA-OO */` | A comment holding only this word, anywhere in the file. Plain Regina 3.9.7 ignores it. |
-| `OPTIONS 'REGINA-OO'` | Also inside a longer option string, such as `OPTIONS 'REGINA-OO STRICT_ANSI'`. Plain Regina 3.9.7 ignores the unknown option. |
-| `OPTIONS REGINA-OO` | Works the same, but plain Regina 3.9.7 reads it as `REGINA - OO` and stops with error 41. |
+| `/* OOREGINA */` | A comment holding only this word, anywhere in the file. |
+| `OPTIONS OOREGINA` or `OPTIONS 'OOREGINA'` | Also inside a longer option string, such as `OPTIONS 'OOREGINA STRICT_ANSI'`. |
 | A `::` directive line | Any program with directives. |
 | An earlier `~`, `->` or `[` | From that point in the source on. |
 | INTERPRET | Inside INTERPRET data, the keywords are on once the program uses objects. |
 
-The markers are found before the program is parsed, so they can be on any
-line, even after the code that uses the keywords. A marker inside a string
+Plain Regina 3.9.7 ignores all of these markers (an unknown option is
+skipped), so a marked program still starts there. The markers are found
+before the program is parsed, so they can be on any line, even after the
+code that uses the keywords. A marker inside a string
 or in a longer comment doesn't count. Elsewhere the words keep their classic
 meaning, so a classic program with a variable named `counter` or a command
 named `loop` runs as before.
 
+### Forcing the mode when starting
+
+| Switch | Environment | Effect |
+|---|---|---|
+| `--oo` or `-O` | `REGINA_OO=on` (also `1`, `yes`, `oo`) | The OO keywords are on in every program, required file and INTERPRET string, with no marker needed. Environment symbols such as `.nil` always resolve. |
+| `--no-oo` or `-N` | `REGINA_OO=off` (also `0`, `no`, `classic`) | The extension is off completely: no message operators, `[ ]`, directives, `.name` symbols, `DO … OVER` or new keywords, and markers are ignored. Programs behave exactly as in Regina 3.9.7. Regina's own trip suite and the classic tests give identical output in this mode. |
+| neither | `REGINA_OO` unset | Decided per program, as described above. |
+
+A switch on the command line wins over `REGINA_OO`. The environment
+variable also works for programs started through the API (`RexxStart`)
+and for `#!` scripts.
+
+```sh
+rexx --oo  myprog.rexx       # OO keywords everywhere
+rexx --no-oo old.rexx        # guaranteed classic behaviour
+REGINA_OO=off rexx old.rexx  # the same through the environment
+```
+
 ### Stems as arguments and results
 
 ```rexx
-/* REGINA-OO */
+/* OOREGINA */
 list.0 = 2; list.1 = 'b'; list.2 = 'a'
 call sortit list.                 /* passed by reference */
 say list.1 list.2                 /* a b */

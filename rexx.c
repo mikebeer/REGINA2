@@ -341,6 +341,8 @@ static struct my_getopt_option long_options[] =
    {"execute",     no_argument,       0,  'e' },
    {"locale",      required_argument, 0,  'l' },
    {"options",     required_argument, 0,  'o' },
+   {"oo",          no_argument,       0,  'O' },
+   {"no-oo",       no_argument,       0,  'N' },
    {0,             0,                 0,  0 }
 };
 /*
@@ -359,7 +361,7 @@ static int check_args( tsd_t *TSD, int argc, char **argv,
    {
       int option_index = 0;
 
-      c = my_getopt_long( argc, argv, "+hi::D::t::pv::yrd::acel:o:", long_options, &option_index );
+      c = my_getopt_long( argc, argv, "+hi::D::t::pv::yrd::acel:o:ON", long_options, &option_index );
       if ( c == -1 )
          break;
 
@@ -512,6 +514,14 @@ static int check_args( tsd_t *TSD, int argc, char **argv,
             do_options( TSD, TSD->currlevel, opts, 0 );
             break;
          }
+
+         case 'O': /* OO extension forced on */
+            oo_set_mode( 1 );
+            break;
+
+         case 'N': /* OO extension off: behave like Regina 3.9.7 */
+            oo_set_mode( -1 );
+            break;
 
          case 'h': /* usage */
          case '?': /* usage */
@@ -1188,6 +1198,8 @@ static void usage( char *argv0 )
    fprintf( stdout,"       p - external packages statically linked\n" );
    fprintf( stdout,"       v - version only\n" );
    fprintf( stdout,"  --restricted, -r                run Regina in \"safe\" mode\n" );
+   fprintf( stdout,"  --oo, -O                        object-oriented keywords on in every program\n" );
+   fprintf( stdout,"  --no-oo, -N                     object-oriented extension off (classic Regina)\n" );
    fprintf( stdout,"  --trace[=char], -t[char]        set TRACE to any valid TRACE character - default A\n" );
    fprintf( stdout,"  --interactive[=char], -i[char]  set TRACE to any valid TRACE character and run interactively - default A\n" );
    fprintf( stdout,"  --args, -a                      pass command line to Rexx program as separate arguments\n");

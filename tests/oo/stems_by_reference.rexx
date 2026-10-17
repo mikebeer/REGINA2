@@ -1,5 +1,5 @@
 /* stems by reference: USE ARG s., RETURN x., Stem objects */
-/* REGINA-OO */
+/* OOREGINA */
 a.0 = 3; a.1 = 1; a.2 = 2; a.3 = 3
 b.0 = 2; b.1 = 10; b.2 = 20
 say 'sum a' sum(a.) 'sum b' sum(b.) 'sum a again' sum(a.)

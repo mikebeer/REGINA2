@@ -1,0 +1,11 @@
+nil is .NIL
+a ~b 1 1
+do x over 2: 2
+a variable
+do counter: 2
+error 64.64.1 x = a~b
+error 35.35.1 x = a->b
+error 13.13.1 x = a[1]
+error 20.20.1 ::class foo
+error 26.26.2 do with index i item v over a; end
+rc=0

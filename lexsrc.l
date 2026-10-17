@@ -145,9 +145,13 @@ static int in_directives=0;
  * do_over_pending is set for "DO name OVER ..." to allow FOR afterwards.
  */
 static int oo_seen=0, do_over_pending=0;
-#define OO_KEYWORDS ( in_directives || oo_seen )
+/* oo_mode() at the start of the parse: 1 forced on, -1 classic, 0 auto */
+static int oo_force=0;
+#define OO_KEYWORDS ( oo_force >= 0 && ( in_directives || oo_seen ) )
+#define OO_OFF      ( oo_force < 0 )
 int __regina_do_is_loop=0;   /* the last DO token was LOOP (yaccsrc.y) */
 int __regina_oo_keywords( void ) { return OO_KEYWORDS ; }
+int __regina_oo_off( void ) { return OO_OFF ; }
 static void oo_second_word( const char *text );
 static int oo_symch( char c );
 
@@ -570,21 +574,6 @@ key_with          [wW][iI][tT][hH]
    BEGIN other ;
    SET_NEXTSTART() ;
    return LEAVE ; }
-
-<comm>{key_options}{blank}+[rR][eE][gG][iI][nN][aA]-[oO][oO]{between} {
-   /*
-    * OO extension: OPTIONS REGINA-OO switches the OO keywords on (see
-    * oo_prescan). Without quotes classic Rexx reads "REGINA - OO", so
-    * the word is passed on as the string 'REGINA-OO'.
-    */
-   if ( oo_symch( yy_hold_char ) )
-      REJECT ;
-   BEGIN other ;
-   strcpy( retvalue, "REGINA-OO" ) ;
-   delayed_symbol = STRING ;
-   inhibit_delayed_abuttal = 0 ;
-   SET_NEXTSTART() ;
-   return OPTIONS ; }
 
 <comm>{key_options}{between} {
    BEGIN other ;
@@ -1931,6 +1920,8 @@ key_with          [wW][iI][tT][hH]
     * other case REJECT falls back to the classic NOT rule.
     */
 {between}\-\>\>{between} {
+   if ( OO_OFF )
+      REJECT ;
    __regina_oo_operator = "->>" ;
    oo_seen = 1 ;
    oo_expect_name = 1 ;
@@ -1939,6 +1930,8 @@ key_with          [wW][iI][tT][hH]
    return CASCADE ; }
 
 {between}\-\>{between} {
+   if ( OO_OFF )
+      REJECT ;
    __regina_oo_operator = "->" ;
    oo_seen = 1 ;
    oo_expect_name = 1 ;
@@ -1947,7 +1940,7 @@ key_with          [wW][iI][tT][hH]
    return MSGSEND ; }
 
 ~~{between} {
-   if ( !insert_abuttal )
+   if ( !insert_abuttal || OO_OFF )
       REJECT ;
    __regina_oo_operator = "~~" ;
    oo_seen = 1 ;
@@ -1957,7 +1950,7 @@ key_with          [wW][iI][tT][hH]
    return CASCADE ; }
 
 ~{between} {
-   if ( !insert_abuttal )
+   if ( !insert_abuttal || OO_OFF )
       REJECT ;
    __regina_oo_operator = "~" ;
    oo_seen = 1 ;
@@ -1971,7 +1964,7 @@ key_with          [wW][iI][tT][hH]
     * directly follow a term; anything else stays an invalid character.
     */
 \[{between} {
-   if ( !insert_abuttal )
+   if ( !insert_abuttal || OO_OFF )
       REJECT ;
    oo_seen = 1 ;
    bracket_depth++ ;
@@ -1992,6 +1985,8 @@ key_with          [wW][iI][tT][hH]
     * clause. "::" is always a syntax error in classic Rexx.
     */
 <comm>::{between} {
+   if ( OO_OFF )
+      REJECT ;
    BEGIN other ;
    in_directives = 1 ;
    SET_NEXTSTART() ;
@@ -3052,12 +3047,12 @@ static void init_it_all( tsd_t *TSD )
  * comments, clause boundaries and continuation commas. It returns 1 if
  * the program switches the OO keywords on:
  *    - a directive: "::" at the start of a clause
- *    - OPTIONS REGINA-OO, OPTIONS 'REGINA-OO' or a quoted option string
- *      containing the word REGINA-OO, at the start of a clause
- *    - a comment that contains only the word REGINA-OO: / * REGINA-OO * /
+ *    - OPTIONS OOREGINA, OPTIONS 'OOREGINA' or a quoted option string
+ *      containing the word OOREGINA, at the start of a clause
+ *    - a comment that contains only the word OOREGINA: / * OOREGINA * /
  */
-#define OO_MARK     "REGINA-OO"
-#define OO_MARK_LEN 9
+#define OO_MARK     "OOREGINA"
+#define OO_MARK_LEN 8
 
 static int oo_symch( char c )
 {
@@ -3083,7 +3078,7 @@ static int oo_blank( char c )
    return c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v';
 }
 
-/* OPTIONS clause starting at s[i] (after the keyword): does it name REGINA-OO? */
+/* OPTIONS clause starting at s[i] (after the keyword): does it name OOREGINA? */
 static int oo_options_mark( const char *s, long len, long i )
 {
    char q;
@@ -3234,12 +3229,17 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
    init_it_all( TSD ) ;
 
    /*
-    * OO extension: the OO keywords are on in programs with directives or a
-    * REGINA-OO marker (see oo_prescan), and in INTERPRET data of a program
-    * using objects.
+    * OO extension: the OO keywords are on in programs with directives or an
+    * OOREGINA marker (see oo_prescan), and in INTERPRET data of a program
+    * using objects. The --oo and --no-oo switches (or REGINA_OO) force
+    * them on or switch the whole extension off.
     */
-   in_directives = has_directive_line( fptr, str )
-                || ( str != NULL && TSD->oo_active );
+   oo_force = oo_mode() ;
+   if ( oo_force )
+      in_directives = ( oo_force > 0 ) ;
+   else
+      in_directives = has_directive_line( fptr, str )
+                   || ( str != NULL && TSD->oo_active );
 
 #ifdef FLEX_SCANNER
    /*

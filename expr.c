@@ -349,7 +349,7 @@ do_an_add:
 
       case X_STRING:
       case X_CON_SYMBOL:
-         if ( thisptr->type == X_CON_SYMBOL && TSD->oo_active && OO_IS_ENVSYMBOL( thisptr ) )
+         if ( thisptr->type == X_CON_SYMBOL && ( TSD->oo_active || oo_mode() > 0 ) && OO_IS_ENVSYMBOL( thisptr ) )
          {
             sptr = oo_eval_envsymbol( TSD, thisptr );
             numthr = get_a_descr( TSD, NULL, 0, sptr );
@@ -673,7 +673,7 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          return NULL ;
 
       case X_CON_SYMBOL:
-         if ( TSD->oo_active && OO_IS_ENVSYMBOL( thisptr ) )
+         if ( ( TSD->oo_active || oo_mode() > 0 ) && OO_IS_ENVSYMBOL( thisptr ) )
          {
             stmp1 = oo_eval_envsymbol( TSD, thisptr );
             if ( TSD->trace_stat == 'I' )
@@ -1059,7 +1059,7 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
 
       case X_STRING:
       case X_CON_SYMBOL:
-         if ( thisptr->type == X_CON_SYMBOL && TSD->oo_active && OO_IS_ENVSYMBOL( thisptr ) )
+         if ( thisptr->type == X_CON_SYMBOL && ( TSD->oo_active || oo_mode() > 0 ) && OO_IS_ENVSYMBOL( thisptr ) )
          {
             tmp = str_to_bool( evaluate( TSD, thisptr, &stmp1 ) );
             FREE_TMP_STRING( stmp1 );

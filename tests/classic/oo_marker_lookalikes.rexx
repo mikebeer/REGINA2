@@ -1,10 +1,10 @@
-/* classic: things that look like the REGINA-OO marker but are not */
-say '/* REGINA-OO */'
-say "options regina-oo"
-/* the word REGINA-OO inside a longer comment */
-/* outer /* REGINA-OO */ comment */
+/* classic: things that look like the OOREGINA marker but are not */
+say '/* OOREGINA */'
+say "options ooregina"
+/* the word OOREGINA inside a longer comment */
+/* outer /* OOREGINA */ comment */
 x = 'a',
-  'options regina-oo'
+  'options ooregina'
 say x
 options 'NOT_A_MARKER'
 counter = 2

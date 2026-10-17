@@ -699,7 +699,7 @@ reinterpret:
 #ifdef OPT_DO
                      chptr = evaluate(TSD, tmpptr, &chkill );
                      if ( !myiswnumber( TSD, chptr, &s.stopval, 1 ) )
-                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, chptr->value );
+                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, tmpstr_of( TSD, chptr ) ); /* NUL-terminated (fix of a 3.9.7 read past the end) */
                      s.stopval_num = streng_to_rx64(TSD, chptr, &error);
                      if ( error )
                         s.strmath = 1; /* have to use string math for this loop */
@@ -745,7 +745,7 @@ s.increment->exp
 #ifdef OPT_DO
                      if ( !myiswnumber( TSD, chptr, &tmpnum, 1 )
                      ||  tmpnum->negative )
-                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, chptr->value );
+                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, tmpstr_of( TSD, chptr ) ); /* NUL-terminated (fix of a 3.9.7 read past the end) */
 
                      s.do_for_val = calcul(TSD,tmpptr,NULL) ;
                      iptr = streng_to_rx64(TSD, chptr, &error);
@@ -757,7 +757,7 @@ s.increment->exp
                         s.strmath = 1; /* have to use string math for this loop */
                      s.do_for_val_num = iptr ;
 #else
-                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, chptr->value );
+                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, tmpstr_of( TSD, chptr ) ); /* NUL-terminated (fix of a 3.9.7 read past the end) */
                      if ( iptr < 0 )
                         exiterror( ERR_INVALID_RESULT, 0 );
                      s.number = iptr;

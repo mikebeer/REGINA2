@@ -93,6 +93,7 @@ static nodeptr do_over_var( nodeptr rep );
 static void finish_do( nodeptr dostat, nodeptr opts );
 extern int __regina_do_is_loop; /* lexsrc.l: the DO token was LOOP */
 extern int __regina_oo_keywords( void ); /* lexsrc.l: OO keywords are on */
+extern int __regina_oo_off( void );      /* lexsrc.l: --no-oo, classic only */
 extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 
 #define IS_EXPRLIST(x) ( ( (x) != NULL )                   \
@@ -1452,7 +1453,8 @@ expr        : '('                      { /* We have to accept exprs here even
             | CONSYMBOL                { /* OO: .NAME may be an environment
                                           * symbol, see OO_IS_ENVSYMBOL */
                                          $$ = makenode( ( retvalue[0] == '.'
-                                                          && rx_isalpha( retvalue[1] ) )
+                                                          && rx_isalpha( retvalue[1] )
+                                                          && !__regina_oo_off() )
                                                         ? X_CON_SYMBOL : X_STRING, 0 );
                                          $$->name = Str_cre_TSD(parser_data.TSD,retvalue) ; }
             | HEXSTRING                { $$ = makenode( X_STRING, 0 );
@@ -2458,7 +2460,7 @@ static void finish_do( nodeptr dostat, nodeptr opts )
          exiterror( ERR_UNMATCHED_END, 0 );
       transform_over( dostat, NULL, rep->p[0], NULL, rep->p[1], rep->p[2], rep->p[3] );
    }
-   else if ( ( overvar = do_over_var( rep ) ) != NULL )
+   else if ( !__regina_oo_off() && ( overvar = do_over_var( rep ) ) != NULL )
    {
       /* OO: DO name OVER collection [FOR n] */
       if ( endname && !same_name( endname, label )

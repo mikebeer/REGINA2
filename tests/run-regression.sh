@@ -39,7 +39,10 @@ run_suite() {   # $1 = suite name
   mkdir -p "$WORK/out/$1"
   cd "$WORK/$1"
   for f in *.rexx; do
-    timeout 60 "$REXX" "./$f" </dev/null >"$WORK/raw" 2>&1
+    # optional interpreter switches for this test in NAME.switches
+    sw=""
+    [ -f "${f%.rexx}.switches" ] && sw=$(cat "${f%.rexx}.switches")
+    timeout 60 "$REXX" $sw "./$f" </dev/null >"$WORK/raw" 2>&1
     echo "rc=$?" >>"$WORK/raw"
     normalize <"$WORK/raw" >"$WORK/out/$1/${f%.rexx}.out"
   done
