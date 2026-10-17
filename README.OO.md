@@ -1,5 +1,7 @@
 # Object-oriented extensions for Regina Rexx
 
+The full manual is [doc/Regina-OO-Manual.pdf](doc/Regina-OO-Manual.pdf); this page is a short guide.
+
 This version of Regina (3.9.7 plus the OO extension) can run object-oriented
 Rexx programs in the style of ooRexx. **It is fully optional:** a program
 that doesn't use any of the new syntax runs exactly as it does on Regina

@@ -1926,9 +1926,11 @@ static streng *m_arr_insert( tsd_t *TSD, oo_call *c )
    const streng *where = opt_arg( c, 1 );
    long idx;
 
-   if ( a->kind == OK_QUEUE )
+   /*
+    * insert(item, index), as in ooRexx for Array and List: after index;
+    * .nil means at the start; without index at the end
+    */
    {
-      /* List~insert(item, index): after index; .nil means first; default last */
       oo_object *w = where ? obj_of( TSD, where ) : NULL;
       if ( where == NULL )
          idx = a->u.a.size + 1;
@@ -1937,8 +1939,6 @@ static streng *m_arr_insert( tsd_t *TSD, oo_call *c )
       else
          idx = whole_arg( TSD, c, 1, 1 ) + 1;
    }
-   else
-      idx = where ? whole_arg( TSD, c, 1, 1 ) : a->u.a.size + 1;
    if ( idx > a->u.a.size + 1 )
       oo_array_put( TSD, a, idx, Str_dupTSD( v ) );
    else
