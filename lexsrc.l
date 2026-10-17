@@ -1340,6 +1340,8 @@ key_with          [wW][iI][tT][hH]
    return THEN ; }
 
 {between}{key_with}{between} {
+   if ( oo_in_name )
+      REJECT ;
    /*
     * Fixes bug 952380
     */
@@ -1441,6 +1443,8 @@ key_with          [wW][iI][tT][hH]
    return FOREVER ; }
 
 {key_to}{between} {
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
    if ( in_do == 2 )
    {
       BEGIN other ;
@@ -1455,6 +1459,8 @@ key_with          [wW][iI][tT][hH]
    REJECT ; }
 
 {key_by}{between} {
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
    if ( in_do == 2 )
    {
       BEGIN other ;
@@ -1469,6 +1475,8 @@ key_with          [wW][iI][tT][hH]
    REJECT ; }
 
 {key_for}{between} {
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
    if ( in_do == 2 || in_do == 4 || ( in_do == 1 && do_over_pending ) )
    {
       /* OO extension: in_do 4 is "DO ... OVER coll", FOR limits it */
@@ -1485,6 +1493,8 @@ key_with          [wW][iI][tT][hH]
    REJECT ; }
 
 {key_while}{between} {
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
    if (in_do)
    {
       if ( in_do == 3 )
@@ -1500,6 +1510,8 @@ key_with          [wW][iI][tT][hH]
    REJECT ; }
 
 {key_until}{between} {
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
    if (in_do) {
       if ( in_do == 3 )
       {

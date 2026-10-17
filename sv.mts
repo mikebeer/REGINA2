@@ -284,6 +284,8 @@
  88,  4,[Method "%s": argument %d must be an Array; found "%s"]|<name>,<argnumber>,<value>
  88,  5,[Method "%s": argument %d must be a non-negative whole number; found "%s"]|<name>,<argnumber>,<value>
  88,  6,[Array index %s exceeds the maximum of 100000000]|<value>
+ 88,  7,[Method "%s": argument %d must be a whole number; found "%s"]|<name>,<argnumber>,<value>
+ 88,  8,[Method "%s": argument %d must not be zero]|<name>,<argnumber>
  90,  0,[Icke-ANSI-karaktäristisk användning med "OPTIONS STRICT_ANSI"]
  90,  1,[%s är en utökning enl. Regina BIF]|<bif>
  90,  2,[%s är en utökad instruktion enl. Regina]|<token>
@@ -335,6 +337,7 @@
  98, 14,[Python: %s]|<description>
  98, 15,[Python is not available in this build]
  98, 16,[The block is used after the routine that created it has ended; begin the block with PROCEDURE]
+ 98, 17,[Method "%s" would change the order of a SortedCollection; use ADD]|<name>
  99,  0,[Translation error]
  99,  1,[Unknown directive "::%s"]|<name>
  99,  2,[Duplicate ::CLASS "%s"]|<name>

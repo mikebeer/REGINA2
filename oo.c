@@ -83,7 +83,7 @@ int oo_mode( void )
 enum {
    OK_PLAIN = 0, OK_CLASS, OK_NIL, OK_ARRAY, OK_DIRECTORY, OK_TABLE,
    OK_QUEUE, OK_BUFFER, OK_SUPER, OK_SUPPLIER, OK_STRING, OK_STEM, OK_CONS,
-   OK_PYOBJ, OK_BLOCK
+   OK_PYOBJ, OK_BLOCK, OK_INTERVAL
 };
 
 #define MF_CLASS     0x0001   /* class method                    */
@@ -168,6 +168,7 @@ typedef struct oo_object {
    int snapshot;                /* internal DO OVER snapshot         */
    streng *handle;
    streng *objname;             /* set by OBJECTNAME=                */
+   streng *aux;                 /* SortedCollection: its sort block  */
    oo_scope *scopes;
    union {
       oo_classdata *c;
@@ -180,6 +181,7 @@ typedef struct oo_object {
       var_hashtable *pool;      /* Stem: private pool with stem "S." */
       struct { streng *car, *cdr; } cons;   /* Cons: a LISP cell     */
       long pyref;               /* PyObject: see pybridge.h          */
+      struct { long from, to, by; } iv;   /* Interval                  */
       struct { struct oo_blockcode *code; proclevel home; unsigned long serial;
                struct oo_frame *homeframe;
                var_hashtable *kept;          /* variables after home ended */
@@ -246,6 +248,7 @@ typedef struct oo_tsd {
    struct oo_program *loading;  /* ::REQUIRES file being loaded */
    struct oo_object *cPython, *cPyObject;   /* the Python bridge     */
    struct oo_object *cBlock;
+   struct oo_object *cInterval, *cSet, *cBag, *cSorted;
    oo_blockcode *blocks;
 } oo_tsd;
 
@@ -2874,6 +2877,13 @@ oo_object *oo_copy_object( tsd_t *TSD, oo_object *o )
       case OK_PYOBJ:
          n->u.pyref = pyb_dup( o->u.pyref );   /* the same Python object */
          break;
+      case OK_INTERVAL:
+         n->u.iv = o->u.iv;
+         break;
+      case OK_BLOCK:
+         n->u.blk = o->u.blk;
+         n->u.blk.nextblock = NULL;
+         break;
       default:
          break;
    }
@@ -2884,6 +2894,8 @@ oo_object *oo_copy_object( tsd_t *TSD, oo_object *o )
       oo_scope *ns = get_scope( TSD, n, s->cls );
       oo_pool_copy( TSD, s->pool, ns->pool );
    }
+   if ( o->aux )
+      n->aux = Str_dupTSD( o->aux );
    return n;
 }
 
@@ -3977,6 +3989,576 @@ static void init_lisp( tsd_t *TSD, oo_tsd *ot )
 }
 
 /* ------------------------------------------------------------------ */
+/* Interval, Set, Bag and SortedCollection                            */
+/* ------------------------------------------------------------------ */
+
+static long signed_arg( tsd_t *TSD, oo_call *c, int i )
+{
+   const streng *s = need_arg( TSD, c, i );
+   int err = 0;
+   long v = streng_to_int( TSD, s, &err );
+
+   if ( err )
+   {
+      streng *d = describe( TSD, s );
+      exiterror( ERR_INVALID_ARGUMENT, 7, tmpstr_of( TSD, c->name ), i + 1, tmpstr_of( TSD, d ) );
+   }
+   return v;
+}
+
+/* the number of values of an interval */
+static long iv_count( oo_object *o )
+{
+   long from = o->u.iv.from, to = o->u.iv.to, by = o->u.iv.by;
+
+   if ( ( by > 0 && from > to ) || ( by < 0 && from < to ) )
+      return 0;
+   return ( to - from ) / by + 1;
+}
+
+static oo_object *new_interval( tsd_t *TSD, oo_object *cls, long from, long to, long by )
+{
+   oo_object *o = new_object( TSD, cls, OK_INTERVAL );
+
+   o->u.iv.from = from;
+   o->u.iv.to = to;
+   o->u.iv.by = by;
+   return o;
+}
+
+/* .Interval~new(from, to [, by]) and "from"~to(to [, by]) */
+static streng *m_iv_new( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *cls = cls_self( TSD, c );
+   long from = signed_arg( TSD, c, 0 ), to = signed_arg( TSD, c, 1 ), by = 1;
+
+   if ( opt_arg( c, 2 ) )
+      by = signed_arg( TSD, c, 2 );
+   if ( by == 0 )
+      exiterror( ERR_INVALID_ARGUMENT, 8, tmpstr_of( TSD, c->name ), 3 );
+   return hdup( TSD, new_interval( TSD, is_subclass( cls, ot->cInterval ) ? cls : ot->cInterval,
+                                   from, to, by ) );
+}
+
+static streng *m_string_to( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   streng *kill;
+   const streng *s = strval( TSD, c, &kill );
+   int err = 0;
+   long from = streng_to_int( TSD, s, &err ), to = signed_arg( TSD, c, 0 ), by = 1;
+
+   if ( err )
+   {
+      streng *d = describe( TSD, s );
+      exiterror( ERR_INVALID_ARGUMENT, 7, "TO", 0, tmpstr_of( TSD, d ) );
+   }
+   if ( kill )
+      Free_stringTSD( kill );
+   if ( opt_arg( c, 1 ) )
+      by = signed_arg( TSD, c, 1 );
+   if ( by == 0 )
+      exiterror( ERR_INVALID_ARGUMENT, 8, "TO", 2 );
+   return hdup( TSD, new_interval( TSD, ot->cInterval, from, to, by ) );
+}
+
+static oo_object *iv_self( tsd_t *TSD, oo_call *c )
+{
+   if ( c->self == NULL || c->self->kind != OK_INTERVAL )
+      err_nomethod( TSD, c->selfstr, c->name );
+   return c->self;
+}
+
+/* at(i): the i-th value, counted from 1 */
+static streng *m_iv_at( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = iv_self( TSD, c );
+   long i = whole_arg( TSD, c, 0, 1 );
+
+   if ( i > iv_count( o ) )
+      return nil_handle( TSD );
+   return mkint( TSD, o->u.iv.from + ( i - 1 ) * o->u.iv.by );
+}
+
+static streng *m_iv_size( tsd_t *TSD, oo_call *c )
+{
+   return mkint( TSD, iv_count( iv_self( TSD, c ) ) );
+}
+
+static streng *m_iv_firstlast( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = iv_self( TSD, c );
+   long n = iv_count( o );
+
+   if ( n == 0 )
+      return nil_handle( TSD );
+   if ( str_eqc( c->name, "FIRST" ) )
+      return mkint( TSD, o->u.iv.from );
+   return mkint( TSD, o->u.iv.from + ( n - 1 ) * o->u.iv.by );
+}
+
+static streng *m_iv_parts( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = iv_self( TSD, c );
+
+   if ( str_eqc( c->name, "FROM" ) )
+      return mkint( TSD, o->u.iv.from );
+   if ( str_eqc( c->name, "TO" ) )
+      return mkint( TSD, o->u.iv.to );
+   return mkint( TSD, o->u.iv.by );
+}
+
+static streng *m_iv_hasitem( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = iv_self( TSD, c );
+   const streng *s = need_arg( TSD, c, 0 );
+   int err = 0;
+   long v = streng_to_int( TSD, s, &err ), n = iv_count( o );
+
+   if ( err || n == 0 )
+      return mkbool( TSD, 0 );
+   v -= o->u.iv.from;
+   return mkbool( TSD, v % o->u.iv.by == 0 && v / o->u.iv.by >= 0 && v / o->u.iv.by < n );
+}
+
+static streng *m_iv_makearray( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *o = iv_self( TSD, c ), *a = new_object( TSD, ot->cArray, OK_ARRAY );
+   long n = iv_count( o ), i;
+
+   if ( n > 100000000L )
+      exiterror( ERR_INVALID_ARGUMENT, 6, tmpstr_of( TSD, mkint( TSD, n ) ) );
+   for ( i = 0; i < n; i++ )
+      oo_array_put( TSD, a, i + 1, mkint( TSD, o->u.iv.from + i * o->u.iv.by ) );
+   return hdup( TSD, a );
+}
+
+static streng *m_iv_reverse( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = iv_self( TSD, c );
+   long n = iv_count( o ), last = o->u.iv.from + ( n - 1 ) * o->u.iv.by;
+
+   if ( n == 0 )
+      return hdup( TSD, new_interval( TSD, o->cls, o->u.iv.to, o->u.iv.from, -o->u.iv.by ) );
+   return hdup( TSD, new_interval( TSD, o->cls, last, o->u.iv.from, -o->u.iv.by ) );
+}
+
+static streng *m_iv_string( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = iv_self( TSD, c );
+   char buf[100];
+
+   if ( o->u.iv.by == 1 )
+      sprintf( buf, "(%ld to %ld)", o->u.iv.from, o->u.iv.to );
+   else
+      sprintf( buf, "(%ld to %ld by %ld)", o->u.iv.from, o->u.iv.to, o->u.iv.by );
+   return Str_creTSD( buf );
+}
+
+/*
+ * Set: every item once. Bag: items with a count. Both are kept as a
+ * Table (identity for objects, value for strings): the key is the item,
+ * the value the item (Set) or its count (Bag).
+ */
+static int is_bag( tsd_t *TSD, oo_object *o )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   return o && o->kind == OK_TABLE && ot->cBag && is_subclass( o->cls, ot->cBag );
+}
+
+static int is_set( tsd_t *TSD, oo_object *o )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   return o && o->kind == OK_TABLE && ot->cSet && is_subclass( o->cls, ot->cSet );
+}
+
+static oo_object *setbag_self( tsd_t *TSD, oo_call *c )
+{
+   if ( !is_set( TSD, c->self ) && !is_bag( TSD, c->self ) )
+      err_nomethod( TSD, c->selfstr, c->name );
+   return c->self;
+}
+
+static long bag_count( const streng *v )
+{
+   long n = 0;
+   int i;
+   for ( i = 0; i < v->len; i++ )
+      n = n * 10 + ( v->value[i] - '0' );
+   return n;
+}
+
+/* adds one item (copied) to a Set or Bag */
+static void setbag_add( tsd_t *TSD, oo_object *o, const streng *item, long times )
+{
+   unsigned hv;
+   oo_entry *e = h_find( o->u.h, item, &hv );
+
+   if ( !is_bag( TSD, o ) )
+   {
+      if ( e == NULL )
+         h_put( TSD, o->u.h, item, Str_dupTSD( item ) );
+      return;
+   }
+   h_put( TSD, o->u.h, item, mkint( TSD, ( e ? bag_count( e->value ) : 0 ) + times ) );
+}
+
+/* put(item), add(item), append(item); Bag: add(item [, times]) */
+static streng *m_sb_add( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = setbag_self( TSD, c );
+   long times = 1;
+
+   if ( is_bag( TSD, o ) && opt_arg( c, 1 ) )
+      times = whole_arg( TSD, c, 1, 1 );
+   setbag_add( TSD, o, need_arg( TSD, c, 0 ), times );
+   return NULL;
+}
+
+/* remove(item): removes it (one occurrence from a Bag); returns it or .nil */
+static streng *m_sb_remove( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = setbag_self( TSD, c );
+   const streng *item = need_arg( TSD, c, 0 );
+   unsigned hv;
+   oo_entry *e = h_find( o->u.h, item, &hv );
+   streng *old;
+
+   if ( e == NULL )
+      return nil_handle( TSD );
+   if ( is_bag( TSD, o ) && bag_count( e->value ) > 1 )
+   {
+      h_put( TSD, o->u.h, item, mkint( TSD, bag_count( e->value ) - 1 ) );
+      return Str_dupTSD( item );
+   }
+   old = h_remove( TSD, o->u.h, item );
+   if ( old )
+      Free_stringTSD( old );
+   return Str_dupTSD( item );
+}
+
+static streng *m_sb_has( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = setbag_self( TSD, c );
+   unsigned hv;
+   return mkbool( TSD, h_find( o->u.h, need_arg( TSD, c, 0 ), &hv ) != NULL );
+}
+
+/* occurrencesOf(item): how often a Bag (or Set) holds it */
+static streng *m_sb_occurrences( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = setbag_self( TSD, c );
+   unsigned hv;
+   oo_entry *e = h_find( o->u.h, need_arg( TSD, c, 0 ), &hv );
+
+   if ( e == NULL )
+      return mkint( TSD, 0 );
+   return mkint( TSD, is_bag( TSD, o ) ? bag_count( e->value ) : 1 );
+}
+
+static long setbag_items( tsd_t *TSD, oo_object *o )
+{
+   oo_entry *e;
+   long n = 0;
+
+   if ( !is_bag( TSD, o ) )
+      return o->u.h->count;
+   for ( e = o->u.h->first; e; e = e->onext )
+      n += bag_count( e->value );
+   return n;
+}
+
+static streng *m_sb_items( tsd_t *TSD, oo_call *c )
+{
+   return mkint( TSD, setbag_items( TSD, setbag_self( TSD, c ) ) );
+}
+
+/* makeArray: the items in the order they were added (a Bag repeats them) */
+static streng *m_sb_makearray( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *o = setbag_self( TSD, c ), *a = new_object( TSD, ot->cArray, OK_ARRAY );
+   oo_entry *e;
+   long n = 0, k, times;
+
+   for ( e = o->u.h->first; e; e = e->onext )
+   {
+      times = is_bag( TSD, o ) ? bag_count( e->value ) : 1;
+      for ( k = 0; k < times; k++ )
+         oo_array_put( TSD, a, ++n, Str_dupTSD( e->key ) );
+   }
+   return hdup( TSD, a );
+}
+
+static oo_object *new_setbag( tsd_t *TSD, oo_object *cls )
+{
+   oo_object *r = new_object( TSD, cls, OK_TABLE );
+   r->u.h = (oo_hash *) MallocTSD( sizeof( oo_hash ) );
+   memset( r->u.h, 0, sizeof( oo_hash ) );
+   return r;
+}
+
+/* the items of any collection argument (Set, Bag, Array, ...) as an Array */
+static oo_object *items_of( tsd_t *TSD, const streng *arg )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *o = obj_of( TSD, arg );
+   streng *h;
+
+   if ( o && ( o->kind == OK_ARRAY || o->kind == OK_QUEUE ) && !ARR_MULTI( o ) )
+      return o;
+   h = send_msg( TSD, arg, ot->s_makearray, 0, NULL );
+   o = obj_of( TSD, h );
+   if ( h )
+      Free_stringTSD( h );
+   if ( o == NULL || ( o->kind != OK_ARRAY && o->kind != OK_QUEUE ) )
+      exiterror( ERR_EXECUTION_ERROR, 5, tmpstr_of( TSD, describe( TSD, arg ) ) );
+   return o;
+}
+
+/* union(c), intersection(c), difference(c): new Sets (Bags) */
+static streng *m_sb_setop( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = setbag_self( TSD, c ), *other = items_of( TSD, need_arg( TSD, c, 0 ) );
+   oo_object *r = new_setbag( TSD, o->cls ), *oset = new_setbag( TSD, o->cls );
+   int op = str_eqc( c->name, "UNION" ) ? 0 : ( str_eqc( c->name, "INTERSECTION" ) ? 1 : 2 );
+   oo_entry *e;
+   unsigned hv;
+   long i, k, times;
+
+   /* the other collection as a Set (Bag) of this kind, to look items up */
+   for ( i = 0; i < other->u.a.size; i++ )
+      if ( other->u.a.v[i] )
+         setbag_add( TSD, oset, other->u.a.v[i], 1 );
+   for ( e = o->u.h->first; e; e = e->onext )
+   {
+      oo_entry *f = h_find( oset->u.h, e->key, &hv );
+      times = is_bag( TSD, o ) ? bag_count( e->value ) : 1;
+      if ( op == 1 )
+      {
+         if ( f == NULL )
+            continue;
+         if ( is_bag( TSD, o ) && bag_count( f->value ) < times )
+            times = bag_count( f->value );
+      }
+      else if ( op == 2 && f )
+      {
+         if ( !is_bag( TSD, o ) )
+            continue;
+         times -= bag_count( f->value );
+         if ( times <= 0 )
+            continue;
+      }
+      for ( k = 0; k < times; k++ )
+         setbag_add( TSD, r, e->key, 1 );
+   }
+   if ( op == 0 )
+      for ( e = oset->u.h->first; e; e = e->onext )
+      {
+         times = is_bag( TSD, o ) ? bag_count( e->value ) : 1;
+         for ( k = 0; k < times; k++ )
+            setbag_add( TSD, r, e->key, 1 );
+      }
+   free_object( TSD, oset );
+   return hdup( TSD, r );
+}
+
+static streng *m_sb_subset( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = setbag_self( TSD, c ), *other = items_of( TSD, need_arg( TSD, c, 0 ) );
+   oo_object *oset = new_setbag( TSD, o->cls );
+   oo_entry *e;
+   unsigned hv;
+   long i;
+   int ok = 1;
+
+   for ( i = 0; i < other->u.a.size; i++ )
+      if ( other->u.a.v[i] )
+         setbag_add( TSD, oset, other->u.a.v[i], 1 );
+   for ( e = o->u.h->first; e && ok; e = e->onext )
+   {
+      oo_entry *f = h_find( oset->u.h, e->key, &hv );
+      if ( f == NULL || ( is_bag( TSD, o ) && bag_count( f->value ) < bag_count( e->value ) ) )
+         ok = 0;
+   }
+   free_object( TSD, oset );
+   return mkbool( TSD, ok );
+}
+
+/* .Set~of(items...), .Bag~of(items...) */
+static streng *m_sb_of( tsd_t *TSD, oo_call *c )
+{
+   oo_object *r = new_setbag( TSD, cls_self( TSD, c ) );
+   int i;
+
+   for ( i = 0; i < c->argc; i++ )
+      if ( c->argv[i] )
+         setbag_add( TSD, r, c->argv[i], 1 );
+   return hdup( TSD, r );
+}
+
+static streng *m_sb_string( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = setbag_self( TSD, c );
+   streng *r = Str_creTSD( is_bag( TSD, o ) ? "a Bag (" : "a Set (" );
+   oo_entry *e;
+   long k, times;
+   int first = 1;
+
+   for ( e = o->u.h->first; e; e = e->onext )
+   {
+      times = is_bag( TSD, o ) ? bag_count( e->value ) : 1;
+      for ( k = 0; k < times; k++ )
+      {
+         streng *t = oo_stringify( TSD, e->key );
+         if ( !first )
+            r = catc( TSD, r, " " );
+         first = 0;
+         r = cats( TSD, r, t ? t : e->key );
+         if ( t )
+            Free_stringTSD( t );
+      }
+   }
+   return catc( TSD, r, ")" );
+}
+
+/*
+ * SortedCollection: an Array kept in order. The order is that of `sort`
+ * (string values; whole numbers by value), or given by a block
+ * f(a, b) that is 1 if a may come before b.
+ */
+static int sorted_before( tsd_t *TSD, oo_object *o, const streng *a, const streng *b )
+{
+   if ( o->aux )
+   {
+      const streng *argv[2];
+      streng *r;
+      int v;
+      argv[0] = a;
+      argv[1] = b;
+      r = fn_call( TSD, o->aux, 2, argv, 1 );
+      v = lisp_bool( TSD, r );
+      Free_stringTSD( r );
+      return v;
+   }
+   return cmp_tails( &a, &b ) <= 0;
+}
+
+static oo_object *sorted_self( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   if ( c->self == NULL || c->self->kind != OK_ARRAY || !is_subclass( c->self->cls, ot->cSorted ) )
+      err_nomethod( TSD, c->selfstr, c->name );
+   return c->self;
+}
+
+/* inserts item (copied) after all items that may come before it */
+static void sorted_add( tsd_t *TSD, oo_object *o, const streng *item )
+{
+   long n = o->u.a.size, lo = 0, hi = n, mid;
+   streng *t;
+
+   while ( lo < hi )
+   {
+      mid = ( lo + hi ) / 2;
+      if ( sorted_before( TSD, o, o->u.a.v[mid], item ) )
+         lo = mid + 1;
+      else
+         hi = mid;
+   }
+   oo_array_put( TSD, o, n + 1, Str_dupTSD( item ) );
+   t = o->u.a.v[n];
+   memmove( o->u.a.v + lo + 1, o->u.a.v + lo, ( n - lo ) * sizeof( streng * ) );
+   o->u.a.v[lo] = t;
+}
+
+/* .SortedCollection~new([f]) */
+static streng *m_sorted_init( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = sorted_self( TSD, c );
+   if ( opt_arg( c, 0 ) )
+      o->aux = Str_dupTSD( opt_arg( c, 0 ) );
+   return NULL;
+}
+
+static streng *m_sorted_add( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = sorted_self( TSD, c );
+   int i;
+   for ( i = 0; i < c->argc; i++ )
+      if ( c->argv[i] )
+         sorted_add( TSD, o, c->argv[i] );
+   return NULL;
+}
+
+static streng *m_sorted_of( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = new_object( TSD, cls_self( TSD, c ), OK_ARRAY );
+   int i;
+   for ( i = 0; i < c->argc; i++ )
+      if ( c->argv[i] )
+         sorted_add( TSD, o, c->argv[i] );
+   return hdup( TSD, o );
+}
+
+static streng *m_sorted_nochange( tsd_t *TSD, oo_call *c )
+{
+   exiterror( ERR_EXECUTION_ERROR, 17, tmpstr_of( TSD, c->name ) );
+   return NULL;
+}
+
+static void add_coll_methods( tsd_t *TSD, oo_object *c );
+static void init_more_collections( tsd_t *TSD, oo_tsd *ot )
+{
+   oo_object *c;
+   int k;
+
+   ot->cInterval = c = new_class( TSD, "Interval", NULL, ot->cObject, OK_INTERVAL );
+   add_methods( TSD, c, "NEW", m_iv_new, MF_CLASS );
+   add_methods( TSD, c, "[] AT", m_iv_at, 0 );
+   add_methods( TSD, c, "SIZE ITEMS", m_iv_size, 0 );
+   add_methods( TSD, c, "FIRST LAST", m_iv_firstlast, 0 );
+   add_methods( TSD, c, "FROM TO BY", m_iv_parts, 0 );
+   add_methods( TSD, c, "HASITEM INCLUDES", m_iv_hasitem, 0 );
+   add_methods( TSD, c, "MAKEARRAY ALLITEMS", m_iv_makearray, 0 );
+   add_methods( TSD, c, "REVERSE", m_iv_reverse, 0 );
+   add_methods( TSD, c, "STRING", m_iv_string, 0 );
+   add_methods( TSD, ot->cString, "TO", m_string_to, 0 );
+   add_coll_methods( TSD, ot->cInterval );
+
+   for ( k = 0; k < 2; k++ )
+   {
+      c = new_class( TSD, k ? "Bag" : "Set", NULL, ot->cObject, OK_TABLE );
+      if ( k )
+         ot->cBag = c;
+      else
+         ot->cSet = c;
+      add_methods( TSD, c, "INIT", m_nothing, 0 );
+      add_methods( TSD, c, "OF", m_sb_of, MF_CLASS );
+      add_methods( TSD, c, "PUT ADD APPEND []=", m_sb_add, 0 );
+      add_methods( TSD, c, "REMOVE REMOVEITEM", m_sb_remove, 0 );
+      add_methods( TSD, c, "HASITEM HASINDEX INCLUDES", m_sb_has, 0 );
+      add_methods( TSD, c, "OCCURRENCESOF", m_sb_occurrences, 0 );
+      add_methods( TSD, c, "ITEMS SIZE", m_sb_items, 0 );
+      add_methods( TSD, c, "ISEMPTY", m_h_isempty, 0 );
+      add_methods( TSD, c, "EMPTY", m_h_empty, 0 );
+      add_methods( TSD, c, "MAKEARRAY ALLITEMS ALLINDEXES", m_sb_makearray, 0 );
+      add_methods( TSD, c, "UNION INTERSECTION DIFFERENCE", m_sb_setop, 0 );
+      add_methods( TSD, c, "ISSUBSETOF", m_sb_subset, 0 );
+      add_methods( TSD, c, "STRING", m_sb_string, 0 );
+      add_coll_methods( TSD, c );
+   }
+
+   ot->cSorted = c = new_class( TSD, "SortedCollection", NULL, ot->cArray, OK_ARRAY );
+   add_methods( TSD, c, "INIT", m_sorted_init, 0 );
+   add_methods( TSD, c, "OF", m_sorted_of, MF_CLASS );
+   add_methods( TSD, c, "ADD APPEND", m_sorted_add, 0 );
+   add_methods( TSD, c, "PUT []= INSERT SORT SORTWITH FILL", m_sorted_nochange, 0 );
+}
+
+/* ------------------------------------------------------------------ */
 /* Blocks: { clauses } and the collection methods that use them        */
 /* ------------------------------------------------------------------ */
 
@@ -4378,10 +4960,22 @@ static oo_object *coll_self( tsd_t *TSD, oo_call *c, coll_items *ci )
       case OK_TABLE:
       {
          oo_entry *e;
-         ci->item = (streng **) MallocTSD( ( o->u.h->count + 1 ) * sizeof( streng * ) );
-         ci->index = (streng **) MallocTSD( ( o->u.h->count + 1 ) * sizeof( streng * ) );
+         long cnt = is_bag( TSD, o ) ? setbag_items( TSD, o ) : (long) o->u.h->count, k;
+         ci->item = (streng **) MallocTSD( ( cnt + 1 ) * sizeof( streng * ) );
+         ci->index = (streng **) MallocTSD( ( cnt + 1 ) * sizeof( streng * ) );
          for ( e = o->u.h->first; e; e = e->onext )
          {
+            if ( is_bag( TSD, o ) || is_set( TSD, o ) )
+            {
+               /* a Set or Bag: the item is its own index */
+               long times = is_bag( TSD, o ) ? bag_count( e->value ) : 1;
+               for ( k = 0; k < times; k++ )
+               {
+                  ci->item[n] = Str_dupTSD( e->key );
+                  ci->index[n++] = Str_dupTSD( e->key );
+               }
+               continue;
+            }
             ci->item[n] = Str_dupTSD( e->value );
             ci->index[n++] = Str_dupTSD( e->key );
          }
@@ -4400,6 +4994,19 @@ static oo_object *coll_self( tsd_t *TSD, oo_call *c, coll_items *ci )
             ci->item[i] = v ? Str_dupTSD( v ) : nullstringptr();
          }
          n = l.n;
+         break;
+      }
+      case OK_INTERVAL:
+      {
+         long cnt = iv_count( o );
+         ci->item = (streng **) MallocTSD( ( cnt + 1 ) * sizeof( streng * ) );
+         ci->index = (streng **) MallocTSD( ( cnt + 1 ) * sizeof( streng * ) );
+         for ( i = 0; i < cnt; i++ )
+         {
+            ci->item[i] = mkint( TSD, o->u.iv.from + i * o->u.iv.by );
+            ci->index[i] = mkint( TSD, i + 1 );
+         }
+         n = cnt;
          break;
       }
       case OK_CONS:
@@ -4423,17 +5030,27 @@ static oo_object *coll_self( tsd_t *TSD, oo_call *c, coll_items *ci )
    return o;
 }
 
-/* a new, empty collection of the receiver's class */
-static oo_object *coll_like( tsd_t *TSD, oo_object *o )
+/*
+ * A new, empty collection of the receiver's class. collect gives an Array
+ * for an Interval and a SortedCollection (its order would not hold).
+ */
+static oo_object *coll_like( tsd_t *TSD, oo_object *o, int collect )
 {
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
    oo_object *r;
 
    switch ( o->kind )
    {
+      case OK_INTERVAL:
+         return new_object( TSD, ot->cArray, OK_ARRAY );
       case OK_ARRAY:
       case OK_QUEUE:
-         return new_object( TSD, ARR_MULTI( o ) ? ot->cArray : o->cls, o->kind );
+         if ( ARR_MULTI( o ) || ( collect && is_subclass( o->cls, ot->cSorted ) ) )
+            return new_object( TSD, ot->cArray, OK_ARRAY );
+         r = new_object( TSD, o->cls, o->kind );
+         if ( o->aux )
+            r->aux = Str_dupTSD( o->aux );
+         return r;
       case OK_DIRECTORY:
       case OK_TABLE:
          r = new_object( TSD, o->cls, o->kind );
@@ -4458,7 +5075,13 @@ static void coll_add( tsd_t *TSD, oo_object *r, const streng *index, streng *ite
          break;
       case OK_DIRECTORY:
       case OK_TABLE:
-         h_put( TSD, r->u.h, index, item );
+         if ( is_set( TSD, r ) || is_bag( TSD, r ) )
+         {
+            setbag_add( TSD, r, item, 1 );
+            Free_stringTSD( item );
+         }
+         else
+            h_put( TSD, r->u.h, index, item );
          break;
       case OK_STEM:
          oo_stem_put( TSD, r->u.pool, ( (oo_tsd *) TSD->oo_tsd )->s_stem, index, item );
@@ -4498,7 +5121,7 @@ static streng *m_coll_select( tsd_t *TSD, oo_call *c )
    coll_items ci;
    const streng *f = need_arg( TSD, c, 0 );
    int mode = str_eqc( c->name, "SELECT" ) ? 1 : ( str_eqc( c->name, "REJECT" ) ? 0 : 2 );
-   oo_object *o = coll_self( TSD, c, &ci ), *res = coll_like( TSD, o );
+   oo_object *o = coll_self( TSD, c, &ci ), *res = coll_like( TSD, o, mode == 2 );
    const streng **lv = NULL;
    long i, nl = 0;
    streng *out;
@@ -5500,6 +6123,7 @@ static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
    ot->cStem = new_class( TSD, "Stem", NULL, ot->cObject, OK_STEM );
    init_lisp( TSD, ot );
    init_blocks( TSD, ot );
+   init_more_collections( TSD, ot );
    init_python( TSD, ot );
 
    /* Object */
@@ -6816,8 +7440,8 @@ streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr )
    else if ( with )
    {
       o = obj_of( TSD, v );
-      if ( o && o->kind != OK_ARRAY && o->kind != OK_QUEUE && o->kind != OK_DIRECTORY
-        && o->kind != OK_TABLE && o->kind != OK_SUPPLIER )
+      if ( o && ( ( o->kind != OK_ARRAY && o->kind != OK_QUEUE && o->kind != OK_DIRECTORY
+        && o->kind != OK_TABLE && o->kind != OK_SUPPLIER ) || is_bag( TSD, o ) || is_set( TSD, o ) ) )
       {
          /* any object that has a SUPPLIER or a MAKEARRAY method */
          streng *sname = Str_creTSD( "SUPPLIER" );
@@ -6874,10 +7498,10 @@ streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr )
    else
    {
       o = obj_of( TSD, v );
-      if ( o && o->kind != OK_ARRAY && o->kind != OK_QUEUE && o->kind != OK_DIRECTORY
-        && o->kind != OK_TABLE && o->kind != OK_SUPPLIER )
+      if ( o && ( ( o->kind != OK_ARRAY && o->kind != OK_QUEUE && o->kind != OK_DIRECTORY
+        && o->kind != OK_TABLE && o->kind != OK_SUPPLIER ) || is_bag( TSD, o ) ) )
       {
-         /* any object that understands MAKEARRAY */
+         /* any object that understands MAKEARRAY; a Bag repeats its items */
          arrh = send_msg( TSD, v, ot->s_makearray, 0, NULL );
          o = obj_of( TSD, arrh );
          if ( o == NULL || ( o->kind != OK_ARRAY && o->kind != OK_QUEUE ) )

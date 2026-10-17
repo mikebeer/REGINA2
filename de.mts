@@ -261,6 +261,8 @@
  88,  4,[Methode "%s": Argument %d muss ein Array sein; gefunden "%s"]|<name>,<argnumber>,<value>
  88,  5,[Methode "%s": Argument %d muss eine nicht negative ganze Zahl sein; gefunden "%s"]|<name>,<argnumber>,<value>
  88,  6,[Array-Index %s überschreitet das Maximum von 100000000]|<value>
+ 88,  7,[Methode "%s": Argument %d muss eine ganze Zahl sein; gefunden "%s"]|<name>,<argnumber>,<value>
+ 88,  8,[Methode "%s": Argument %d darf nicht null sein]|<name>,<argnumber>
  90,  0,[Nicht-ANSI-Besonderheit mit "OPTIONS STRICT_ANSI" benutzt]
  90,  1,[%s ist eine Erweiterungs-BIF von Regina (BIF = built in function, Standardfunktion)]|<bif>
  90,  2,[%s ist eine Erweiterungsinstruktion von Regina]|<token>
@@ -312,6 +314,7 @@
  98, 14,[Python: %s]|<description>
  98, 15,[Python ist in diesem Build nicht verfügbar]
  98, 16,[Der Block wird verwendet, nachdem die Routine, die ihn erzeugt hat, beendet ist; der Block muss mit PROCEDURE beginnen]
+ 98, 17,[Methode "%s" würde die Ordnung einer SortedCollection ändern; ADD verwenden]|<name>
  99,  0,[Übersetzungsfehler]
  99,  1,[Unbekannte Direktive "::%s"]|<name>
  99,  2,[Doppelte ::CLASS "%s"]|<name>

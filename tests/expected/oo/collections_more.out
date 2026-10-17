@@ -1,0 +1,21 @@
+(1 to 10) 10 1 10 3 1 0
+1 2 3 4 5 
+10 7 4 1 
+(2 to 20 by 4) 0 (2 to 10 by 2)
+3 6 9
+120
+1 4 9 16 25
+a Set (a b c) 3 1 0
+a Set (b c d)
+a Set (b c d e) | a Set (c d) | a Set (b) | 1
+b c d 
+a Bag (x x x y) 4 3 0
+a Bag (x x y z z z) 6
+x x y z z z 
+a Bag (x x y) a Bag (xx xx yy zz zz zz)
+the: 3 and: 2
+1 2 3 5 10 1 5 2 The SortedCollection class
+fig kiwi apple banana
+The SortedCollection class The Array class
+Error 98.17: [Method "[]=" would change the order of a SortedCollection; use ADD]
+rc=0
