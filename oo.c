@@ -5361,6 +5361,12 @@ static void init_blocks( tsd_t *TSD, oo_tsd *ot )
  * everything else is a PyObject.
  */
 
+static int py_callback( long id, long n, const pyref *args, pyref *result,
+                        char *err, int errlen );
+static tsd_t *py_tsd;               /* the thread that uses Python      */
+static streng *py_pending_exit;     /* EXIT in a block called by Python */
+static int py_exit_pending = 0;
+
 static void py_start( tsd_t *TSD )
 {
    static int started = 0;
@@ -5375,11 +5381,20 @@ static void py_start( tsd_t *TSD )
    fflush( stdout );
    if ( pyb_init( script, NULL ) != 0 )
       exiterror( ERR_EXECUTION_ERROR, 14, pyb_error() );
+   py_tsd = TSD;
+   pyb_set_callback( py_callback );
    started = 1;
 }
 
 static void py_fail( tsd_t *TSD )
 {
+   if ( py_exit_pending )
+   {
+      /* EXIT in a block that Python called: now that Python is left */
+      extern void jump_script_exit( tsd_t *TSD, streng *result );
+      py_exit_pending = 0;
+      jump_script_exit( TSD, py_pending_exit );
+   }
    fflush( stdout );
    exiterror( ERR_EXECUTION_ERROR, 14, pyb_error() );
 }
@@ -5514,6 +5529,9 @@ static pyref to_py( tsd_t *TSD, const streng *s, int depth )
    {
       case OK_PYOBJ:
          return pyb_dup( o->u.pyref );
+      case OK_BLOCK:
+         /* a Python callable that runs the block */
+         return pyb_rexx_callable( (long) o->id );
       case OK_NIL:
          return pyb_none();
       case OK_ARRAY:
@@ -6079,6 +6097,83 @@ static streng *m_python_unknown( tsd_t *TSD, oo_call *c )
    py_free_args( a, n );
    FreeTSD( a );
    return from_py( TSD, r );
+}
+
+/*
+ * Python calls a Rexx block. The block runs protected (oo_try_call): an
+ * error or EXIT in it must first leave the Python interpreter. An error
+ * becomes a Python RuntimeError, and so error 98.14 in the Rexx code
+ * that called Python; EXIT ends the program after that.
+ */
+typedef struct {
+   oo_object *block;
+   long n;
+   const pyref *args;
+   pyref result;
+} py_cbdata;
+
+static void py_cb_run( tsd_t *TSD, void *data )
+{
+   py_cbdata *d = (py_cbdata *) data;
+   const streng **argv = (const streng **) MallocTSD( ( d->n + 1 ) * sizeof( streng * ) );
+   streng *r, *h = hdup( TSD, d->block );
+   long i;
+
+   for ( i = 0; i < d->n; i++ )
+      argv[i] = from_py( TSD, pyb_dup( d->args[i] ) );
+   r = fn_call( TSD, h, (int) d->n, argv, 0 );
+   d->result = r ? to_py( TSD, r, 0 ) : pyb_none();
+   if ( r )
+      Free_stringTSD( r );
+   for ( i = 0; i < d->n; i++ )
+      Free_stringTSD( (streng *) argv[i] );
+   FreeTSD( (void *) argv );
+   Free_stringTSD( h );
+}
+
+static int py_callback( long id, long n, const pyref *args, pyref *result,
+                        char *err, int errlen )
+{
+   extern int oo_try_call( tsd_t *TSD, void (*fn)( tsd_t *, void * ), void *data );
+   extern const char *oo_captured_error( int *no, int *sub );
+   tsd_t *TSD = py_tsd;
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   py_cbdata d;
+   int status, no, sub;
+   const char *text;
+
+   if ( id <= 0 || (unsigned long) id > ot->nobjs || ot->objs[id] == NULL
+     || ot->objs[id]->kind != OK_BLOCK )
+   {
+      strncpy( err, "the Rexx block no longer exists", errlen - 1 );
+      return -1;
+   }
+   d.block = ot->objs[id];
+   d.n = n;
+   d.args = args;
+   d.result = -1;
+   status = oo_try_call( TSD, py_cb_run, &d );
+   if ( status == 0 )
+   {
+      *result = d.result;
+      return 0;
+   }
+   if ( status == 1 )
+   {
+      py_pending_exit = TSD->systeminfo->result;
+      TSD->systeminfo->result = NULL;
+      py_exit_pending = 1;
+      strncpy( err, "EXIT in a Rexx block", errlen - 1 );
+      return -1;
+   }
+   text = oo_captured_error( &no, &sub );
+   if ( strncmp( text, "Error ", 6 ) == 0 )
+      sprintf( err, "%.600s", text );      /* "Error 42.3: ..." */
+   else if ( sub )
+      sprintf( err, "Error %d.%d: %.500s", no, sub, text );
+   else
+      sprintf( err, "Error %d: %.500s", no, text );
+   return -1;
 }
 
 static void init_python( tsd_t *TSD, oo_tsd *ot )

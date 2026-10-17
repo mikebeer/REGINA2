@@ -561,6 +561,29 @@ static const char *get_embedded_text_message( int errorno, int suberrorno )
  *             Maybe, we don't have a functional tsd_t!
  *             What shall we do?
  */
+/*
+ * OO extension: while oo_error_capture is set (a Rexx block called from
+ * Python), a fatal error is not printed but kept for the caller, see
+ * oo_try_call() in interprt.c.
+ */
+static int oo_error_capture = 0;
+static int oo_captured_no, oo_captured_sub;
+static char oo_captured_text[600];
+
+int oo_set_error_capture( int on )
+{
+   int old = oo_error_capture;
+   oo_error_capture = on;
+   return old;
+}
+
+const char *oo_captured_error( int *no, int *sub )
+{
+   *no = oo_captured_no;
+   *sub = oo_captured_sub;
+   return oo_captured_text;
+}
+
 void exiterror( int errorno, int suberrorno, ... )
 {
    staticstreng( nofile, "<name>" );
@@ -736,6 +759,20 @@ void exiterror( int errorno, int suberrorno, ... )
    }
 
    et->conditions++;
+   if ( oo_error_capture && TSD->systeminfo->script_exit )
+   {
+      const streng *t = suberror_streng ? suberror_streng : etext;
+      int n = Str_len( t ) < (int) sizeof( oo_captured_text ) - 1
+            ? Str_len( t ) : (int) sizeof( oo_captured_text ) - 1;
+      oo_captured_no = errorno;
+      oo_captured_sub = suberrorno;
+      memcpy( oo_captured_text, t->value, n );
+      oo_captured_text[n] = '\0';
+      if ( suberror_streng )
+         Free_stringTSD( suberror_streng );
+      clear_errortext_buffers( TSD );
+      goto not_hookable;
+   }
    if ( ( inputfile = TSD->systeminfo->input_file ) == NULL )
       inputfile = (streng *) nofile;
    ok = HOOK_GO_ON;

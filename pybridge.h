@@ -57,4 +57,14 @@ pyref pyb_op( const char *op, pyref a, pyref b );           /* b == -1: unary */
 int pyb_truth( pyref r );                                   /* -1 on error */
 int pyb_is_mapping( pyref r );                              /* dict, Counter, ... */
 
+/*
+ * Rexx code called from Python: pyb_rexx_callable(id) is a Python object
+ * that calls cb(id, args) when Python calls it. cb returns 0 and a new
+ * reference in *result, or -1 and a message (raised as RuntimeError).
+ */
+typedef int ( *pyb_callback )( long id, long n, const pyref *args, pyref *result,
+                               char *err, int errlen );
+void pyb_set_callback( pyb_callback cb );
+pyref pyb_rexx_callable( long id );
+
 #endif

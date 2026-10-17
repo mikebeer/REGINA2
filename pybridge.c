@@ -47,6 +47,8 @@ pyref pyb_getitem( pyref o, long n, const pyref *k ) { (void)o; (void)n; (void)k
 int pyb_setitem( pyref o, long n, const pyref *k, pyref v )
    { (void)o; (void)n; (void)k; (void)v; return -1; }
 pyref pyb_op( const char *op, pyref a, pyref b ) { (void)op; (void)a; (void)b; return -1; }
+void pyb_set_callback( pyb_callback cb ) { (void)cb; }
+pyref pyb_rexx_callable( long id ) { (void)id; return -1; }
 int pyb_truth( pyref r ) { (void)r; return -1; }
 int pyb_is_mapping( pyref r ) { (void)r; return 0; }
 
@@ -170,15 +172,25 @@ static const char rx_helpers[] =
 "    for part in name.split('.')[1:]:\n"
 "        m = getattr(m, part)\n"
 "    return m\n"
+"class _rx_Callback:\n"
+"    def __init__(self, ref):\n"
+"        self.ref = ref\n"
+"    def __call__(self, *args, **kw):\n"
+"        a = list(args)\n"
+"        if kw:\n"
+"            a.append(kw)\n"
+"        return _rx_rexxcall(self.ref, a)\n"
+"    def __repr__(self):\n"
+"        return '<Rexx block>'\n"
 "def _rx_type(o):\n"
 "    return type(o).__name__\n";
 
 enum { H_SEND, H_CALL, H_SETATTR, H_GLOBAL, H_EVAL, H_GETITEM, H_SETITEM, H_OP,
-       H_ITEMS, H_DICTITEMS, H_TRUTH, H_TYPE, H_ATTR, H_KW, H_IMPORT, H_ISMAP, H_COUNT };
+       H_ITEMS, H_DICTITEMS, H_TRUTH, H_TYPE, H_ATTR, H_KW, H_IMPORT, H_ISMAP, H_CALLBACK, H_COUNT };
 static const char *helper_names[H_COUNT] = {
    "_rx_send", "_rx_call", "_rx_setattr", "_rx_global", "_rx_eval", "_rx_getitem",
    "_rx_setitem", "_rx_op", "_rx_items", "_rx_dict_items", "_rx_truth", "_rx_type",
-   "_rx_attr", "_rx_KW", "_rx_import", "_rx_ismap"
+   "_rx_attr", "_rx_KW", "_rx_import", "_rx_ismap", "_rx_Callback"
 };
 static Value helpers[H_COUNT];
 
@@ -295,6 +307,43 @@ int pyb_available( void )
    return 1;
 }
 
+/* Rexx code called from Python: _rx_rexxcall(id, args) */
+static pyb_callback rexx_cb;
+
+void pyb_set_callback( pyb_callback cb )
+{
+   rexx_cb = cb;
+}
+
+static Value bi_rx_rexxcall( Args *x )
+{
+   long id, n, i;
+   pyref *a, r = -1;
+   char err[700];
+   int rc;
+   List *l;
+   Value v;
+
+   if ( x->n != 2 || x->a[0].t != T_INT || x->a[1].t != T_LIST || rexx_cb == NULL )
+      throw_new( cls_TypeError, "_rx_rexxcall(id, list)" );
+   id = x->a[0].u.i;
+   l = AS_LIST( x->a[1] );
+   n = l->n;
+   a = (pyref *) malloc( sizeof( pyref ) * (size_t) ( n ? n : 1 ) );
+   for ( i = 0; i < n; i++ )
+      a[i] = keep( l->a[i] );
+   err[0] = '\0';
+   rc = rexx_cb( id, n, a, &r, err, (int) sizeof( err ) );
+   for ( i = 0; i < n; i++ )
+      pyb_release( a[i] );
+   free( a );
+   if ( rc != 0 )
+      throw_new( cls_RuntimeError, "%s", err );
+   v = val( r );
+   pyb_release( r );
+   return v;
+}
+
 const char *pyb_error( void )
 {
    return errbuf;
@@ -354,6 +403,7 @@ int pyb_init( const char *script, const char *exe )
    init_runtime( 1, argv );
    gc_perm = 1;
    refs = list_new( 64 );
+   def_bi( NULL, "_rx_rexxcall", bi_rx_rexxcall );
    gc_perm = 0;
    script_name = "<rexx>";
    py_state = -1;
@@ -675,6 +725,13 @@ int pyb_setitem( pyref obj, long nkeys, const pyref *keys, pyref value )
    GUARDED( call_helper( H_SETITEM, 3, val( obj ), k, val( value ), NONE_V ), -1 );
    vsp = base;
    return 0;
+}
+
+pyref pyb_rexx_callable( long id )
+{
+   Value *base = vsp;
+   GUARDED( call_helper( H_CALLBACK, 1, mkint( id ), NONE_V, NONE_V, NONE_V ), -1 );
+   return keep( pyb_res );
 }
 
 pyref pyb_op( const char *op, pyref a, pyref b )

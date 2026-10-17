@@ -2918,6 +2918,54 @@ void jump_script_exit( tsd_t *TSD, streng *result )
  * code (the prolog of a ::REQUIRES file). Errors still end the program.
  * Returns 1 if the code ended with EXIT.
  */
+/*
+ * Calls fn for a Rexx block called from Python: an error or EXIT in it
+ * must not jump over the Python interpreter. Returns 0, 1 for EXIT (the
+ * value is in TSD->systeminfo->result) or 2 for an error, see
+ * oo_captured_error(). A SYNTAX trap of the caller is off meanwhile, so
+ * that the error ends here.
+ */
+int oo_try_call( tsd_t *TSD, void (*fn)( tsd_t *, void * ), void *data )
+{
+   extern int oo_set_error_capture( int on );
+   jmp_buf jb;
+   jmp_buf * volatile save = TSD->systeminfo->script_exit;
+   proclevel volatile oldlevel = TSD->currlevel;
+   nodeptr volatile savenode = TSD->currentnode;
+   volatile int cstack = TSD->systeminfo->cstackcnt;
+   volatile unsigned nst = nstacktrigger( TSD );
+   volatile unsigned st = stacktrigger( TSD );
+   volatile int errfree = TSD->instore_is_errorfree;
+   volatile int status = 0, capture;
+   trap *ct = gettraps( TSD, oldlevel );
+   volatile int syntax_on = ct[SIGNAL_SYNTAX].on_off;
+
+   ct[SIGNAL_SYNTAX].on_off = 0;
+   capture = oo_set_error_capture( 1 );
+   TSD->instore_is_errorfree = 1;
+   TSD->systeminfo->script_exit = &jb;
+   if ( setjmp( jb ) == 0 )
+      fn( TSD, data );
+   else
+   {
+      status = TSD->instore_is_errorfree ? 1 : 2;
+      nstackcleanup( TSD, nst, NULL );
+      stackcleanup( TSD, st );
+      if ( oldlevel->next )
+         removelevel( TSD, oldlevel->next );
+      TSD->currlevel = oldlevel;
+      oldlevel->next = NULL;
+      TSD->trace_stat = oldlevel->tracestat;
+      TSD->currentnode = savenode;
+      TSD->systeminfo->cstackcnt = cstack;
+   }
+   oo_set_error_capture( capture );
+   gettraps( TSD, oldlevel )[SIGNAL_SYNTAX].on_off = syntax_on;
+   TSD->systeminfo->script_exit = save;
+   TSD->instore_is_errorfree = errfree;
+   return status;
+}
+
 int oo_exit_protected( tsd_t *TSD, void (*fn)( tsd_t *, void * ), void *data )
 {
    jmp_buf jb;
