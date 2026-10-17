@@ -111,6 +111,7 @@ exit
     ['Classes', 'Object, Class, String, Array (with any number of dimensions), Queue, List, Directory, StringTable, Table, Stem, MutableBuffer, Supplier; `.nil`, `.true`, `.false`, `.environment`, `.local`'],
     ['Methods', 'instance and class methods, attributes, constants, private and abstract methods, UNKNOWN, operator methods, mixins and multiple inheritance'],
     ['Stems', 'stems passed by reference with `USE ARG s.`, stems returned with `RETURN x.`'],
+    ['Lists', 'LISP-style lists: the Cons class, and with `::requires \'lisp\'` the functions `cons`, `car`, `cdr`, `list`, `mapcar` and more'],
     ['Control', 'markers `/* OOREGINA */` and `OPTIONS OOREGINA`, switches `--oo` and `--no-oo`, variable `REGINA_OO`'],
     ['Errors', 'error numbers 88, 91, 97, 98 and 99 as in ooRexx, in all message languages'],
   ], W(1700, 7938), 'What the extension adds'),
@@ -316,6 +317,8 @@ const ch5 = [
   ...UL([
     '`->` and `->>` as alternative spellings of `~` and `~~`, with blanks allowed around them.',
     'The markers `OOREGINA` and the switches `--oo` and `--no-oo` (ooRexx has no classic mode).',
+    'LISP-style lists: the Cons class and the built-in `lisp` library.',
+    '`::requires` anywhere in a program, for example at the top.',
     'Regina\'s classic features remain: its built-in functions, OPTIONS, the external queue, ADDRESS WITH and the Regina API.',
   ]),
   H2('Different behaviour'),
@@ -508,6 +511,48 @@ say m~dimensions~toString(, 'x') m[2, 3]                  /* 3x4 23  */`, 'A two
     ['`available`, `index`, `item`, `next`', 'Test, current index and item, step.'],
     ['`allIndexes`, `allItems`', 'The remaining indexes and items.'],
   ]),
+  H2('Cons: LISP-style lists'),
+  P('A LISP list is a chain of cells. Each cell (a Cons) holds two values, the CAR (the item) and the CDR (the rest of the list); the last cell of a list has `.nil` as its CDR, and `.nil` is the empty list. `say` prints a list in LISP notation: `(1 2 3)`, nested lists as `(1 (2 3))`, a cell whose CDR is no list as a dotted pair `(a . b)`, and atoms with blanks in quotes.'),
+  ...table(['Method', 'Meaning'], [
+    ['`new(car, cdr)` (class)', 'A new cell.'],
+    ['`of(items...)` (class)', 'A list of the items; without items `.nil`.'],
+    ['`read(string)` (class)', 'The list written in LISP notation in the string: `( )`, atoms, `"strings"` (`""` for a quote), `(a . b)`, `NIL`, and `;` comments. A syntax error is error 98.13.'],
+    ['`apply(f, list)` (class)', 'Calls the function F with the items of LIST as its arguments.'],
+    ['`car`, `cdr`, `first`, `rest`', 'The item and the rest of the list.'],
+    ['`second`, `third`, `[n]`, `at(n)`', 'An item, counted from 1.'],
+    ['`nthcdr(n)`', 'The list without its first N items (counted from 0, as in LISP).'],
+    ['`length`, `isList`', 'The number of cells; 1 if the list ends with `.nil`. A circular list is error 98.12.'],
+    ['`last`, `lastItem`', 'The last cell, the last item.'],
+    ['`reverse`, `copy`, `append(lists...)`', 'New lists; `append` shares its last argument, as in LISP.'],
+    ['`member(x)`, `assoc(key)`', 'The rest of the list starting at X; the first pair whose CAR is KEY.'],
+    ['`map(f)`, `filter(f)`, `reduce(f, initial)`', 'A list of `f(item)`; the items for which `f(item)` is 1; `f(f(initial, item1), item2)` and so on.'],
+    ['`equal(x)`', 'True if X has the same structure and equal atoms.'],
+    ['`setCar(x)`, `setCdr(x)`', 'Changes the cell.'],
+    ['`makeArray`, `string`', 'An Array of the items; the printed form.'],
+  ], W(3100, 6538), 'Methods of Cons'),
+  P('`.nil` answers the list methods as the empty list: `.nil~length` is 0, `.nil~car` and `.nil~cdr` are `.nil`, `.nil~map(f)` is `.nil`. `DO x OVER list` walks the items of a list.'),
+  P('A function F is given by its name. It can be an internal routine of the program (for example `square: procedure`), a `::routine`, a built-in function such as `max` or `abs`, or the name of a method that is sent to each item. An internal routine is found in the program that calls `map`, also when the call goes through the `lisp` library.'),
+  H3('The lisp library'),
+  P('`::requires \'lisp\'` gives the classic LISP functions as routines. The library is built into the interpreter; a file `lisp.cls` next to the program or in REGINA_MACROS replaces it. Its source is in `lib/lisp.cls` of the repository.'),
+  ...table(['Function', 'Meaning'], [
+    ['`cons(a, d)`, `list(items...)`', 'A new cell; a new list.'],
+    ['`car(x)`, `cdr(x)`, `caar`, `cadr`, `cdar`, `cddr`, `caddr`', 'Parts of a list.'],
+    ['`null(x)`, `atom(x)`, `consp(x)`, `listp(x)`', 'Tests: the empty list, not a cell, a cell, a list.'],
+    ['`nth(n, l)`, `nthcdr(n, l)`', 'Counted from 0, as in LISP.'],
+    ['`llength(l)`, `lreverse(l)`, `last(l)`', 'Length, reverse and last cell; LENGTH and REVERSE are Rexx built-in functions, hence the L.'],
+    ['`append(l...)`, `member(x, l)`, `assoc(k, alist)`', 'As the methods.'],
+    ['`mapcar(f, l)`, `filter(f, l)`, `reduce(f, l, init)`, `apply(f, l)`', 'Functions that take a function name.'],
+    ['`equal(a, b)`, `eq(a, b)`', 'Same structure; the same object or equal atoms.'],
+    ['`rplaca(c, x)`, `rplacd(c, x)`', 'Change a cell; call them with CALL, as any function whose result is not used.'],
+    ['`read(string)`', 'A list from its printed form.'],
+  ], W(3600, 6038), 'Functions of the lisp library'),
+  ...screen(`::requires 'lisp'
+l = list(5, 3, 8)
+say cons(1, l) car(l) cdr(l)            /* (1 5 3 8) 5 (3 8) */
+say mapcar('square', l) llength(l)      /* (25 9 64) 3       */
+say read('(a (b c) . d)')               /* (a (b c) . d)     */
+exit
+square: procedure; return arg(1) * arg(1)`, 'Using the lisp library'),
 ];
 
 // ------------------------------------------------------------------
@@ -522,6 +567,7 @@ const samples = [
   ['06_data_structures', 'Data structures', 'A Stack built on Array and a binary search tree of Node objects linked by references.'],
   ['07_dynamic', 'Dynamic messages', 'A logging proxy built with UNKNOWN, a mixin class that adds PRINT to two unrelated classes, and messages chosen at run time with SEND and SENDWITH.'],
   ['08_inventory', 'A small application', 'Stock keeping with Product and Inventory classes: orders, a sorted value report and a reorder list.'],
+  ['09_lisp', 'LISP-style lists', 'An evaluator for expressions in LISP notation such as `(* 2 (+ 3 4))`, quicksort and flatten written recursively, and an association list.'],
 ];
 const ch8 = [
   H1('Chapter 8. Sample Programs'),
@@ -550,6 +596,7 @@ const ch9 = [
   ...UL([
     'The ooRexx features listed in Chapter 5 under "Not available" are missing, notably RAISE, FORWARD, GUARD, REPLY, START and many classes.',
     'An array can have up to 64 dimensions and at most 100,000,000 places in all (error 88.6).',
+    'A function given by name to `map`, `filter`, `reduce`, `mapcar` or `apply` must be an internal routine, a `::routine`, a built-in function or a method; external routines are not searched. LISP lists use the CAR/CDR recursion of LISP, so very long lists are better handled with `DO x OVER` than with deep recursion.',
     '`sort` orders the string values of the items; there are no comparators.',
     'The new keywords need a marker, a directive, an earlier message operator or `--oo` (Chapter 3). A program that uses objects only through routine arguments, without any of these, must add a marker to use them.',
     'Directives are not allowed in INTERPRET data (error 98.2).',

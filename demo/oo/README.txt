@@ -12,5 +12,6 @@ Run any of them with:   rexx 01_classes.rexx
 06_data_structures.rexx  a Stack built on Array, a binary search tree
 07_dynamic.rexx          UNKNOWN (a logging proxy), mixins, SEND/SENDWITH
 08_inventory.rexx        a small stock-keeping application
+09_lisp.rexx             LISP-style lists: an expression evaluator, quicksort
 
 ../oo_demo.rexx          a quick self-test of classic and OO features

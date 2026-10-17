@@ -111,6 +111,30 @@ or in a longer comment doesn't count. Elsewhere the words keep their classic
 meaning, so a classic program with a variable named `counter` or a command
 named `loop` runs as before.
 
+### LISP-style lists
+
+```rexx
+::requires 'lisp'                       /* built into the interpreter */
+l = list(5, 3, 8)
+say cons(1, l) car(l) cdr(l)            /* (1 5 3 8) 5 (3 8) */
+say mapcar('square', l) llength(l)      /* (25 9 64) 3       */
+say read('(a (b c) . d)')               /* (a (b c) . d)     */
+exit
+square: procedure; return arg(1) * arg(1)
+```
+
+Lists are chains of `Cons` cells, and `.nil` is the empty list. The `Cons`
+class has the methods `car cdr first rest second third [] nthcdr length
+last lastItem reverse append copy member assoc map filter reduce equal
+isList makeArray setCar setCdr`, and the class methods `new`, `of`, `read`
+and `apply`. `::requires 'lisp'` adds the functions `cons car cdr caar cadr
+cdar cddr caddr list null atom consp listp nth nthcdr llength lreverse last
+append member assoc mapcar filter reduce apply equal eq rplaca rplacd read`
+(`llength` and `lreverse`, because LENGTH and REVERSE are Rexx built-in
+functions). A function passed by name can be an internal routine, a
+`::routine`, a built-in function or a method of the items. See
+`demo/oo/09_lisp.rexx`.
+
 ### Forcing the mode when starting
 
 | Switch | Environment | Effect |
