@@ -249,6 +249,7 @@ typedef struct oo_tsd {
    struct oo_object *cPython, *cPyObject;   /* the Python bridge     */
    struct oo_object *cBlock;
    struct oo_object *cInterval, *cSet, *cBag, *cSorted;
+   struct oo_object *extending;   /* class of the current ::EXTENSION */
    oo_blockcode *blocks;
 } oo_tsd;
 
@@ -851,6 +852,14 @@ static void setup_self( tsd_t *TSD, void *data )
    setvalue( TSD, ot->s_super, hdup( TSD, sc->superproxy ), -1 );
 }
 
+static void setup_selfstr( tsd_t *TSD, void *data )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   self_setup *ss = (self_setup *) data;
+
+   setvalue( TSD, ot->s_self, Str_dupTSD( ss->selfstr ), -1 );
+}
+
 /*
  * Runs a method or routine body as a new activation, see oo_run_level()
  * in interprt.c.
@@ -868,6 +877,9 @@ static streng *run_body( tsd_t *TSD, nodeptr body, oo_frame *frame,
    }
    ss.selfstr = selfstr;
    ss.frame = frame;
+   if ( frame->self == NULL && selfstr )
+      /* a method of String (::EXTENSION String) for a plain string */
+      return oo_run_level( TSD, body, args, frame, setup_selfstr, &ss );
    return oo_run_level( TSD, body, args, frame, frame->self ? setup_self : NULL, &ss );
 }
 
@@ -6327,7 +6339,8 @@ static oo_method *new_user_method( tsd_t *TSD, oo_object *cls, const streng *nam
    list = ( flags & MF_CLASS ) ? cls->u.c->cmethods : cls->u.c->imethods;
    {
       streng *u = upper_dup( TSD, name );
-      if ( find_in( list, u ) )
+      /* ::EXTENSION may replace a method: the newest is found first */
+      if ( find_in( list, u ) && ( (oo_tsd *) TSD->oo_tsd )->extending != cls )
       {
          TSD->currentnode = d;
          exiterror( ERR_TRANSLATION_ERROR, 3, tmpstr_of( TSD, u ),
@@ -6415,8 +6428,10 @@ static void resolve_class( tsd_t *TSD, oo_object *c )
 static void process_directives( tsd_t *TSD, oo_program *prog, nodeptr first )
 {
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
-   oo_object *cls = NULL, **mine = NULL;
-   int nmine = 0, i, k, nw;
+   oo_object *cls = NULL, **mine = NULL, **pend_cls = NULL;
+   streng **pend_name = NULL;
+   nodeptr *pend_dir = NULL;
+   int nmine = 0, i, k, nw, npend = 0;
    nodeptr d;
    const streng *w[64];
    nodeptr save = TSD->currentnode;
@@ -6444,6 +6459,8 @@ static void process_directives( tsd_t *TSD, oo_program *prog, nodeptr first )
          continue;
       if ( nw < 1 )
          exiterror( ERR_TRANSLATION_ERROR, 5, tmpstr_of( TSD, d->name ) );
+      if ( str_eqc( d->name, "CLASS" ) || str_eqc( d->name, "ROUTINE" ) )
+         ot->extending = NULL;
 
       if ( str_eqc( d->name, "CLASS" ) )
       {
@@ -6569,8 +6586,92 @@ static void process_directives( tsd_t *TSD, oo_program *prog, nodeptr first )
          ot->routines = r;
          cls = NULL;
       }
+      else if ( str_eqc( d->name, "EXTENSION" ) )
+      {
+         /*
+          * ::EXTENSION class [INHERIT mixin ...]: the following ::METHOD,
+          * ::ATTRIBUTE and ::CONSTANT directives add to (or replace
+          * methods of) an existing class, also a built-in one.
+          */
+         streng *id = upper_dup( TSD, w[0] );
+         cls = NULL;
+         for ( i = 0; i < nmine && cls == NULL; i++ )
+            if ( str_eq( mine[i]->u.c->id, id ) )
+               cls = mine[i];
+         if ( cls == NULL )
+            cls = class_by_id( ot, id );
+         Free_stringTSD( id );
+         if ( cls == NULL || cls == ot->cNilList )
+            exiterror( ERR_TRANSLATION_ERROR, 10, tmpstr_of( TSD, w[0] ) );
+         for ( k = 1; k < nw; k++ )
+         {
+            if ( opt_is( w[k], "INHERIT" ) )
+            {
+               /* the mixins are added when all classes of the file exist */
+               for ( k++; k < nw; k++ )
+               {
+                  if ( npend % 16 == 0 )
+                  {
+                     oo_object **nc = (oo_object **) MallocTSD( ( npend + 16 ) * sizeof( oo_object * ) );
+                     streng **nn = (streng **) MallocTSD( ( npend + 16 ) * sizeof( streng * ) );
+                     nodeptr *nd = (nodeptr *) MallocTSD( ( npend + 16 ) * sizeof( nodeptr ) );
+                     if ( npend )
+                     {
+                        memcpy( nc, pend_cls, npend * sizeof( oo_object * ) );
+                        memcpy( nn, pend_name, npend * sizeof( streng * ) );
+                        memcpy( nd, pend_dir, npend * sizeof( nodeptr ) );
+                        FreeTSD( pend_cls );
+                        FreeTSD( pend_name );
+                        FreeTSD( pend_dir );
+                     }
+                     pend_cls = nc;
+                     pend_name = nn;
+                     pend_dir = nd;
+                  }
+                  pend_cls[npend] = cls;
+                  pend_dir[npend] = d;
+                  pend_name[npend++] = upper_dup( TSD, w[k] );
+               }
+            }
+            else
+               bad_option( TSD, d, w[k] );
+         }
+         ot->extending = cls;
+         continue;
+      }
       else
          exiterror( ERR_TRANSLATION_ERROR, 1, tmpstr_of( TSD, d->name ) );
+   }
+   ot->extending = NULL;
+
+   /* ::EXTENSION ... INHERIT mixin */
+   for ( k = 0; k < npend; k++ )
+   {
+      oo_object *mx = class_by_id( ot, pend_name[k] ), *target = pend_cls[k];
+      oo_classdata *cd = target->u.c;
+      oo_object **ni;
+
+      TSD->currentnode = pend_dir[k];
+      if ( mx == NULL )
+         exiterror( ERR_TRANSLATION_ERROR, 10, tmpstr_of( TSD, pend_name[k] ) );
+      if ( mx->u.c->resolved != 1 )
+         resolve_class( TSD, mx );
+      ni = (oo_object **) MallocTSD( ( cd->ninherits + 1 ) * sizeof( oo_object * ) );
+      if ( cd->ninherits )
+      {
+         memcpy( ni, cd->inherits, cd->ninherits * sizeof( oo_object * ) );
+         FreeTSD( cd->inherits );
+      }
+      ni[cd->ninherits++] = mx;
+      cd->inherits = ni;
+      Free_stringTSD( pend_name[k] );
+   }
+   if ( npend )
+   {
+      FreeTSD( pend_cls );
+      FreeTSD( pend_name );
+      FreeTSD( pend_dir );
+      invalidate_mros( ot, TSD );
    }
 
    for ( i = 0; i < nmine; i++ )

@@ -325,6 +325,7 @@
  99,  7,[Doppelte ::ROUTINE "%s"]|<name>
  99,  8,[Block nicht abgeschlossen: "}" erwartet]
  99,  9,[Ungültige Block-Parameter: auf ":name ..." müssen ein senkrechter Strich und ein Ausdruck folgen]
+ 99, 10,[Klasse "%s" nicht gefunden]|<name>
 100,  0,[Unbekannter Dateisystemfehler]
 #
 # Error prefix strings

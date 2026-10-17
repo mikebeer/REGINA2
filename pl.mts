@@ -351,6 +351,7 @@
  99,  7,[Duplicate ::ROUTINE "%s"]|<name>
  99,  8,[Block not closed: "}" expected]
  99,  9,[Invalid block parameters: ":name ..." must be followed by a vertical bar and an expression]
+ 99, 10,[Class "%s" not found]|<name>
 100,  0,[Nieznany bê¥d systemu plików]
 #
 # Extra general phrases requiring translation:
