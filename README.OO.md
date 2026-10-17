@@ -50,7 +50,7 @@ exit
 | `DO x OVER coll` | Iterates over a collection or the tails of a stem. See [Loops](#loops) for `DO WITH`, `FOR`, `COUNTER`, `LABEL` and `LOOP`. |
 | `USE ARG a, b` | Assigns the arguments to variables without converting them to strings, so objects keep their identity. |
 | `EXPOSE a b c.` | First instruction of a method: shares these variables with the object. |
-| `::directive …` | Starts the directive section. The main program ends at the first directive. |
+| `::directive …` | Starts the directive section. The main program ends at the first directive, except `::requires` and `::options`, which can stand anywhere. |
 
 Message terms bind tighter than prefix operators: `-a~size` is `-(a~size)`.
 
@@ -179,7 +179,7 @@ In a classic program (none of the switches above), `call f st.` and
 | `::attribute name` | `get`, `set`, `class`, `private`. |
 | `::constant name value` | A method that returns `value`. |
 | `::routine name` | `public`, `private`. Called with `CALL name` or `name()`, like an internal routine. |
-| `::requires 'file'` | Loads another file's classes and routines and runs its prolog once. The file is searched next to the program, in the current directory and in `REGINA_MACROS`, with the extensions "", `.cls`, `.rex` and `.rexx`. |
+| `::requires 'file'` | Loads another file's classes and routines and runs its prolog once. It can stand anywhere, best at the top of the program like `#include` in C; all required files are loaded before the program starts. The file is searched next to the program, in the current directory and in `REGINA_MACROS`, with the extensions "", `.cls`, `.rex` and `.rexx`. |
 | `::options` | Accepted and ignored. |
 
 Inside a method, `self` is the receiver and `super` is the superclass.
@@ -214,7 +214,13 @@ storage all keep the object itself.
 | Object | `init string defaultName objectName objectName= class isA isInstanceOf hashCode identityHash isNil send sendWith hasMethod request copy` and the identity comparisons |
 | Class | `new id name superclass superclasses subclass mixinclass inherit isSubclassOf queryMixinClass methods` |
 | String | `upper lower equals caselessEquals startsWith caselessStartsWith endsWith caselessEndsWith contains caselessContains makeArray`, and every string built-in function as a method: `'abc'~length`, `'a-b'~changeStr('-', '+')` |
-| Array, Queue, List | `of` (class method) `[] []= at put size items append first last firstItem lastItem next previous hasIndex hasItem index remove removeItem insert makeArray allItems allIndexes isEmpty empty supplier section toString`. Array also has `fill sort delete`; Queue has `push queue pull peek`. |
+| Array, Queue, List | `of` (class method) `[] []= at put size items append first last firstItem lastItem next previous hasIndex hasItem index remove removeItem insert makeArray allItems allIndexes isEmpty empty supplier section toString`. Array also has `fill sort delete dimension dimensions`; Queue has `push queue pull peek`. |
+
+`.array~new(3, 4)` creates an array with two dimensions; `m[i, j]` reads and
+`m[i, j] = v` stores (an index beyond a bound makes that dimension larger).
+`DO x OVER m` walks row by row, and `DO WITH INDEX ix ITEM x OVER m` gives the
+index as an Array. `append`, `insert`, `sort` and the other list methods need
+a one-dimensional array.
 | Directory, StringTable, Table | `[] []= at put hasIndex remove items isEmpty empty makeArray allIndexes allItems hasItem index supplier`. Directory also has `entry setEntry hasEntry removeEntry`, and an unknown message name reads or sets the entry of that name (`d~city`, `d~city = 'Zurich'`). |
 | MutableBuffer | `init append insert delete length string substr pos lastPos left right words word countStr verify` |
 | Supplier | `available item index next allItems allIndexes` |

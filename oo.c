@@ -169,7 +169,8 @@ typedef struct oo_object {
    oo_scope *scopes;
    union {
       oo_classdata *c;
-      struct { streng **v; long size, cap; } a;
+      /* Array, Queue, List; an Array with ndims > 1 is stored row by row */
+      struct { streng **v; long size, cap; long *dims; int ndims; } a;
       oo_hash *h;
       streng *s;                /* MutableBuffer and String values   */
       struct { struct oo_object *self; struct oo_object *start; } sup;
@@ -381,6 +382,8 @@ static void free_object( tsd_t *TSD, oo_object *o )
             Free_stringTSD( o->u.a.v[i] );
       if ( o->u.a.v )
          FreeTSD( o->u.a.v );
+      if ( o->u.a.dims )
+         FreeTSD( o->u.a.dims );
    }
    Free_stringTSD( o->handle );
    FreeTSD( o );
@@ -1736,6 +1739,185 @@ static oo_object *seq_self( tsd_t *TSD, oo_call *c )
    return c->self;
 }
 
+/* ------------------------------------------------------------------ */
+/* multi-dimensional arrays                                           */
+/* ------------------------------------------------------------------ */
+
+#define ARR_MULTI(arr) ( (arr)->kind == OK_ARRAY && (arr)->u.a.ndims > 1 )
+
+/* for methods that only work on a list: error 98.8 for a 2+ dim array */
+static oo_object *seq1_self( tsd_t *TSD, oo_call *c )
+{
+   oo_object *a = seq_self( TSD, c );
+
+   if ( ARR_MULTI( a ) )
+      exiterror( ERR_EXECUTION_ERROR, 8, tmpstr_of( TSD, c->name ) );
+   return a;
+}
+
+static void arr_dims_error( tsd_t *TSD, oo_object *a, int given )
+{
+   char d[16], g[16];
+
+   sprintf( d, "%d", ARR_MULTI( a ) ? a->u.a.ndims : 1 );
+   sprintf( g, "%d", given );
+   exiterror( ERR_EXECUTION_ERROR, 11, d, g );
+}
+
+/* the index of linear position i (0-based): a number, or an Array of numbers */
+static streng *arr_index_value( tsd_t *TSD, oo_object *a, long i )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *ix;
+   int k;
+   long rest = i, pos[64];
+
+   if ( !ARR_MULTI( a ) )
+      return mkint( TSD, i + 1 );
+   for ( k = a->u.a.ndims - 1; k >= 0; k-- )
+   {
+      pos[k] = rest % a->u.a.dims[k] + 1;
+      rest /= a->u.a.dims[k];
+   }
+   ix = new_object( TSD, ot->cArray, OK_ARRAY );
+   for ( k = 0; k < a->u.a.ndims; k++ )
+      oo_array_put( TSD, ix, k + 1, mkint( TSD, pos[k] ) );
+   return hdup( TSD, ix );
+}
+
+/* gives the array the dimensions nd (as many as it has) and moves the items */
+static void arr_relayout( tsd_t *TSD, oo_object *a, const long *nd )
+{
+   long nsize = 1, i, k, rest, off, idx[64];
+   streng **nv = NULL;
+   int n = a->u.a.ndims;
+
+   for ( k = 0; k < n; k++ )
+   {
+      nsize *= nd[k];
+      if ( nsize > OO_MAX_INDEX )
+      {
+         char buf[32];
+         sprintf( buf, "%ld", nsize );
+         exiterror( ERR_INVALID_ARGUMENT, 6, buf );
+      }
+   }
+   if ( nsize > 0 )
+   {
+      nv = (streng **) MallocTSD( nsize * sizeof( streng * ) );
+      memset( nv, 0, nsize * sizeof( streng * ) );
+   }
+   for ( i = 0; i < a->u.a.size; i++ )
+   {
+      if ( a->u.a.v[i] == NULL )
+         continue;
+      for ( rest = i, k = n - 1; k >= 0; k-- )
+      {
+         idx[k] = rest % a->u.a.dims[k];
+         rest /= a->u.a.dims[k];
+      }
+      for ( off = 0, k = 0; k < n; k++ )
+         off = off * nd[k] + idx[k];
+      nv[off] = a->u.a.v[i];
+   }
+   if ( a->u.a.v )
+      FreeTSD( a->u.a.v );
+   a->u.a.v = nv;
+   a->u.a.size = a->u.a.cap = nsize;
+   for ( k = 0; k < n; k++ )
+      a->u.a.dims[k] = nd[k];
+}
+
+/* makes a an array of n dimensions with the given sizes; items are lost */
+static void arr_make_multi( tsd_t *TSD, oo_object *a, int n, const long *sizes )
+{
+   long i;
+
+   for ( i = 0; i < a->u.a.size; i++ )
+      if ( a->u.a.v[i] )
+         Free_stringTSD( a->u.a.v[i] );
+   if ( a->u.a.v )
+      FreeTSD( a->u.a.v );
+   a->u.a.v = NULL;
+   a->u.a.size = a->u.a.cap = 0;
+   if ( a->u.a.dims )
+      FreeTSD( a->u.a.dims );
+   a->u.a.ndims = n;
+   a->u.a.dims = (long *) MallocTSD( n * sizeof( long ) );
+   memset( a->u.a.dims, 0, n * sizeof( long ) );
+   arr_relayout( TSD, a, sizes );
+}
+
+/*
+ * The linear position (0-based) of the indexes argv[from..] of c in a.
+ * With grow, an index beyond a bound extends that dimension, and an empty
+ * one-dimensional array takes the number of dimensions of the indexes.
+ * Without grow, -1 means "no such position".
+ */
+static long arr_position( tsd_t *TSD, oo_call *c, oo_object *a, int from, int grow )
+{
+   int k = c->argc - from, j, beyond = 0;
+   long idx[64], nd[64], off = 0;
+
+   if ( k > 64 )
+      arr_dims_error( TSD, a, k );
+   if ( !ARR_MULTI( a ) )
+   {
+      if ( a->kind == OK_ARRAY && oo_array_items( TSD, a, NULL ) == 0 && k > 1 )
+      {
+         if ( !grow )
+            return -1;
+         for ( j = 0; j < k; j++ )
+            nd[j] = 0;
+         arr_make_multi( TSD, a, k, nd );
+      }
+      else
+         arr_dims_error( TSD, a, k );
+   }
+   else if ( k != a->u.a.ndims )
+      arr_dims_error( TSD, a, k );
+   for ( j = 0; j < k; j++ )
+   {
+      idx[j] = whole_arg( TSD, c, from + j, 1 );
+      nd[j] = a->u.a.dims[j];
+      if ( idx[j] > nd[j] )
+      {
+         beyond = 1;
+         nd[j] = idx[j];
+      }
+   }
+   if ( beyond )
+   {
+      if ( !grow )
+         return -1;
+      arr_relayout( TSD, a, nd );
+   }
+   for ( j = 0; j < k; j++ )
+      off = off * a->u.a.dims[j] + ( idx[j] - 1 );
+   return off;
+}
+
+static streng *m_arr_dimension( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *a = seq_self( TSD, c ), *r;
+   int n = ARR_MULTI( a ) ? a->u.a.ndims : 1, k;
+
+   if ( str_eqc( c->name, "DIMENSIONS" ) )
+   {
+      r = new_object( TSD, ot->cArray, OK_ARRAY );
+      for ( k = 0; k < n; k++ )
+         oo_array_put( TSD, r, k + 1, mkint( TSD, ARR_MULTI( a ) ? a->u.a.dims[k] : a->u.a.size ) );
+      return hdup( TSD, r );
+   }
+   if ( opt_arg( c, 0 ) == NULL )
+      return mkint( TSD, n );
+   k = (int) whole_arg( TSD, c, 0, 1 );
+   if ( k > n )
+      return mkint( TSD, 0 );
+   return mkint( TSD, ARR_MULTI( a ) ? a->u.a.dims[k - 1] : a->u.a.size );
+}
+
 static streng *nil_or( tsd_t *TSD, const streng *v )
 {
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
@@ -1745,9 +1927,8 @@ static streng *nil_or( tsd_t *TSD, const streng *v )
 /* the single index of [] and friends */
 static long index_arg( tsd_t *TSD, oo_call *c, int i )
 {
-   if ( c->argc > i + 1 && seq_self( TSD, c )->kind == OK_ARRAY
-     && str_eqc( c->name, "[]" ) )
-      exiterror( ERR_EXECUTION_ERROR, 8 );
+   if ( c->argc > i + 1 )
+      arr_dims_error( TSD, seq_self( TSD, c ), c->argc - i );
    return whole_arg( TSD, c, i, 1 );
 }
 
@@ -1756,6 +1937,18 @@ static streng *m_arr_init( tsd_t *TSD, oo_call *c )
    oo_object *a = seq_self( TSD, c );
    long n;
 
+   if ( a->kind == OK_ARRAY && c->argc > 1 )
+   {
+      /* .array~new(3, 4): a 3 x 4 array */
+      long sizes[64];
+      int k;
+      if ( c->argc > 64 )
+         arr_dims_error( TSD, a, c->argc );
+      for ( k = 0; k < c->argc; k++ )
+         sizes[k] = whole_arg( TSD, c, k, 0 );
+      arr_make_multi( TSD, a, c->argc, sizes );
+      return NULL;
+   }
    if ( a->kind == OK_ARRAY && opt_arg( c, 0 ) )
    {
       n = whole_arg( TSD, c, 0, 0 );
@@ -1789,8 +1982,14 @@ static streng *m_arr_of( tsd_t *TSD, oo_call *c )
 static streng *m_arr_at( tsd_t *TSD, oo_call *c )
 {
    oo_object *a = seq_self( TSD, c );
-   long i = index_arg( TSD, c, 0 );
+   long i;
 
+   if ( ARR_MULTI( a ) || ( a->kind == OK_ARRAY && c->argc > 1 ) )
+   {
+      long p = arr_position( TSD, c, a, 0, 0 );
+      return nil_or( TSD, p >= 0 ? a->u.a.v[p] : NULL );
+   }
+   i = index_arg( TSD, c, 0 );
    return nil_or( TSD, i <= a->u.a.size ? a->u.a.v[i - 1] : NULL );
 }
 
@@ -1798,8 +1997,17 @@ static streng *m_arr_put( tsd_t *TSD, oo_call *c )
 {
    oo_object *a = seq_self( TSD, c );
    const streng *v = need_arg( TSD, c, 0 );
-   long i = whole_arg( TSD, c, 1, 1 );
+   long i;
 
+   if ( ARR_MULTI( a ) || c->argc > 2 )
+   {
+      long p = arr_position( TSD, c, a, 1, 1 );
+      if ( a->u.a.v[p] )
+         Free_stringTSD( a->u.a.v[p] );
+      a->u.a.v[p] = Str_dupTSD( v );
+      return NULL;
+   }
+   i = whole_arg( TSD, c, 1, 1 );
    oo_array_put( TSD, a, i, Str_dupTSD( v ) );
    return NULL;
 }
@@ -1816,7 +2024,7 @@ static streng *m_arr_items( tsd_t *TSD, oo_call *c )
 
 static streng *m_arr_append( tsd_t *TSD, oo_call *c )
 {
-   oo_object *a = seq_self( TSD, c );
+   oo_object *a = seq1_self( TSD, c );
    const streng *v = need_arg( TSD, c, 0 );
 
    oo_array_put( TSD, a, a->u.a.size + 1, Str_dupTSD( v ) );
@@ -1826,7 +2034,7 @@ static streng *m_arr_append( tsd_t *TSD, oo_call *c )
 static streng *m_arr_firstlast( tsd_t *TSD, oo_call *c )
 {
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
-   oo_object *a = seq_self( TSD, c );
+   oo_object *a = seq1_self( TSD, c );
    int last = ( c->name->value[0] == 'L' );
    int item = str_eqc( c->name, "FIRSTITEM" ) || str_eqc( c->name, "LASTITEM" );
    long i;
@@ -1853,7 +2061,7 @@ static streng *m_arr_firstlast( tsd_t *TSD, oo_call *c )
 static streng *m_arr_nextprev( tsd_t *TSD, oo_call *c )
 {
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
-   oo_object *a = seq_self( TSD, c );
+   oo_object *a = seq1_self( TSD, c );
    long i = whole_arg( TSD, c, 0, 1 );
    int next = ( c->name->value[0] == 'N' );
 
@@ -1868,8 +2076,14 @@ static streng *m_arr_hasindex( tsd_t *TSD, oo_call *c )
    oo_object *a = seq_self( TSD, c );
    const streng *s = need_arg( TSD, c, 0 );
    int err = 0;
-   long i = streng_to_int( TSD, s, &err );
+   long i;
 
+   if ( ARR_MULTI( a ) || ( a->kind == OK_ARRAY && c->argc > 1 ) )
+   {
+      long p = arr_position( TSD, c, a, 0, 0 );
+      return mkbool( TSD, p >= 0 && a->u.a.v[p] != NULL );
+   }
+   i = streng_to_int( TSD, s, &err );
    return mkbool( TSD, !err && i >= 1 && i <= a->u.a.size && a->u.a.v[i - 1] );
 }
 
@@ -1891,16 +2105,32 @@ static streng *m_arr_hasitem( tsd_t *TSD, oo_call *c )
 static streng *m_arr_index( tsd_t *TSD, oo_call *c )
 {
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
-   long i = find_item( seq_self( TSD, c ), need_arg( TSD, c, 0 ) );
+   oo_object *a = seq_self( TSD, c );
+   long i = find_item( a, need_arg( TSD, c, 0 ) );
 
-   return i ? mkint( TSD, i ) : hdup( TSD, ot->nil );
+   return i ? arr_index_value( TSD, a, i - 1 ) : hdup( TSD, ot->nil );
 }
 
 static streng *m_arr_remove( tsd_t *TSD, oo_call *c )
 {
-   oo_object *a = seq_self( TSD, c );
-   long i = whole_arg( TSD, c, 0, 1 );
-   streng *v = arr_take( TSD, a, i, a->kind == OK_QUEUE || str_eqc( c->name, "DELETE" ) );
+   oo_object *a = str_eqc( c->name, "DELETE" ) ? seq1_self( TSD, c ) : seq_self( TSD, c );
+   long i;
+   streng *v;
+
+   if ( ARR_MULTI( a ) )
+   {
+      /* remove(i, j): the item, no shift; the size stays */
+      long p = arr_position( TSD, c, a, 0, 0 );
+      v = NULL;
+      if ( p >= 0 )
+      {
+         v = a->u.a.v[p];
+         a->u.a.v[p] = NULL;
+      }
+      return v ? v : nil_or( TSD, NULL );
+   }
+   i = whole_arg( TSD, c, 0, 1 );
+   v = arr_take( TSD, a, i, a->kind == OK_QUEUE || str_eqc( c->name, "DELETE" ) );
 
    if ( v == NULL )
       return nil_or( TSD, NULL );
@@ -1921,7 +2151,7 @@ static streng *m_arr_removeitem( tsd_t *TSD, oo_call *c )
 
 static streng *m_arr_insert( tsd_t *TSD, oo_call *c )
 {
-   oo_object *a = seq_self( TSD, c );
+   oo_object *a = seq1_self( TSD, c );
    const streng *v = need_arg( TSD, c, 0 );
    const streng *where = opt_arg( c, 1 );
    long idx;
@@ -1976,7 +2206,7 @@ static streng *m_arr_allindexes( tsd_t *TSD, oo_call *c )
 
    for ( i = 0; i < a->u.a.size; i++ )
       if ( a->u.a.v[i] )
-         oo_array_put( TSD, arr, ++n, mkint( TSD, i + 1 ) );
+         oo_array_put( TSD, arr, ++n, arr_index_value( TSD, a, i ) );
    return hdup( TSD, arr );
 }
 
@@ -2024,7 +2254,7 @@ static int cmp_strings( const void *x, const void *y )
 
 static streng *m_arr_sort( tsd_t *TSD, oo_call *c )
 {
-   oo_object *a = seq_self( TSD, c );
+   oo_object *a = seq1_self( TSD, c );
    long i, n = 0;
 
    /* ooRexx requires no holes; holes are moved to the end */
@@ -2069,7 +2299,7 @@ static streng *m_arr_tostring( tsd_t *TSD, oo_call *c )
 static streng *m_arr_section( tsd_t *TSD, oo_call *c )
 {
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
-   oo_object *a = seq_self( TSD, c );
+   oo_object *a = seq1_self( TSD, c );
    long start = whole_arg( TSD, c, 0, 1 ), cnt, i;
    oo_object *r = new_object( TSD, a->cls == ot->cArray ? ot->cArray : a->cls, a->kind );
 
@@ -2493,7 +2723,7 @@ static streng *m_supplier_of( tsd_t *TSD, oo_call *c )
       if ( o->u.a.v[i] )
       {
          oo_array_put( TSD, items, ++n, Str_dupTSD( o->u.a.v[i] ) );
-         oo_array_put( TSD, idx, n, mkint( TSD, i + 1 ) );
+         oo_array_put( TSD, idx, n, arr_index_value( TSD, o, i ) );
       }
    return hdup( TSD, make_supplier( TSD, items, idx ) );
 }
@@ -2556,6 +2786,13 @@ oo_object *oo_copy_object( tsd_t *TSD, oo_object *o )
       case OK_QUEUE:
          for ( i = 0; i < o->u.a.size; i++ )
             oo_array_put( TSD, n, i + 1, o->u.a.v[i] ? Str_dupTSD( o->u.a.v[i] ) : NULL );
+         if ( ARR_MULTI( o ) )
+         {
+            /* the size is the product of the dimensions; keep both */
+            n->u.a.ndims = o->u.a.ndims;
+            n->u.a.dims = (long *) MallocTSD( o->u.a.ndims * sizeof( long ) );
+            memcpy( n->u.a.dims, o->u.a.dims, o->u.a.ndims * sizeof( long ) );
+         }
          break;
       case OK_DIRECTORY:
       case OK_TABLE:
@@ -2618,6 +2855,7 @@ static void add_seq_methods( tsd_t *TSD, oo_object *c )
    add_methods( TSD, c, "[] AT", m_arr_at, 0 );
    add_methods( TSD, c, "[]= PUT", m_arr_put, 0 );
    add_methods( TSD, c, "SIZE", m_arr_size, 0 );
+   add_methods( TSD, c, "DIMENSION DIMENSIONS", m_arr_dimension, 0 );
    add_methods( TSD, c, "ITEMS", m_arr_items, 0 );
    add_methods( TSD, c, "APPEND", m_arr_append, 0 );
    add_methods( TSD, c, "FIRST LAST FIRSTITEM LASTITEM", m_arr_firstlast, 0 );
@@ -4041,7 +4279,7 @@ streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr )
       {
          for ( i = 0; i < o->u.a.size; i++ )
             if ( o->u.a.v[i] )
-               snap_pair( TSD, snap, &n, mkint( TSD, i + 1 ), Str_dupTSD( o->u.a.v[i] ) );
+               snap_pair( TSD, snap, &n, arr_index_value( TSD, o, i ), Str_dupTSD( o->u.a.v[i] ) );
       }
       else if ( o->kind == OK_SUPPLIER )
          snap_supplier( TSD, snap, &n, o );

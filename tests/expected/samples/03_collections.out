@@ -10,4 +10,8 @@ Bob reports to Alice
 1: red
 2: green
 3: blue
+table 3x3:
+    1  2  3
+    2  4  6
+    3  6  9
 rc=0

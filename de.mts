@@ -303,9 +303,10 @@
  98,  5,[DO OVER: "%s" ist keine Sammlung]|<value>
  98,  6,[Methode "%s" ist abstrakt]|<name>
  98,  7,[Mixin-Klasse "%s" kann keine Instanzen erzeugen]|<name>
- 98,  8,[Arrays haben nur eine Dimension]
+ 98,  8,[Methode "%s" braucht ein eindimensionales Array]|<name>
  98,  9,[Supplier hat keine weiteren Elemente]
  98, 10,[Klasse "%s" würde von sich selbst erben]|<name>
+ 98, 11,[Das Array hat %s Dimension(en), aber %s Index(e) wurden angegeben]|<value>,<value>
  99,  0,[Übersetzungsfehler]
  99,  1,[Unbekannte Direktive "::%s"]|<name>
  99,  2,[Doppelte ::CLASS "%s"]|<name>

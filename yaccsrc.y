@@ -91,6 +91,7 @@ static nodeptr optgluelast( nodeptr p1, nodeptr p2 );
 static void move_labels( nodeptr front, nodeptr end, int level );
 static nodeptr do_over_var( nodeptr rep );
 static void finish_do( nodeptr dostat, nodeptr opts );
+static nodeptr split_requires( nodeptr *dirs );
 extern int __regina_do_is_loop; /* lexsrc.l: the DO token was LOOP */
 extern int __regina_oo_keywords( void ); /* lexsrc.l: OO keywords are on */
 extern int __regina_oo_off( void );      /* lexsrc.l: --no-oo, classic only */
@@ -187,12 +188,16 @@ prog         : nlncl stats             { $$ = optgluelast( $1, $2 );
                                          if ( $$ != NULL )
                                             $$->o.last = NULL;
                                          EndProg( $$ ); }
-             | nlncl stats dirsect     { $$ = optgluelast( makenode( X_OO_INIT, 0 ), $1 );
+             | nlncl stats dirsect     { nodeptr more = split_requires( &$3 );
+                                         $$ = optgluelast( makenode( X_OO_INIT, 0 ), $1 );
                                          $$ = optgluelast( $$, $2 );
+                                         $$ = optgluelast( $$, more );
                                          $$ = optgluelast( $$, $3 );
                                          $$->o.last = NULL;
                                          EndProg( $$ ) ; }
-             | nlncl dirsect           { $$ = optgluelast( makenode( X_OO_INIT, 0 ), $1 );
+             | nlncl dirsect           { nodeptr more = split_requires( &$2 );
+                                         $$ = optgluelast( makenode( X_OO_INIT, 0 ), $1 );
+                                         $$ = optgluelast( $$, more );
                                          $$ = optgluelast( $$, $2 );
                                          $$->o.last = NULL;
                                          EndProg( $$ ) ; }
@@ -2289,6 +2294,65 @@ static void move_labels( nodeptr front, nodeptr end, int level )
       labels->u.trace_only = ( level == 0 ) ? 0 : 1;
       labels = labels->next;
    }
+}
+
+/* sets the o.last field of the head of a statement chain, see optgluelast */
+static nodeptr fix_last( nodeptr chain )
+{
+   nodeptr t;
+
+   if ( chain == NULL )
+      return NULL;
+   for ( t = chain; t->next; t = t->next )
+      t->o.last = NULL;
+   t->o.last = NULL;
+   chain->o.last = ( t != chain ) ? t : NULL;
+   return chain;
+}
+
+static int is_transparent_directive( cnodeptr d )
+{
+   return d->name != NULL
+       && ( ( d->name->len == 8 && memcmp( d->name->value, "REQUIRES", 8 ) == 0 )
+         || ( d->name->len == 7 && memcmp( d->name->value, "OPTIONS", 7 ) == 0 ) );
+}
+
+/*
+ * OO extension: ::REQUIRES and ::OPTIONS may stand anywhere, like an
+ * #include in C. They never own statements: the statements after them
+ * belong to what came before, the main program as long as no other
+ * directive has appeared, otherwise the body of the last directive.
+ * *dirs is the chain of directives; it is rebuilt with empty bodies for
+ * these two. Returns the statements that continue the main program.
+ */
+static nodeptr split_requires( nodeptr *dirs )
+{
+   nodeptr d, next, main_more = NULL, owner = NULL, chain = NULL, body;
+
+   for ( d = *dirs; d; d = next )
+   {
+      next = d->next;
+      d->next = NULL;
+      d->o.last = NULL;
+      if ( is_transparent_directive( d ) && d->p[1] != NULL )
+      {
+         body = fix_last( d->p[1] );
+         d->p[1] = NULL;
+         if ( owner == NULL )
+            main_more = optgluelast( main_more, body );
+         else
+         {
+            owner->p[1] = optgluelast( fix_last( owner->p[1] ), body );
+            fix_last( owner->p[1] );
+            owner->p[1]->o.last = NULL;
+         }
+      }
+      else if ( !is_transparent_directive( d ) )
+         owner = d;
+      chain = optgluelast( chain, d );
+   }
+   *dirs = chain;
+   return main_more;
 }
 
 /*

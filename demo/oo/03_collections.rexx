@@ -1,7 +1,8 @@
 /* 03_collections.rexx - Array, Directory, Queue, Table, Supplier
  *
  * Counts the words of a text with a Directory, sorts them with an Array,
- * walks a queue of jobs and keeps objects as keys in a Table.
+ * walks a queue of jobs, keeps objects as keys in a Table and fills a
+ * two-dimensional array.
  */
 text = 'the quick brown fox jumps over the lazy dog the fox sleeps'
 
@@ -46,4 +47,16 @@ s = .array~of('red', 'green', 'blue')~supplier
 do while s~available
   say s~index':' s~item
   s~next
+end
+
+/* an array with two dimensions: a small multiplication table */
+t = .array~new(3, 3)
+do i = 1 to 3
+  do j = 1 to 3
+    t[i, j] = i * j
+  end
+end
+say 'table' t~dimensions~toString(, 'x')':'
+do i = 1 to t~dimension(1)
+  say '  ' right(t[i, 1], 2) right(t[i, 2], 2) right(t[i, 3], 2)
 end

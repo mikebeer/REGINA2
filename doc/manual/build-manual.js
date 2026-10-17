@@ -71,16 +71,6 @@ const preface = [
   ]),
   H3('Conventions'),
   P('Program text, commands and file names are shown in `monospaced type`. Examples of programs and terminal sessions are shown in framed screens; lines you type and the lines the system prints are not marked separately. REXX keywords are shown in uppercase in the text, although REXX itself ignores case.'),
-  H3('Summary of changes'),
-  P('This edition is kept up to date as the extension grows; each change is listed here, newest first.'),
-  ...UL([
-    '**17 October 2026.** Packages for macOS (one universal binary for Apple Silicon and Intel). Eight sample programs in `demo/oo`. Objects on the right side of an operator use their string value.',
-    '**17 October 2026.** Startup switches `--oo` and `--no-oo` and the environment variable `REGINA_OO`. The marker `OOREGINA` (comment or OPTIONS) switches the new keywords on.',
-    '**17 October 2026.** Stems passed by reference with `USE ARG s.`, stems returned with `RETURN x.`, the Stem class.',
-    '**17 October 2026.** `DO WITH INDEX ... ITEM ... OVER`, `FOR` with `OVER`, `DO COUNTER`, `DO LABEL` and `LOOP`.',
-    '**16 October 2026.** The object system: classes, methods, attributes, routines, `::requires`, collections, operator methods, error messages 88 to 99. Packages for Linux and Windows.',
-    '**15 October 2026.** Syntax only: message operators, directives and `[ ]` were parsed but not yet executed.',
-  ]),
 ];
 
 // ------------------------------------------------------------------
@@ -118,7 +108,7 @@ exit
     ['Messages', '`obj~name(args)` and `obj -> name(args)`, cascades `~~` and `->>`, `~name:super`, `obj~name = value`, `coll[i]` and `coll[i] = value`'],
     ['Directives', '`::class`, `::method`, `::attribute`, `::constant`, `::routine`, `::requires`, `::options`'],
     ['Instructions', '`USE ARG`, `EXPOSE`, `DO x OVER`, `DO WITH INDEX i ITEM x OVER`, `DO COUNTER`, `DO LABEL`, `LOOP`'],
-    ['Classes', 'Object, Class, String, Array, Queue, List, Directory, StringTable, Table, Stem, MutableBuffer, Supplier; `.nil`, `.true`, `.false`, `.environment`, `.local`'],
+    ['Classes', 'Object, Class, String, Array (with any number of dimensions), Queue, List, Directory, StringTable, Table, Stem, MutableBuffer, Supplier; `.nil`, `.true`, `.false`, `.environment`, `.local`'],
     ['Methods', 'instance and class methods, attributes, constants, private and abstract methods, UNKNOWN, operator methods, mixins and multiple inheritance'],
     ['Stems', 'stems passed by reference with `USE ARG s.`, stems returned with `RETURN x.`'],
     ['Control', 'markers `/* OOREGINA */` and `OPTIONS OOREGINA`, switches `--oo` and `--no-oo`, variable `REGINA_OO`'],
@@ -209,7 +199,11 @@ sudo make install`, 'Building and installing from source'),
 const ch3 = [
   H1('Chapter 3. First Steps'),
   H2('A program with a class'),
-  P('An object-oriented REXX program has two parts. First comes the main program, as in classic REXX. Then come the directives: lines starting with `::` that define classes, methods and routines. The main program ends at the first directive, as if it ended with EXIT.'),
+  P('An object-oriented REXX program has two parts. First comes the main program, as in classic REXX. Then come the directives: lines starting with `::` that define classes, methods and routines. The main program ends at the first of these directives, as if it ended with EXIT.'),
+  P('`::requires` and `::options` are different: they can stand anywhere and never end the main program. The natural place for `::requires` is the top of the program, as for `#include` in C:'),
+  ...screen(`::requires 'shapes.cls'        /* the classes of a library */
+say .circle~new(2)~area         /* the main program follows  */
+exit`, 'A program that starts with ::requires'),
   ...screen(`/* greet.rexx */
 g = .greeter~new('Hello')
 g~greet('world')
@@ -313,6 +307,7 @@ const ch5 = [
   ...UL([
     'Messages with `~`, cascades with `~~`, `~name:super`, attribute assignment `obj~name = value`, `[]` and `[]=`.',
     'The directives `::class` (with SUBCLASS, MIXINCLASS and INHERIT), `::method` (CLASS, PRIVATE, ABSTRACT, ATTRIBUTE), `::attribute` (GET, SET, CLASS), `::constant`, `::routine`, `::requires`.',
+    'Arrays with any number of dimensions: `.array~new(3, 4)`, `a[i, j]`, `dimension`, growing on assignment.',
     'SELF and SUPER, EXPOSE, USE ARG, the UNKNOWN method, operator methods, mixins and multiple inheritance.',
     '`DO x OVER`, `DO WITH INDEX i ITEM x OVER`, `DO ... FOR` with OVER, `DO COUNTER`, `DO LABEL`, LOOP.',
     'The error numbers 88, 91, 97, 98 and 99.',
@@ -331,7 +326,7 @@ const ch5 = [
     ['Stem assignment `r. = stemobject`', 'r. refers to the same Stem object', 'r. receives a copy'],
     ['`a. = b.`', 'a. refers to the Stem object of b.', 'Classic REXX: the default value of a. is set'],
     ['Class names', '`~id` returns the name', '`~id` returns the name in uppercase for classes defined with `::class`'],
-    ['Array', 'Multi-dimensional arrays', 'One dimension; indexes up to 100,000,000'],
+    ['`::requires` position', 'Before the other directives; as every directive ends the main program, it stands after the main program', 'Anywhere: at the top as in C, in the main program or between methods; it never ends the main program'],
     ['Sorting', '`sort` uses the Comparable interface; `sortWith`', '`sort` orders the string values; no comparators'],
     ['`::requires` search', 'Program folder, current folder, REXX_PATH, PATH', 'Program folder, current folder, REGINA_MACROS; extensions "", .cls, .rex, .rexx'],
     ['Required files', 'Only PUBLIC classes and routines are visible to the requiring program', 'All classes and routines are visible'],
@@ -396,15 +391,15 @@ const ch6 = [
   H3('RETURN with a stem'),
   P('In code with the OO keywords on, `RETURN x.` returns a new Stem object with a copy of all tails and the default value of `x.`. Assigned to a stem (`r. = f()`), it replaces `r.` with that copy; assigned to a simple variable, it is an object (see Stem in Chapter 7).'),
   H2('Directives'),
-  P('Directives start with `::` at the beginning of a clause. They follow the main program; the main program ends at the first directive.'),
+  P('Directives start with `::` at the beginning of a clause. The main program ends at the first directive, except `::requires` and `::options`, which can stand anywhere: the statements after them continue what came before, the main program or the body of the last method or routine.'),
   ...table(['Directive', 'Options and meaning'], [
     ['`::class name`', '`SUBCLASS parent` (default Object), `MIXINCLASS parent` (a class whose methods other classes inherit), `INHERIT mixin ...`. `PUBLIC`, `PRIVATE` and `METACLASS` are accepted; in this release all classes of a required file are visible (Chapter 9).'],
     ['`::method name`', '`CLASS` (a class method), `PRIVATE` (only through SELF), `ABSTRACT` (subclasses must define it; calling it is error 98.6), `ATTRIBUTE`. `GUARDED`, `UNGUARDED`, `PROTECTED` and `UNPROTECTED` are accepted and ignored. Operator methods are named in quotes: `::method "+"`.'],
     ['`::attribute name`', 'Defines `name` and `name=` for an exposed variable. `GET` or `SET` defines only one of them; `CLASS` and `PRIVATE` as for methods.'],
     ['`::constant name value`', 'A method that returns VALUE.'],
     ['`::routine name`', 'A routine called with `CALL name` or `name()`. `PUBLIC` and `PRIVATE` are accepted; all routines of a required file are visible.'],
-    ['`::requires \'file\'`', 'Loads the classes and public routines of another file and runs its main program (prolog) once. The file is searched next to the program, in the current directory and in REGINA_MACROS, with the extensions "", .cls, .rex and .rexx.'],
-    ['`::options ...`', 'Accepted and ignored.'],
+    ['`::requires \'file\'`', 'Loads the classes and routines of another file and runs its main program (prolog) once. It can stand anywhere, best at the top. All required files are loaded before the program starts, in the order of the `::requires` directives, wherever they stand. The file is searched next to the program, in the current directory and in REGINA_MACROS, with the extensions "", .cls, .rex and .rexx.'],
+    ['`::options ...`', 'Accepted and ignored; can stand anywhere, like `::requires`.'],
   ], W(2400, 7238), 'Directives'),
   H2('Methods'),
   P('A method body runs like a routine called with PROCEDURE: it has its own variables (except those it EXPOSEs), its own condition traps and the default NUMERIC settings. A SYNTAX error in a method that the method does not trap is passed to the caller, so `SIGNAL ON SYNTAX` in the caller catches it. Labels in a method or routine belong to that body.'),
@@ -457,7 +452,7 @@ const ch7 = [
     ['`makeArray(separator)`', 'An Array of the parts; without separator, the lines.'],
     ['`makeString`, `string`', 'The string itself.'],
   ]),
-  ...cls('Array, Queue and List', 'Sequences indexed by position. Array has holes where no item was stored; Queue and List are ordered lists.', [
+  ...cls('Array, Queue and List', 'Sequences indexed by position. Array has holes where no item was stored and can have several dimensions (see below); Queue and List are ordered lists.', [
     ['`of(items...)` (class)', 'A new collection with these items.'],
     ['`[] at(i)`, `[]= put(item, i)`', 'Read and store; a missing item is `.nil`.'],
     ['`append(item)`, `insert(item, i)`', 'Add at the end, insert after position I.'],
@@ -470,6 +465,25 @@ const ch7 = [
     ['Array only: `fill(x)`, `sort`, `delete(i)`', 'Fill, sort the string values, delete with shift.'],
     ['Queue only: `push`, `queue`, `pull`, `peek`', 'Add in front or at the end, take and look at the first item.'],
   ]),
+  H3('Arrays with several dimensions'),
+  P('`.array~new(3, 4)` creates an array with 3 rows and 4 columns; an empty array also takes the number of dimensions of its first item, so `a = .array~new; a[2, 3] = x` makes a two-dimensional array. Every index of `[]`, `at`, `put`, `hasIndex` and `remove` is given separately: `m[i, j]`, `m~put(x, i, j)`. Storing beyond a bound makes that dimension larger; the items keep their indexes.'),
+  ...table(['Method', 'Meaning'], [
+    ['`dimension`', 'The number of dimensions.'],
+    ['`dimension(n)`', 'The size of dimension N.'],
+    ['`dimensions`', 'An Array with the sizes of all dimensions.'],
+    ['`size`, `items`', 'The number of places (the product of the sizes) and the number of items.'],
+    ['`index(x)`, `allIndexes`, `supplier`', 'Indexes are Arrays of numbers, for example `2,3` for row 2, column 3.'],
+  ], W(3100, 6538), 'Methods for arrays with several dimensions'),
+  P('`DO x OVER m` walks the items row by row; `DO WITH INDEX ix ITEM x OVER m` gives the index as an Array: `ix[1]` is the row, `ix[2]` the column. The methods that treat an array as a list (`append`, `insert`, `delete`, `first`, `last`, `next`, `previous`, `section` and `sort`) need a one-dimensional array (error 98.8). The wrong number of indexes is error 98.11.'),
+  ...screen(`m = .array~new(2, 3)
+do i = 1 to 2
+  do j = 1 to 3
+    m[i, j] = i * 10 + j
+  end
+end
+say m[2, 3] m~dimension m~dimensions~toString(, 'x')     /* 23 2 2x3 */
+m[3, 4] = 'grown'
+say m~dimensions~toString(, 'x') m[2, 3]                  /* 3x4 23  */`, 'A two-dimensional array'),
   ...cls('Directory, StringTable and Table', 'Collections indexed by key. Directory and StringTable use the string value of the key; Table also accepts objects as keys and compares them by identity.', [
     ['`[] at(k)`, `[]= put(item, k)`', 'Read and store; keys are case sensitive.'],
     ['`hasIndex(k)`, `hasItem(x)`, `index(x)`, `remove(k)`', 'Tests, search and removal.'],
@@ -535,7 +549,7 @@ const ch9 = [
   H2('Language'),
   ...UL([
     'The ooRexx features listed in Chapter 5 under "Not available" are missing, notably RAISE, FORWARD, GUARD, REPLY, START and many classes.',
-    'Arrays have one dimension; an index above 100,000,000 is error 88.6.',
+    'An array can have up to 64 dimensions and at most 100,000,000 places in all (error 88.6).',
     '`sort` orders the string values of the items; there are no comparators.',
     'The new keywords need a marker, a directive, an earlier message operator or `--oo` (Chapter 3). A program that uses objects only through routine arguments, without any of these, must add a marker to use them.',
     'Directives are not allowed in INTERPRET data (error 98.2).',
