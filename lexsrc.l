@@ -147,7 +147,9 @@ static int in_directives=0;
 static int oo_seen=0, do_over_pending=0;
 #define OO_KEYWORDS ( in_directives || oo_seen )
 int __regina_do_is_loop=0;   /* the last DO token was LOOP (yaccsrc.y) */
+int __regina_oo_keywords( void ) { return OO_KEYWORDS ; }
 static void oo_second_word( const char *text );
+static int oo_symch( char c );
 
 /*
  * Tracking of "~name:super": oo_expect_name is set by a message operator,
@@ -568,6 +570,21 @@ key_with          [wW][iI][tT][hH]
    BEGIN other ;
    SET_NEXTSTART() ;
    return LEAVE ; }
+
+<comm>{key_options}{blank}+[rR][eE][gG][iI][nN][aA]-[oO][oO]{between} {
+   /*
+    * OO extension: OPTIONS REGINA-OO switches the OO keywords on (see
+    * oo_prescan). Without quotes classic Rexx reads "REGINA - OO", so
+    * the word is passed on as the string 'REGINA-OO'.
+    */
+   if ( oo_symch( yy_hold_char ) )
+      REJECT ;
+   BEGIN other ;
+   strcpy( retvalue, "REGINA-OO" ) ;
+   delayed_symbol = STRING ;
+   inhibit_delayed_abuttal = 0 ;
+   SET_NEXTSTART() ;
+   return OPTIONS ; }
 
 <comm>{key_options}{between} {
    BEGIN other ;
@@ -3030,39 +3047,182 @@ static void init_it_all( tsd_t *TSD )
  * program, not only after the first directive. The file position is
  * restored; for a stream that can't be positioned 0 is returned.
  */
+/*
+ * OO extension: the pre-scan of a program. It understands strings, nested
+ * comments, clause boundaries and continuation commas. It returns 1 if
+ * the program switches the OO keywords on:
+ *    - a directive: "::" at the start of a clause
+ *    - OPTIONS REGINA-OO, OPTIONS 'REGINA-OO' or a quoted option string
+ *      containing the word REGINA-OO, at the start of a clause
+ *    - a comment that contains only the word REGINA-OO: / * REGINA-OO * /
+ */
+#define OO_MARK     "REGINA-OO"
+#define OO_MARK_LEN 9
+
+static int oo_symch( char c )
+{
+   return rx_isalnum( c ) || c == '_' || c == '.' || c == '!' || c == '?'
+       || c == '@' || c == '#' || c == '$';
+}
+
+/* is s[i..] the word w (caseless), not followed by a symbol character? */
+static int oo_word_at( const char *s, long len, long i, const char *w, int wl )
+{
+   int k;
+
+   if ( i + wl > len )
+      return 0;
+   for ( k = 0; k < wl; k++ )
+      if ( rx_toupper( s[i + k] ) != w[k] )
+         return 0;
+   return i + wl == len || !oo_symch( s[i + wl] );
+}
+
+static int oo_blank( char c )
+{
+   return c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v';
+}
+
+/* OPTIONS clause starting at s[i] (after the keyword): does it name REGINA-OO? */
+static int oo_options_mark( const char *s, long len, long i )
+{
+   char q;
+   long j;
+
+   while ( i < len && oo_blank( s[i] ) )
+      i++;
+   if ( oo_word_at( s, len, i, OO_MARK, OO_MARK_LEN ) )
+      return 1;
+   if ( i >= len || ( s[i] != '\'' && s[i] != '"' ) )
+      return 0;
+   q = s[i++];
+   /* the words of the quoted option string */
+   while ( i < len && s[i] != q && s[i] != '\n' )
+   {
+      while ( i < len && oo_blank( s[i] ) )
+         i++;
+      for ( j = i; j < len && s[j] != q && s[j] != '\n' && !oo_blank( s[j] ); j++ )
+         ;
+      if ( j - i == OO_MARK_LEN && oo_word_at( s, j, i, OO_MARK, OO_MARK_LEN ) )
+         return 1;
+      i = ( j > i ) ? j : i + 1;
+   }
+   return 0;
+}
+
+static int oo_prescan( const char *s, long len )
+{
+   long i = 0, j;
+   int depth = 0, at_clause = 1, cont = 0;
+   char c, q;
+
+   while ( i < len )
+   {
+      c = s[i];
+      if ( depth )                       /* inside a comment */
+      {
+         if ( c == '*' && i + 1 < len && s[i + 1] == '/' )
+         {
+            depth--;
+            i += 2;
+         }
+         else if ( c == '/' && i + 1 < len && s[i + 1] == '*' )
+         {
+            depth++;
+            i += 2;
+         }
+         else
+            i++;
+         continue;
+      }
+      if ( c == '/' && i + 1 < len && s[i + 1] == '*' )
+      {
+         for ( j = i + 2; j < len && oo_blank( s[j] ); j++ )
+            ;
+         if ( oo_word_at( s, len, j, OO_MARK, OO_MARK_LEN ) )
+         {
+            for ( j += OO_MARK_LEN; j < len && oo_blank( s[j] ); j++ )
+               ;
+            if ( j + 1 < len && s[j] == '*' && s[j + 1] == '/' )
+               return 1;
+         }
+         depth = 1;
+         i += 2;
+         continue;
+      }
+      if ( c == '\n' )
+      {
+         at_clause = !cont;
+         cont = 0;
+         i++;
+         continue;
+      }
+      if ( oo_blank( c ) )
+      {
+         i++;
+         continue;
+      }
+      if ( c == ';' )
+      {
+         at_clause = 1;
+         cont = 0;
+         i++;
+         continue;
+      }
+      cont = ( c == ',' );
+      if ( at_clause )
+      {
+         at_clause = 0;
+         if ( c == ':' && i + 1 < len && s[i + 1] == ':' )
+            return 1;
+         if ( oo_word_at( s, len, i, "OPTIONS", 7 )
+           && oo_options_mark( s, len, i + 7 ) )
+            return 1;
+      }
+      if ( c == '\'' || c == '"' )
+      {
+         /* strings end at the matching quote or the end of the line */
+         for ( q = c, i++; i < len && s[i] != q && s[i] != '\n'; i++ )
+            ;
+         if ( i < len && s[i] == q )
+            i++;
+         continue;
+      }
+      i++;
+   }
+   return 0;
+}
+
 static int has_directive_line( FILE *fptr, const streng *str )
 {
-   char buf[512];
-   int at_start = 1, i, found = 0;
-   long pos;
+   char *buf;
+   long pos, len = 0, cap = 0;
+   size_t n;
+   int found;
 
    if ( str != NULL )
-   {
-      for ( i = 0; i < str->len && !found; i++ )
-      {
-         char c = str->value[i];
-         if ( at_start && ( c == ' ' || c == '\t' ) )
-            continue;
-         if ( at_start && c == ':' && i + 1 < str->len && str->value[i + 1] == ':' )
-            found = 1;
-         at_start = ( c == '\n' );
-      }
-      return found;
-   }
+      return oo_prescan( str->value, str->len );
    if ( fptr == NULL || ( pos = ftell( fptr ) ) < 0 )
       return 0;
-   while ( !found && fgets( buf, sizeof( buf ), fptr ) != NULL )
+   buf = NULL;
+   for ( ;; )
    {
-      size_t len = strlen( buf );
-      if ( at_start )
+      if ( len + 4096 > cap )
       {
-         for ( i = 0; buf[i] == ' ' || buf[i] == '\t'; i++ )
-            ;
-         if ( buf[i] == ':' && buf[i + 1] == ':' )
-            found = 1;
+         char *nb;
+         cap = cap ? cap * 2 : 65536;
+         nb = (char *) realloc( buf, cap );
+         if ( nb == NULL )
+            break;
+         buf = nb;
       }
-      at_start = ( len > 0 && buf[len - 1] == '\n' );
+      n = fread( buf + len, 1, (size_t) ( cap - len ), fptr );
+      if ( n == 0 )
+         break;
+      len += (long) n;
    }
+   found = buf ? oo_prescan( buf, len ) : 0;
+   free( buf );
    clearerr( fptr );
    fseek( fptr, pos, SEEK_SET );
    return found;
@@ -3074,8 +3234,9 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
    init_it_all( TSD ) ;
 
    /*
-    * OO extension: EXPOSE and USE ARG are instructions in programs with
-    * directives, and in INTERPRET data of a program using objects.
+    * OO extension: the OO keywords are on in programs with directives or a
+    * REGINA-OO marker (see oo_prescan), and in INTERPRET data of a program
+    * using objects.
     */
    in_directives = has_directive_line( fptr, str )
                 || ( str != NULL && TSD->oo_active );

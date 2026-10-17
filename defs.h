@@ -177,6 +177,7 @@
 #define X_OO_OVERWHILE  158 /* DO OVER ... WHILE: p[0] var, p[1] item, p[2] cond */
 #define X_OO_OVERSTEP   159 /* DO OVER: "var = item" at the start of the body */
 #define X_OO_DOOPTS     160 /* parse time only: DO LABEL name, p[0] COUNTER var */
+#define X_OO_STEMOBJ    162 /* RETURN stem. in OO code: p[0] the X_STEM_SYMBOL */
 #define X_OO_DOWITH     161 /* parse time only: p[0] coll, p[1] INDEX var, p[2] ITEM var, p[3] FOR */
 
 

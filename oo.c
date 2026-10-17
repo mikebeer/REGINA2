@@ -39,7 +39,7 @@ streng *oo_run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
 
 enum {
    OK_PLAIN = 0, OK_CLASS, OK_NIL, OK_ARRAY, OK_DIRECTORY, OK_TABLE,
-   OK_QUEUE, OK_BUFFER, OK_SUPER, OK_SUPPLIER, OK_STRING
+   OK_QUEUE, OK_BUFFER, OK_SUPER, OK_SUPPLIER, OK_STRING, OK_STEM
 };
 
 #define MF_CLASS     0x0001   /* class method                    */
@@ -132,6 +132,7 @@ typedef struct oo_object {
       streng *s;                /* MutableBuffer and String values   */
       struct { struct oo_object *self; struct oo_object *start; } sup;
       struct { struct oo_object *items, *indexes; long pos; } sp;
+      var_hashtable *pool;      /* Stem: private pool with stem "S." */
    } u;
 } oo_object;
 
@@ -170,6 +171,11 @@ typedef struct oo_tsd {
    oo_object **classes;         /* all classes, for ".NAME" lookups  */
    int nclasses, capclasses;
    streng *s_self, *s_super, *s_string, *s_init, *s_unknown, *s_makearray;
+   streng *s_stem;                   /* "S.", the stem inside a Stem      */
+   struct oo_object *cStem;
+   /* stem references of the arguments of the message being sent */
+   const streng **pend_argv;
+   paramboxptr pend_plist;
    struct oo_program *loading;  /* ::REQUIRES file being loaded */
 } oo_tsd;
 
@@ -196,6 +202,7 @@ static oo_tsd *get_ot( tsd_t *TSD )
       ot->s_init = Str_creTSD( "INIT" );
       ot->s_unknown = Str_creTSD( "UNKNOWN" );
       ot->s_makearray = Str_creTSD( "MAKEARRAY" );
+      ot->s_stem = Str_creTSD( "S." );
       init_builtin_classes( TSD, ot );
    }
    return ot;
@@ -276,6 +283,8 @@ static oo_object *new_object( tsd_t *TSD, oo_object *cls, int kind )
    memset( o, 0, sizeof( oo_object ) );
    o->id = id;
    o->cls = cls;
+   if ( kind == OK_STEM )
+      o->u.pool = oo_pool_new( TSD );
    o->kind = kind;
    o->handle = Str_makeTSD( OO_HANDLE_LEN );
    o->handle->len = OO_HANDLE_LEN;
@@ -665,6 +674,21 @@ static oo_object *class_arg( tsd_t *TSD, oo_call *c, int i )
 /* running method bodies                                              */
 /* ------------------------------------------------------------------ */
 
+static const streng **ot_pend_argv( tsd_t *TSD )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   return ot ? ot->pend_argv : NULL;
+}
+
+static paramboxptr ot_pend_box( tsd_t *TSD, int i )
+{
+   paramboxptr q = ( (oo_tsd *) TSD->oo_tsd )->pend_plist;
+
+   while ( q && i-- > 0 )
+      q = q->next;
+   return q;
+}
+
 static paramboxptr make_plist( tsd_t *TSD, int argc, const streng **argv )
 {
    paramboxptr first = NULL, last = NULL, p;
@@ -683,6 +707,18 @@ static paramboxptr make_plist( tsd_t *TSD, int argc, const streng **argv )
       p->next = NULL;
       p->dealloc = 1;
       p->value = argv[i] ? Str_dupTSD( argv[i] ) : NULL;
+      p->stempool = NULL;
+      p->stemname = NULL;
+      if ( argv == ot_pend_argv( TSD ) )
+      {
+         /* "obj~m(st.)": pass the stem reference on to USE ARG s. */
+         paramboxptr q = ot_pend_box( TSD, i );
+         if ( q )
+         {
+            p->stempool = q->stempool;
+            p->stemname = q->stemname;
+         }
+      }
       if ( last )
          last->next = p;
       else
@@ -1286,6 +1322,8 @@ static streng *call_bif( tsd_t *TSD, const char *bifname, int argc,
       boxes[i].value = kills[i] ? kills[i] : (streng *) argv[i];
       boxes[i].dealloc = 0;
       boxes[i].next = ( i + 1 < n ) ? &boxes[i + 1] : NULL;
+      boxes[i].stempool = NULL;
+      boxes[i].stemname = NULL;
    }
    saveName = TSD->BIFname;
    saveFunc = TSD->BIFfunc;
@@ -2557,6 +2595,221 @@ static void add_seq_methods( tsd_t *TSD, oo_object *c )
    add_methods( TSD, c, "TOSTRING MAKESTRING", m_arr_tostring, 0 );
 }
 
+/* ------------------------------------------------------------------ */
+/* Stem: a stem as an object; "RETURN x." in OO code returns one      */
+/* ------------------------------------------------------------------ */
+
+static int cmp_tails( const void *x, const void *y );
+
+static oo_object *stem_self( tsd_t *TSD, oo_call *c )
+{
+   if ( c->self == NULL || c->self->kind != OK_STEM )
+      err_nomethod( TSD, c->selfstr, c->name );
+   return c->self;
+}
+
+static variableptr stem_box( tsd_t *TSD, oo_object *o )
+{
+   return oo_stem_box( TSD, o->u.pool, ( (oo_tsd *) TSD->oo_tsd )->s_stem );
+}
+
+variableptr oo_stem_object_box( tsd_t *TSD, const streng *s )
+{
+   oo_object *o;
+
+   if ( TSD->oo_tsd == NULL || !OO_LOOKS_LIKE_HANDLE( s ) )
+      return NULL;
+   o = obj_of( TSD, s );
+   return ( o && o->kind == OK_STEM ) ? stem_box( TSD, o ) : NULL;
+}
+
+/* the tail of stem[i, j, ...]: the string values joined with "." */
+static streng *stem_tail( tsd_t *TSD, oo_call *c, int from )
+{
+   streng *t = Str_creTSD( "" ), *v;
+   int i;
+
+   for ( i = from; i < c->argc || i == from; i++ )
+   {
+      const streng *a = need_arg( TSD, c, i );
+      if ( i > from )
+         t = catc( TSD, t, "." );
+      v = oo_stringify( TSD, a );
+      t = cats( TSD, t, v ? v : a );
+      if ( v )
+         Free_stringTSD( v );
+   }
+   return t;
+}
+
+static streng *m_stem_init( tsd_t *TSD, oo_call *c )
+{
+   const streng *d = opt_arg( c, 0 );
+
+   /* .stem~new(default): the default value of every element */
+   if ( d )
+   {
+      oo_object *o = stem_self( TSD, c );
+      stem_box( TSD, o );
+      oo_pool_set( TSD, o->u.pool, ( (oo_tsd *) TSD->oo_tsd )->s_stem, Str_dupTSD( d ) );
+   }
+   return NULL;
+}
+
+static streng *m_stem_at( tsd_t *TSD, oo_call *c )
+{
+   variableptr b = stem_box( TSD, stem_self( TSD, c ) );
+   streng *t = stem_tail( TSD, c, 0 );
+   const streng *v = oo_stem_get( TSD, b, t );
+
+   Free_stringTSD( t );
+   if ( v == NULL )
+      v = oo_stem_default( TSD, b );
+   return nil_or( TSD, v );
+}
+
+static streng *m_stem_put( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = stem_self( TSD, c );
+   streng *t = stem_tail( TSD, c, 1 );
+
+   oo_stem_put( TSD, o->u.pool, ( (oo_tsd *) TSD->oo_tsd )->s_stem, t,
+                Str_dupTSD( need_arg( TSD, c, 0 ) ) );
+   Free_stringTSD( t );
+   return NULL;
+}
+
+static streng *m_stem_remove( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = stem_self( TSD, c );
+   streng *t = stem_tail( TSD, c, 0 ), *old;
+   const streng *v = oo_stem_get( TSD, stem_box( TSD, o ), t );
+
+   old = nil_or( TSD, v );
+   if ( v )
+      oo_stem_put( TSD, o->u.pool, ( (oo_tsd *) TSD->oo_tsd )->s_stem, t, NULL );
+   Free_stringTSD( t );
+   return old;
+}
+
+static streng *m_stem_hasindex( tsd_t *TSD, oo_call *c )
+{
+   streng *t = stem_tail( TSD, c, 0 );
+   int has = oo_stem_get( TSD, stem_box( TSD, stem_self( TSD, c ) ), t ) != NULL;
+
+   Free_stringTSD( t );
+   return mkbool( TSD, has );
+}
+
+static streng *m_stem_items( tsd_t *TSD, oo_call *c )
+{
+   return mkint( TSD, oo_stem_each( TSD, stem_box( TSD, stem_self( TSD, c ) ), NULL, NULL ) );
+}
+
+static streng *m_stem_isempty( tsd_t *TSD, oo_call *c )
+{
+   return mkbool( TSD, oo_stem_each( TSD, stem_box( TSD, stem_self( TSD, c ) ), NULL, NULL ) == 0 );
+}
+
+typedef struct { streng **t, **v; long n, cap; } stemlist;
+
+static void stemlist_cb( tsd_t *TSD, void *data, const streng *tail, const streng *value )
+{
+   stemlist *l = (stemlist *) data;
+
+   if ( l->n >= l->cap )
+   {
+      long ncap = l->cap ? l->cap * 2 : 16;
+      streng **nt = (streng **) MallocTSD( ncap * sizeof( streng * ) );
+      if ( l->t )
+      {
+         memcpy( nt, l->t, l->n * sizeof( streng * ) );
+         FreeTSD( l->t );
+      }
+      l->t = nt;
+      l->cap = ncap;
+   }
+   l->t[l->n++] = Str_dupTSD( tail );
+   (void) value;
+}
+
+/* the tails of the stem of o, sorted like DO OVER sorts them */
+static void stem_sorted_tails( tsd_t *TSD, oo_object *o, stemlist *l )
+{
+   l->t = l->v = NULL;
+   l->n = l->cap = 0;
+   oo_stem_each( TSD, stem_box( TSD, o ), stemlist_cb, l );
+   if ( l->n )
+      qsort( l->t, l->n, sizeof( streng * ), cmp_tails );
+}
+
+static streng *m_stem_lists( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *o = stem_self( TSD, c ), *idx, *items;
+   variableptr b = stem_box( TSD, o );
+   stemlist l;
+   long i;
+   int want = str_eqc( c->name, "ALLITEMS" ) ? 1 : str_eqc( c->name, "SUPPLIER" ) ? 2 : 0;
+
+   stem_sorted_tails( TSD, o, &l );
+   idx = new_object( TSD, ot->cArray, OK_ARRAY );
+   items = new_object( TSD, ot->cArray, OK_ARRAY );
+   for ( i = 0; i < l.n; i++ )
+   {
+      if ( want != 1 )
+         oo_array_put( TSD, idx, i + 1, Str_dupTSD( l.t[i] ) );
+      if ( want != 0 )
+         oo_array_put( TSD, items, i + 1, Str_dupTSD( oo_stem_get( TSD, b, l.t[i] ) ) );
+      Free_stringTSD( l.t[i] );
+   }
+   if ( l.t )
+      FreeTSD( l.t );
+   if ( want == 2 )
+      return hdup( TSD, make_supplier( TSD, items, idx ) );
+   return hdup( TSD, want ? items : idx );
+}
+
+static streng *m_stem_empty( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = stem_self( TSD, c );
+   stemlist l;
+   long i;
+
+   stem_sorted_tails( TSD, o, &l );
+   for ( i = 0; i < l.n; i++ )
+   {
+      oo_stem_put( TSD, o->u.pool, ( (oo_tsd *) TSD->oo_tsd )->s_stem, l.t[i], NULL );
+      Free_stringTSD( l.t[i] );
+   }
+   if ( l.t )
+      FreeTSD( l.t );
+   return NULL;
+}
+
+static streng *m_stem_string( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = stem_self( TSD, c );
+   const streng *d = oo_stem_default( TSD, stem_box( TSD, o ) );
+
+   /* like the value of a stem variable: its default value, or its name */
+   if ( d )
+      return Str_dupTSD( d );
+   return o->objname ? Str_dupTSD( o->objname ) : Str_creTSD( "a Stem" );
+}
+
+/* "RETURN x." in OO code: a new Stem object holding a copy of x. */
+streng *oo_eval_stemobj( tsd_t *TSD, nodeptr thisptr )
+{
+   oo_tsd *ot = get_ot( TSD );
+   oo_object *o = new_object( TSD, ot->cStem, OK_STEM );
+
+   oo_stem_assign( TSD, o->u.pool, ot->s_stem,
+                   oo_stem_box( TSD, TSD->currlevel->vars, thisptr->p[0]->name ) );
+   o->objname = Str_dupTSD( thisptr->p[0]->name );
+   return hdup( TSD, o );
+}
+
 static void add_hash_methods( tsd_t *TSD, oo_object *c, int directory )
 {
    add_methods( TSD, c, "INIT", m_nothing, 0 );
@@ -2609,6 +2862,7 @@ static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
    ot->cTable = new_class( TSD, "Table", NULL, ot->cObject, OK_TABLE );
    ot->cBuffer = new_class( TSD, "MutableBuffer", NULL, ot->cObject, OK_BUFFER );
    ot->cSupplier = new_class( TSD, "Supplier", NULL, ot->cObject, OK_SUPPLIER );
+   ot->cStem = new_class( TSD, "Stem", NULL, ot->cObject, OK_STEM );
 
    /* Object */
    add_methods( TSD, ot->cObject, "INIT", m_nothing, 0 );
@@ -2690,6 +2944,16 @@ static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
    add_methods( TSD, ot->cBuffer, "SUBSTR POS LASTPOS LEFT RIGHT WORDS WORD COUNTSTR VERIFY",
                 m_string_bif, 0 );
 
+   add_methods( TSD, ot->cStem, "INIT", m_stem_init, 0 );
+   add_methods( TSD, ot->cStem, "[] AT", m_stem_at, 0 );
+   add_methods( TSD, ot->cStem, "[]= PUT", m_stem_put, 0 );
+   add_methods( TSD, ot->cStem, "REMOVE", m_stem_remove, 0 );
+   add_methods( TSD, ot->cStem, "HASINDEX", m_stem_hasindex, 0 );
+   add_methods( TSD, ot->cStem, "ITEMS", m_stem_items, 0 );
+   add_methods( TSD, ot->cStem, "ISEMPTY", m_stem_isempty, 0 );
+   add_methods( TSD, ot->cStem, "EMPTY", m_stem_empty, 0 );
+   add_methods( TSD, ot->cStem, "ALLINDEXES MAKEARRAY ALLITEMS SUPPLIER", m_stem_lists, 0 );
+   add_methods( TSD, ot->cStem, "STRING", m_stem_string, 0 );
    add_methods( TSD, ot->cSupplier, "AVAILABLE", m_sup_available, 0 );
    add_methods( TSD, ot->cSupplier, "ITEM INDEX", m_sup_item, 0 );
    add_methods( TSD, ot->cSupplier, "NEXT", m_sup_next, 0 );
@@ -3308,6 +3572,12 @@ streng *oo_eval_message( tsd_t *TSD, nodeptr thisptr, int need_result )
    if ( kill == NULL )
       kill = recv = Str_dupTSD( recv );
    argc = eval_args( TSD, thisptr->p[1], &plist, &argv );
+   {
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   const streng **save_argv = ot->pend_argv;
+   paramboxptr save_plist = ot->pend_plist;
+   ot->pend_argv = argv;
+   ot->pend_plist = plist;
    if ( thisptr->u.nonansi )
    {
       /* ~name:super -- start the lookup after the current method's class */
@@ -3318,6 +3588,9 @@ streng *oo_eval_message( tsd_t *TSD, nodeptr thisptr, int need_result )
    }
    else
       result = send_msg( TSD, recv, thisptr->name, argc, argv );
+   ot->pend_argv = save_argv;
+   ot->pend_plist = save_plist;
+   }
    if ( plist )
       deallocplink( TSD, plist );
    FreeTSD( (void *) argv );
@@ -3466,10 +3739,21 @@ void oo_exec_usearg( tsd_t *TSD, nodeptr thisptr )
    {
       if ( n->name )
       {
-         if ( a && a->value )
-            setvalue( TSD, n->name, Str_dupTSD( a->value ), -1 );
+         const streng *nm = n->name;
+         int stem = nm->len > 1 && nm->value[nm->len - 1] == '.'
+                 && memchr( nm->value, '.', nm->len - 1 ) == NULL;
+         variableptr box;
+
+         if ( stem && a && a->stempool )
+            /* "call f st." ... "use arg s.": s. is the caller's st. */
+            oo_link_stem( TSD, nm, oo_stem_box( TSD, a->stempool, a->stemname ) );
+         else if ( stem && a && a->value
+                && ( box = oo_stem_object_box( TSD, a->value ) ) != NULL )
+            oo_link_stem( TSD, nm, box );
+         else if ( a && a->value )
+            setvalue( TSD, nm, Str_dupTSD( a->value ), -1 );
          else
-            drop_var( TSD, n->name );
+            drop_var( TSD, nm );
       }
       if ( a )
          a = a->next;

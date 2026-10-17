@@ -173,6 +173,8 @@ static paramboxptr parametrize( const tsd_t *TSD, int ArgCount, const int *ParLe
          parms = root = (paramboxptr)MallocTSD( sizeof(parambox )) ;
 
       parms->value = wrapstring( TSD, ParStrings[i], ParLengths[i] ) ;
+      parms->stempool = NULL ;
+      parms->stemname = NULL ;
    }
 
    if (parms)

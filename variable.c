@@ -1750,6 +1750,19 @@ static int setvalue_stem( const tsd_t *TSD, var_hashtable *vars,
 
    DPRINTF((TSD,"setvalue_stem:     ?"));
 
+   /* OO extension: "r. = <a Stem object>" copies the whole stem */
+   if ( TSD->oo_active && value && OO_LOOKS_LIKE_HANDLE( value ) )
+   {
+      variableptr from = oo_stem_object_box( (tsd_t *) TSD, value );
+      if ( from )
+      {
+         oo_stem_assign( (tsd_t *) TSD, vars, name, from );
+         Free_stringTSD( value );
+         vt->thespot = NULL;
+         return 0;
+      }
+   }
+
    vars->writes++;
    ptr = findsimple( TSD, vars, name, &rehash );
 
@@ -4235,4 +4248,192 @@ const streng *oo_peek_simple( tsd_t *TSD, const streng *name )
    if ( KNOWN_RESERVED( name->value, Str_len( name ) ) )
       return isvariable( TSD, name );
    return oo_pool_get( TSD, TSD->currlevel->vars, name );
+}
+
+/* ------------------------------------------------------------------ */
+/* OO extension: stems by reference (USE ARG s.) and Stem objects     */
+/* ------------------------------------------------------------------ */
+
+/*
+ * oo_stem_box returns the real box of the stem stemname ("X.", uppercase)
+ * in vars. It is created without a value if it doesn't exist yet.
+ */
+variableptr oo_stem_box( tsd_t *TSD, var_hashtable *vars, const streng *stemname )
+{
+   variableptr ptr;
+   unsigned hashn;
+   int rehash = 0;
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+
+   hashn = hashfunc( vt, stemname, 0, NULL, vars->size );
+   ptr = vars->tbl[hashn];
+   vars->reads++;
+   SEEK_VAR_CCMP( ptr, stemname, vt->fullhash, vars, rehash );
+   SEEK_EXPOSED( ptr );
+   if ( ptr == NULL )
+   {
+      newbox( TSD, stemname, NULL, &vars->tbl[hashn], vt->fullhash );
+      vars->elements++;
+      NEW_HASHTABLE_CHECK( vars, rehash );
+      ptr = vars->tbl[hashn];
+   }
+   if ( ptr->index == NULL )
+      ptr->index = make_hash_table( TSD, vt->initialHashTableLength );
+   if ( rehash )
+      reorgHashtable( TSD, vars );
+   return ptr;
+}
+
+/*
+ * oo_link_stem makes the stem localname of the current procedure an alias
+ * of target (a real stem box), like PROCEDURE EXPOSE does.
+ */
+void oo_link_stem( tsd_t *TSD, const streng *localname, variableptr target )
+{
+   var_hashtable *vars = TSD->currlevel->vars;
+   variableptr ptr, r;
+   unsigned hashv;
+   int junk, rehash = 0;
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+
+   hashv = hashfunc( vt, localname, 0, &junk, vars->size );
+   ptr = vars->tbl[hashv];
+   vars->writes++;
+   SEEK_VAR_CCMP( ptr, localname, vt->fullhash, vars, rehash );
+   if ( ptr )
+   {
+      for ( r = ptr; r->realbox; r = r->realbox )
+         ;
+      if ( r == target )
+         return;           /* already the same stem */
+      if ( ptr->index )
+      {
+         remove_foliage( TSD, ptr->index );
+         ptr->index = NULL;
+      }
+      ptr->realbox = target;
+   }
+   else
+   {
+      newbox( TSD, localname, NULL, &vars->tbl[hashv], vt->fullhash );
+      vars->elements++;
+      NEW_HASHTABLE_CHECK( vars, rehash );
+      vars->tbl[hashv]->realbox = target;
+   }
+   if ( rehash )
+      reorgHashtable( TSD, vars );
+}
+
+/* the default value of a real stem box, NULL if it has none */
+const streng *oo_stem_default( tsd_t *TSD, variableptr stem )
+{
+   if ( stem->flag & VFLAG_NUM && !( stem->flag & VFLAG_STR ) )
+      expand_to_str( TSD, stem );
+   return ( stem->flag & VFLAG_STR ) ? stem->value : NULL;
+}
+
+/* the value of stem.tail (tail as is, not substituted), NULL if unset */
+const streng *oo_stem_get( tsd_t *TSD, variableptr stem, const streng *tail )
+{
+   variableptr p;
+   int rehash = 0;
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+
+   if ( stem->index == NULL )
+      return NULL;
+   /* tails are case sensitive, like in getdirvalue_compound */
+   p = stem->index->tbl[hashfunc( vt, tail, 0, NULL, stem->index->size )];
+   stem->index->reads++;
+   SEEK_VAR_CMP( p, tail, vt->fullhash, stem->index, rehash );
+   SEEK_EXPOSED( p );
+   if ( rehash )
+      reorgHashtable( TSD, stem->index );
+   if ( p == NULL )
+      return NULL;
+   if ( p->flag & VFLAG_NUM && !( p->flag & VFLAG_STR ) )
+      expand_to_str( TSD, p );
+   return ( p->flag & VFLAG_STR ) ? p->value : NULL;
+}
+
+/* calls cb for each tail of the real stem box that has a value */
+int oo_stem_each( tsd_t *TSD, variableptr st,
+                  void (*cb)( tsd_t *, void *, const streng *, const streng * ),
+                  void *data )
+{
+   variableptr p, r;
+   int count = 0;
+   unsigned i;
+
+   if ( st == NULL || st->index == NULL )
+      return 0;
+   for ( i = 0; i < st->index->size; i++ )
+   {
+      for ( p = st->index->tbl[i]; p; p = p->next )
+      {
+         r = get_realbox( p );
+         if ( r->flag & VFLAG_NUM && !( r->flag & VFLAG_STR ) )
+            expand_to_str( TSD, r );
+         if ( !( r->flag & VFLAG_STR ) )
+            continue;
+         if ( cb )
+            cb( TSD, data, p->name, r->value );
+         count++;
+      }
+   }
+   return count;
+}
+
+/* name.tail as a new string */
+static streng *oo_compound_name( tsd_t *TSD, const streng *stemname, const streng *tail )
+{
+   streng *n = Str_makeTSD( stemname->len + tail->len );
+
+   memcpy( n->value, stemname->value, stemname->len );
+   memcpy( n->value + stemname->len, tail->value, tail->len );
+   n->len = stemname->len + tail->len;
+   return n;
+}
+
+/* sets (value != NULL) or drops stem.tail of the stem stemname in vars */
+void oo_stem_put( tsd_t *TSD, var_hashtable *vars, const streng *stemname,
+                  const streng *tail, streng *value )
+{
+   streng *n = oo_compound_name( TSD, stemname, tail );
+
+   /* the stem box needs its tail index before compounds can be set */
+   oo_stem_box( TSD, vars, stemname );
+   if ( value )
+      setdirvalue_compound( TSD, vars, n, value );
+   else
+      drop_dirvar_compound( TSD, vars, n );
+   Free_stringTSD( n );
+}
+
+typedef struct { var_hashtable *vars; const streng *name; } oo_stemcopy;
+
+static void oo_copy_cb( tsd_t *TSD, void *data, const streng *tail, const streng *value )
+{
+   oo_stemcopy *c = (oo_stemcopy *) data;
+   oo_stem_put( TSD, c->vars, c->name, tail, Str_dupTSD( value ) );
+}
+
+/*
+ * oo_stem_assign replaces the whole stem name of vars by a copy of the
+ * real stem box from: its default value and every tail.
+ */
+void oo_stem_assign( tsd_t *TSD, var_hashtable *vars, const streng *name, variableptr from )
+{
+   variableptr to = oo_stem_box( TSD, vars, name );
+   const streng *def;
+   oo_stemcopy c;
+
+   if ( to == from )
+      return;
+   drop_var_stem( TSD, vars, name );
+   def = oo_stem_default( TSD, from );
+   if ( def )
+      setvalue_stem( TSD, vars, name, Str_dupTSD( def ) );
+   c.vars = vars;
+   c.name = name;
+   oo_stem_each( TSD, from, oo_copy_cb, &c );
 }

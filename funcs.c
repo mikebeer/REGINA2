@@ -425,6 +425,18 @@ paramboxptr initplist( tsd_t *TSD, cnodeptr thisptr )
          currnt = newptr ;
       }
 
+      /* OO extension: a plain stem argument may be used by USE ARG s. */
+      if ( thisptr->p[0] && thisptr->p[0]->type == X_STEM_SYMBOL )
+      {
+         currnt->stempool = TSD->currlevel->vars ;
+         currnt->stemname = thisptr->p[0]->name ;
+      }
+      else
+      {
+         currnt->stempool = NULL ;
+         currnt->stemname = NULL ;
+      }
+
       if (thisptr->type==X_CEXPRLIST && TSD->trace_stat!='I')
       {
          if (thisptr->u.strng)
@@ -489,6 +501,8 @@ paramboxptr initargs( tsd_t *TSD, int argc, const int *lengths,
          currnt = newptr;
       }
 
+      currnt->stempool = NULL;
+      currnt->stemname = NULL;
       if ( lengths[i] == RX_NO_STRING )
       {
          currnt->dealloc = 1;

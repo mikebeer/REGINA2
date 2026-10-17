@@ -1,0 +1,3 @@
+use arg 1 2
+loop ran 3 times
+rc=0

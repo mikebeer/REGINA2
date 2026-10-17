@@ -124,6 +124,13 @@ typedef struct pparambox {
    paramboxptr next ;
    int dealloc ;
    struct strengtype *value ;
+   /*
+    * OO extension: for an argument that is a plain stem ("call f st."),
+    * the caller's variable pool and the stem name, so that "USE ARG s."
+    * can make s. an alias of the caller's stem. NULL otherwise.
+    */
+   var_hashtable *stempool ;
+   const struct strengtype *stemname ;
 } parambox ;
 
 typedef struct tnode {

@@ -92,6 +92,7 @@ static void move_labels( nodeptr front, nodeptr end, int level );
 static nodeptr do_over_var( nodeptr rep );
 static void finish_do( nodeptr dostat, nodeptr opts );
 extern int __regina_do_is_loop; /* lexsrc.l: the DO token was LOOP */
+extern int __regina_oo_keywords( void ); /* lexsrc.l: OO keywords are on */
 extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 
 #define IS_EXPRLIST(x) ( ( (x) != NULL )                   \
@@ -1004,6 +1005,10 @@ say_stat     : say nexpr               { $$ = $1 ;
              ;
 
 return_stat  : return nexpr            { $$ = $1 ;
+                                         /* OO: "RETURN x." returns a Stem object */
+                                         if ( $2 && $2->type == X_STEM_SYMBOL
+                                           && __regina_oo_keywords() )
+                                            $2 = makenode( X_OO_STEMOBJ, 1, $2 ) ;
                                          $$->p[0] = $2 ; }
              ;
 

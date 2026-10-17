@@ -53,6 +53,23 @@ streng *oo_describe( tsd_t *TSD, const streng *s );
 /* simple variable value without tracing or NOVALUE (variable.c) */
 const streng *oo_peek_simple( tsd_t *TSD, const streng *name );
 
+/* stems by reference and Stem objects (variable.c) */
+variableptr oo_stem_box( tsd_t *TSD, var_hashtable *vars, const streng *stemname );
+void oo_link_stem( tsd_t *TSD, const streng *localname, variableptr target );
+const streng *oo_stem_default( tsd_t *TSD, variableptr stem );
+const streng *oo_stem_get( tsd_t *TSD, variableptr stem, const streng *tail );
+int oo_stem_each( tsd_t *TSD, variableptr st,
+                  void (*cb)( tsd_t *, void *, const streng *, const streng * ),
+                  void *data );
+void oo_stem_put( tsd_t *TSD, var_hashtable *vars, const streng *stemname,
+                  const streng *tail, streng *value );
+void oo_stem_assign( tsd_t *TSD, var_hashtable *vars, const streng *name, variableptr from );
+
+/* the real stem box of a Stem object handle, else NULL (oo.c) */
+variableptr oo_stem_object_box( tsd_t *TSD, const streng *s );
+/* "RETURN x." in OO code: a Stem object with a copy of the stem */
+streng *oo_eval_stemobj( tsd_t *TSD, nodeptr thisptr );
+
 /* expression nodes */
 streng *oo_eval_message( tsd_t *TSD, nodeptr thisptr, int need_result );
 streng *oo_eval_index( tsd_t *TSD, nodeptr thisptr );
