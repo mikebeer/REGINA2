@@ -87,6 +87,15 @@ call check 'operator method "+"', v, '(11,22)'
 call check 'SAY uses ~string   ', acct, 'Account with 175'
 call check 'subclass + super   ', .savings~new(10)~describe, 'Savings: Account with 10'
 call check 'routine            ', twice(21), 42
+pairs = ''
+do counter n with index k item v over .array~of('x', 'y')
+  pairs = pairs k'='v
+end
+call check 'DO WITH + COUNTER  ', n strip(pairs), '2 1=x 2=y'
+loop label find i = 1 to 100
+  if i * i > 50 then leave find
+end
+call check 'LOOP LABEL / LEAVE ', i, 8
 signal on syntax name nomethod
 x = acct~fly
 say '  WRONG  unknown message did not raise an error'

@@ -60,6 +60,7 @@ streng *oo_eval_envsymbol( tsd_t *TSD, nodeptr thisptr );
 streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr );
 streng *oo_eval_over_item( tsd_t *TSD, nodeptr thisptr );
 void oo_over_assign( tsd_t *TSD, nodeptr thisptr );
+void oo_do_counter( tsd_t *TSD, nodeptr var, long n );
 
 /* instructions */
 void oo_exec_init( tsd_t *TSD, nodeptr thisptr );

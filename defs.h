@@ -176,6 +176,8 @@
 #define X_OO_OVERITEM   157 /* DO OVER: p[0] snapshot var, p[1] index var */
 #define X_OO_OVERWHILE  158 /* DO OVER ... WHILE: p[0] var, p[1] item, p[2] cond */
 #define X_OO_OVERSTEP   159 /* DO OVER: "var = item" at the start of the body */
+#define X_OO_DOOPTS     160 /* parse time only: DO LABEL name, p[0] COUNTER var */
+#define X_OO_DOWITH     161 /* parse time only: p[0] coll, p[1] INDEX var, p[2] ITEM var, p[3] FOR */
 
 
 /* The three first two numbers have not errortext attched to them */

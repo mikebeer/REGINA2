@@ -3502,6 +3502,31 @@ static void tail_cb( tsd_t *TSD, void *data, const streng *tail, const streng *v
    (void) value;
 }
 
+/* DO WITH over a stem: tails with their values */
+typedef struct { streng *tail, *value; } tailpair;
+typedef struct { tsd_t *TSD; tailpair *v; long n, cap; } pairsave;
+
+static void pair_cb( tsd_t *TSD, void *data, const streng *tail, const streng *value )
+{
+   pairsave *t = (pairsave *) data;
+
+   if ( t->n >= t->cap )
+   {
+      long ncap = t->cap ? t->cap * 2 : 16;
+      tailpair *n = (tailpair *) MallocTSD( ncap * sizeof( tailpair ) );
+      if ( t->v )
+      {
+         memcpy( n, t->v, t->n * sizeof( tailpair ) );
+         FreeTSD( t->v );
+      }
+      t->v = n;
+      t->cap = ncap;
+   }
+   t->v[t->n].tail = Str_dupTSD( tail );
+   t->v[t->n].value = Str_dupTSD( value );
+   t->n++;
+}
+
 static int is_whole( const streng *s, double *d )
 {
    int i;
@@ -3531,6 +3556,32 @@ static int cmp_tails( const void *x, const void *y )
    return cmp_strings( x, y );
 }
 
+/* the tail is the first member, so cmp_tails works on tailpairs too */
+static int cmp_pairs( const void *x, const void *y )
+{
+   return cmp_tails( &( (const tailpair *) x )->tail, &( (const tailpair *) y )->tail );
+}
+
+/* DO WITH: the snapshot holds index n at 2n-1 and item n at 2n */
+static void snap_pair( tsd_t *TSD, oo_object *snap, long *n, streng *idx, streng *item )
+{
+   ( *n )++;
+   oo_array_put( TSD, snap, 2 * *n - 1, idx );
+   oo_array_put( TSD, snap, 2 * *n, item );
+}
+
+static void snap_supplier( tsd_t *TSD, oo_object *snap, long *n, oo_object *sp )
+{
+   long i;
+
+   for ( i = sp->u.sp.pos; i <= sp->u.sp.items->u.a.size; i++ )
+      if ( sp->u.sp.items->u.a.v[i - 1] )
+         snap_pair( TSD, snap, n,
+                    nil_or( TSD, i <= sp->u.sp.indexes->u.a.size
+                                 ? sp->u.sp.indexes->u.a.v[i - 1] : NULL ),
+                    Str_dupTSD( sp->u.sp.items->u.a.v[i - 1] ) );
+}
+
 /* the classic meaning of "DO x OVER y": count = y if x and OVER are empty */
 static int classic_over_count( tsd_t *TSD, nodeptr thisptr, const streng *v, long *count )
 {
@@ -3542,8 +3593,8 @@ static int classic_over_count( tsd_t *TSD, nodeptr thisptr, const streng *v, lon
 
    if ( var == NULL || over == NULL || var->type != X_SIM_SYMBOL )
       return 0;
-   vx = isvariable( TSD, var->name );
-   vo = isvariable( TSD, over->name );
+   vx = oo_peek_simple( TSD, var->name );
+   vo = oo_peek_simple( TSD, over->name );
    if ( vx == NULL || vo == NULL || vx->len != 0 || vo->len != 0 || v == NULL
      || obj_of( TSD, v ) != NULL )
       return 0;
@@ -3574,8 +3625,8 @@ static void classic_over_error( tsd_t *TSD, nodeptr thisptr, const streng *v )
 
    if ( var == NULL || over == NULL || var->type != X_SIM_SYMBOL )
       return;
-   vx = isvariable( TSD, var->name );
-   vo = isvariable( TSD, over->name );
+   vx = oo_peek_simple( TSD, var->name );
+   vo = oo_peek_simple( TSD, over->name );
    s = Str_dupTSD( vx ? vx : var->name );
    s = catc( TSD, s, " " );
    s = cats( TSD, s, vo ? vo : over->name );
@@ -3593,9 +3644,10 @@ streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr )
    const streng *cur;
    streng *kill = NULL, *v = NULL, *arrh = NULL;
    long i, n = 0, classic;
+   int with = thisptr->p[3] != NULL;   /* DO WITH INDEX/ITEM: pairs */
 
    /* release the snapshot of the previous run of this loop */
-   cur = isvariable( TSD, thisptr->name );
+   cur = oo_peek_simple( TSD, thisptr->name );
    if ( cur && ( old = obj_of( TSD, cur ) ) != NULL && old->snapshot )
       free_object( TSD, old );
 
@@ -3613,14 +3665,72 @@ streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr )
       setvalue( TSD, thisptr->name, Str_creTSD( "\001CLASSIC" ), -1 );
       return mkint( TSD, classic );
    }
-   if ( !was_active && coll->type != X_STEM_SYMBOL && !OO_LOOKS_LIKE_HANDLE( v ) )
+   if ( !was_active && !with && coll->type != X_STEM_SYMBOL && !OO_LOOKS_LIKE_HANDLE( v ) )
       classic_over_error( TSD, thisptr, v );
 
    ot = get_ot( TSD );
    snap = new_object( TSD, ot->cArray, OK_ARRAY );
    snap->snapshot = 1;
 
-   if ( coll->type == X_STEM_SYMBOL )
+   if ( with && coll->type == X_STEM_SYMBOL )
+   {
+      pairsave t;
+      t.TSD = TSD;
+      t.v = NULL;
+      t.n = t.cap = 0;
+      oo_stem_tails( TSD, coll->name, pair_cb, &t );
+      if ( t.n )
+         qsort( t.v, t.n, sizeof( tailpair ), cmp_pairs );
+      for ( i = 0; i < t.n; i++ )
+         snap_pair( TSD, snap, &n, t.v[i].tail, t.v[i].value );
+      if ( t.v )
+         FreeTSD( t.v );
+   }
+   else if ( with )
+   {
+      o = obj_of( TSD, v );
+      if ( o && o->kind != OK_ARRAY && o->kind != OK_QUEUE && o->kind != OK_DIRECTORY
+        && o->kind != OK_TABLE && o->kind != OK_SUPPLIER )
+      {
+         /* any object that has a SUPPLIER or a MAKEARRAY method */
+         streng *sname = Str_creTSD( "SUPPLIER" );
+         oo_object *scope;
+         if ( lookup( TSD, o, sname, NULL, &scope ) != NULL )
+            arrh = send_msg( TSD, v, sname, 0, NULL );
+         else
+            arrh = send_msg( TSD, v, ot->s_makearray, 0, NULL );
+         Free_stringTSD( sname );
+         o = obj_of( TSD, arrh );
+         if ( o == NULL || ( o->kind != OK_ARRAY && o->kind != OK_QUEUE
+                          && o->kind != OK_SUPPLIER ) )
+            o = NULL;
+      }
+      if ( o == NULL )
+      {
+         streng *d;
+         d = describe( TSD, v );
+         exiterror( ERR_EXECUTION_ERROR, 5, tmpstr_of( TSD, d ) );
+      }
+      if ( o->kind == OK_ARRAY || o->kind == OK_QUEUE )
+      {
+         for ( i = 0; i < o->u.a.size; i++ )
+            if ( o->u.a.v[i] )
+               snap_pair( TSD, snap, &n, mkint( TSD, i + 1 ), Str_dupTSD( o->u.a.v[i] ) );
+      }
+      else if ( o->kind == OK_SUPPLIER )
+         snap_supplier( TSD, snap, &n, o );
+      else
+      {
+         oo_entry *e;
+         for ( e = o->u.h->first; e; e = e->onext )
+            snap_pair( TSD, snap, &n, Str_dupTSD( e->key ), Str_dupTSD( e->value ) );
+      }
+      if ( kill )
+         Free_stringTSD( kill );
+      if ( arrh )
+         Free_stringTSD( arrh );
+   }
+   else if ( coll->type == X_STEM_SYMBOL )
    {
       tailcol t;
       t.TSD = TSD;
@@ -3681,39 +3791,51 @@ streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr )
 
 streng *oo_eval_over_item( tsd_t *TSD, nodeptr thisptr )
 {
-   streng *k1 = NULL, *k2 = NULL, *r;
-   const streng *a = evaluate( TSD, thisptr->p[0], &k1 );
-   const streng *i = evaluate( TSD, thisptr->p[1], &k2 );
-   oo_object *o = obj_of( TSD, a );
+   streng *r;
+   /* the hidden variables are read without tracing */
+   const streng *a = oo_peek_simple( TSD, thisptr->p[0]->name );
+   const streng *i = oo_peek_simple( TSD, thisptr->p[1]->name );
+   oo_object *o = a ? obj_of( TSD, a ) : NULL;
    int err = 0;
-   long idx = streng_to_int( TSD, i, &err );
+   long idx = i ? streng_to_int( TSD, i, &err ) : 0;
 
+   /* DO WITH: p[2] names the half of the pair, "INDEX" or "ITEM" */
+   if ( thisptr->p[2] && !err )
+      idx = thisptr->p[2]->name->value[1] == 'N' ? 2 * idx - 1 : 2 * idx;
    if ( o == NULL || err || idx < 1 || idx > o->u.a.size )
       exiterror( ERR_INTERPRETER_FAILURE, 1, __FILE__, __LINE__, "DO OVER" );
    r = Str_dupTSD( o->u.a.v[idx - 1] );
-   if ( k1 )
-      Free_stringTSD( k1 );
-   if ( k2 )
-      Free_stringTSD( k2 );
    return r;
 }
 
 /* DO name OVER c WHILE cond: set name before cond is tested */
 void oo_over_assign( tsd_t *TSD, nodeptr thisptr )
 {
-   streng *k = NULL, *v;
-   oo_object *snap = obj_of( TSD, evaluate( TSD, thisptr->p[1]->p[0], &k ) );
+   streng *v;
+   const streng *h = oo_peek_simple( TSD, thisptr->p[1]->p[0]->name );
+   oo_object *snap = h ? obj_of( TSD, h ) : NULL;
 
-   if ( k )
-      Free_stringTSD( k );
    if ( snap == NULL )
       return;      /* classic "DO expr": no control variable */
    v = oo_eval_over_item( TSD, thisptr->p[1] );
+   if ( TSD->trace_stat == 'I' )
+      tracevalue( TSD, v, 'V' );
 
    if ( thisptr->p[0]->type == X_HEAD_SYMBOL )
       fix_compound( TSD, thisptr->p[0], v );
    else
       setshortcut( TSD, thisptr->p[0], v );
+}
+
+/* DO COUNTER c: assign the iteration count n to the variable node var */
+void oo_do_counter( tsd_t *TSD, nodeptr var, long n )
+{
+   streng *v = mkint( TSD, n );
+
+   if ( var->type == X_HEAD_SYMBOL )
+      fix_compound( TSD, var, v );
+   else
+      setshortcut( TSD, var, v );
 }
 
 streng *oo_describe( tsd_t *TSD, const streng *s )

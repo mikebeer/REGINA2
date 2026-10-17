@@ -1,0 +1,53 @@
+for:  a b
+for+while:  a b
+with dir:  x=1 y=2
+with arr:  1:a 2:b 3:c 4:d
+with idx for:  1 2
+with stem:  1=one 2=two B=bee
+with while:  x
+counter ctl: 3 4
+counter n: 4
+counter over: 4
+counter while0: 0
+lbl 1 1
+lbl 2 1
+in block
+loop forever: 3
+loop ctl 1
+loop ctl 2
+loop label counter: 5
+loop with:  1a 2b
+var
+loop var: 2 y
+leave item var 1 10
+compound counter 3
+interp 10
+error do v over a to 3; end -> Error 27.1: Invalid use of keyword "TO" in DO clause
+error do v over a by 2; end -> Error 27.1: Invalid use of keyword "BY" in DO clause
+error do label a label b; end -> Error 27.1: Invalid use of keyword "LABEL" in DO clause
+error do counter a counter b 2; end -> Error 27.1: Invalid use of keyword "COUNTER" in DO clause
+error do with index i over 5; end -> Error 98.5: [DO OVER: "5" is not a collection]
+error do label l i = 1 to 2; end m -> Unexpected or unmatched END
+ok    do label l i = 1 to 2; end i
+ok    do label l i = 1 to 2; end l
+ok    do with index i item x over a; end x
+error do with index i item x over a; end q -> Unexpected or unmatched END
+error do v over a for -1; end -> Invalid expression result
+leave ctl var with label 1
+leave over var with label 10
+iterate item var with label 3 30
+    80 *-*  do label l counter c with index i item x over a
+       >V>    "an Array"
+    81 *-*   say i x c
+       >V>     "1"
+       >V>     "p"
+       >V>     "1"
+1 p 1
+    82 *-*  end l
+    80 *-*  do label l counter c with index i item x over a
+    81 *-*   say i x c
+2 q 2
+    82 *-*  end l
+    80 *-*  do label l counter c with index i item x over a
+    83 *-*  trace o
+rc=0

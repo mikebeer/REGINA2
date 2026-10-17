@@ -138,6 +138,18 @@ static int bracket_depth=0;
 static int in_directives=0;
 
 /*
+ * oo_seen is set once the program has used a message operator or "[".
+ * Those were syntax errors in classic Rexx, so a classic program never
+ * sets it. OO_KEYWORDS tells whether the new keywords EXPOSE, USE ARG,
+ * LOOP and the DO options LABEL, COUNTER and WITH are recognized.
+ * do_over_pending is set for "DO name OVER ..." to allow FOR afterwards.
+ */
+static int oo_seen=0, do_over_pending=0;
+#define OO_KEYWORDS ( in_directives || oo_seen )
+int __regina_do_is_loop=0;   /* the last DO token was LOOP (yaccsrc.y) */
+static void oo_second_word( const char *text );
+
+/*
  * Tracking of "~name:super": oo_expect_name is set by a message operator,
  * the prologue of yylex() moves it on so that oo_after_name is set for the
  * token directly following the message name.
@@ -180,7 +192,7 @@ static int fill_buffer( char *buf, int max_size ) ;
 
 
 %start comm signal sgtype procd parse then with
-%start numeric do1 other value1 ifcont signame nmform
+%start numeric do1 other value1 ifcont signame nmform dowith
 
 %e 2500
 %p 17000
@@ -479,12 +491,31 @@ key_with          [wW][iI][tT][hH]
    assert( do_level >=0 ) ;
    do_level++ ;
    in_do = 1 ;
+   do_over_pending = 0 ;
+   __regina_do_is_loop = 0 ;
+   SET_NEXTSTART() ;
+   return DO ; }
+
+<comm>[lL][oO][oO][pP]{between} {
+   /*
+    * OO extension: LOOP is DO, but without a repetitor it loops forever.
+    * "loop~msg" and "loop[i] = x" stay message and index instructions.
+    */
+   if ( !OO_KEYWORDS
+     || ( yyleng == 4 && ( yy_hold_char == '~' || yy_hold_char == '[' ) ) )
+      REJECT ;
+   BEGIN do1 ;
+   assert( do_level >=0 ) ;
+   do_level++ ;
+   in_do = 1 ;
+   do_over_pending = 0 ;
+   __regina_do_is_loop = 1 ;
    SET_NEXTSTART() ;
    return DO ; }
 
 <comm>{key_expose}{between} {
    /* OO extension: EXPOSE instruction in methods */
-   if ( !in_directives )
+   if ( !OO_KEYWORDS )
       REJECT ;
    BEGIN other ;
    in_parse = 1 ;
@@ -493,7 +524,7 @@ key_with          [wW][iI][tT][hH]
 
 <comm>[uU][sS][eE]{blank}+{key_arg}{between} {
    /* OO extension: USE ARG instruction in methods and routines */
-   if ( !in_directives )
+   if ( !OO_KEYWORDS )
       REJECT ;
    BEGIN other ;
    in_parse = 1 ;
@@ -1310,6 +1341,60 @@ key_with          [wW][iI][tT][hH]
    SET_NEXTSTART() ;
    return FUZZ ; }
 
+   /*
+    * OO extension: DO LABEL name, DO COUNTER var, DO WITH INDEX i ITEM x
+    * OVER coll. In classic code these words stay ordinary symbols.
+    */
+<do1>[lL][aA][bB][eE][lL]{blank}+{var_symbol}{between} {
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   oo_second_word( yytext ) ;
+   SET_NEXTSTART() ;
+   return DOLABEL ; }
+
+<do1>[cC][oO][uU][nN][tT][eE][rR]{blank}+{var_symbol}{between} {
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   oo_second_word( yytext ) ;
+   SET_NEXTSTART() ;
+   return DOCOUNTER ; }
+
+<do1>[wW][iI][tT][hH]{blank}+/[iI][nN][dD][eE][xX] {
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   BEGIN dowith ;
+   SET_NEXTSTART() ;
+   return DOWITH ; }
+
+<do1>[wW][iI][tT][hH]{blank}+/[iI][tT][eE][mM] {
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   BEGIN dowith ;
+   SET_NEXTSTART() ;
+   return DOWITH ; }
+
+<dowith>[iI][nN][dD][eE][xX]{blank}+{var_symbol}{between} {
+   oo_second_word( yytext ) ;
+   SET_NEXTSTART() ;
+   return DOINDEX ; }
+
+<dowith>[iI][tT][eE][mM]{blank}+{var_symbol}{between} {
+   oo_second_word( yytext ) ;
+   SET_NEXTSTART() ;
+   return DOITEM ; }
+
+<dowith>[oO][vV][eE][rR]{between} {
+   BEGIN other ;
+   in_do = 4 ;     /* only FOR, WHILE and UNTIL may follow */
+   SET_NEXTSTART() ;
+   return DOOVER ; }
+
+<do1>{var_symbol}{blank}+[oO][vV][eE][rR]{blank} {
+   /* "DO name OVER ...": remember it, then lex it as an expression */
+   if ( OO_KEYWORDS )
+      do_over_pending = 1 ;
+   REJECT ; }
+
 <do1>{key_forever}{between} {
    BEGIN other ;
    assert(in_do) ;
@@ -1324,7 +1409,7 @@ key_with          [wW][iI][tT][hH]
       SET_NEXTSTART() ;
       return TO ;
    }
-   else if ( in_do == 1 )
+   else if ( in_do == 1 || in_do == 4 )
    {
       parser_data.tline = linenr - 1 ; /* set tline for exiterror */
       exiterror( ERR_INVALID_DO_SYNTAX, 1, "TO" )  ;
@@ -1338,7 +1423,7 @@ key_with          [wW][iI][tT][hH]
       SET_NEXTSTART() ;
       return BY ;
    }
-   else if ( in_do == 1 )
+   else if ( in_do == 1 || in_do == 4 )
    {
       parser_data.tline = linenr - 1 ; /* set tline for exiterror */
       exiterror( ERR_INVALID_DO_SYNTAX, 1, "BY" ) ;
@@ -1346,8 +1431,10 @@ key_with          [wW][iI][tT][hH]
    REJECT ; }
 
 {key_for}{between} {
-   if ( in_do == 2 )
+   if ( in_do == 2 || in_do == 4 || ( in_do == 1 && do_over_pending ) )
    {
+      /* OO extension: in_do 4 is "DO ... OVER coll", FOR limits it */
+      in_do = ( in_do == 2 ) ? 2 : 4 ;
       BEGIN other ;
       SET_NEXTSTART() ;
       return FOR ;
@@ -1828,6 +1915,7 @@ key_with          [wW][iI][tT][hH]
     */
 {between}\-\>\>{between} {
    __regina_oo_operator = "->>" ;
+   oo_seen = 1 ;
    oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -1835,6 +1923,7 @@ key_with          [wW][iI][tT][hH]
 
 {between}\-\>{between} {
    __regina_oo_operator = "->" ;
+   oo_seen = 1 ;
    oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -1844,6 +1933,7 @@ key_with          [wW][iI][tT][hH]
    if ( !insert_abuttal )
       REJECT ;
    __regina_oo_operator = "~~" ;
+   oo_seen = 1 ;
    oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -1853,6 +1943,7 @@ key_with          [wW][iI][tT][hH]
    if ( !insert_abuttal )
       REJECT ;
    __regina_oo_operator = "~" ;
+   oo_seen = 1 ;
    oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -1865,6 +1956,7 @@ key_with          [wW][iI][tT][hH]
 \[{between} {
    if ( !insert_abuttal )
       REJECT ;
+   oo_seen = 1 ;
    bracket_depth++ ;
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -2038,6 +2130,24 @@ static void set_assignment( char delim )
 /* rmspc uppercases all characters and removes blanks from a string.
  * Returns the input string.
  */
+/*
+ * OO extension: copies the second word of "LABEL name", "COUNTER name",
+ * "INDEX name" or "ITEM name" uppercased into retvalue.
+ */
+static void oo_second_word( const char *text )
+{
+   int i = 0;
+
+   while ( *text && !MY_ISBLANK( *text ) )
+      text++;
+   while ( *text && MY_ISBLANK( *text ) )
+      text++;
+   while ( *text && !MY_ISBLANK( *text ) && *text != '\n' && *text != '/'
+        && i < BUFFERSIZE - 1 )
+      retvalue[i++] = (char) rx_toupper( *text++ );
+   retvalue[i] = '\0';
+}
+
 static YY_CHAR_TYPE *rmspc( YY_CHAR_TYPE *instr )
 {
    YY_CHAR_TYPE *retval=instr ,
@@ -2870,6 +2980,8 @@ static void init_it_all( tsd_t *TSD )
    inhibit_delayed_abuttal = 0 ;
    bracket_depth = 0 ;
    in_directives = 0 ;
+   oo_seen = do_over_pending = 0 ;
+   __regina_do_is_loop = 0 ;
    oo_expect_name = oo_in_name = oo_after_name = 0 ;
    firstln = 0 ;
    in_parse = 0 ;

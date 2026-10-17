@@ -45,12 +45,49 @@ exit
 | `obj~name = value` | Calls `name=` (attribute assignment). `obj~name(i) = v` calls `name=` with `v` as the first argument and `i` as the second. |
 | `coll[i]`, `coll[i, j]` | Sends `[]`. `coll[i] = v` sends `[]=`. The `[` must directly follow the term. |
 | `.name` | Environment symbol: a class (`.array`, `.myclass`), `.nil`, `.true`, `.false`, `.environment`, `.local`. |
-| `DO x OVER coll` | Iterates over the items of a collection, or over the tails of a stem (`DO t OVER st.`). WHILE/UNTIL, LEAVE and ITERATE work as usual. |
+| `DO x OVER coll` | Iterates over a collection or the tails of a stem. See [Loops](#loops) for `DO WITH`, `FOR`, `COUNTER`, `LABEL` and `LOOP`. |
 | `USE ARG a, b` | Assigns the arguments to variables without converting them to strings, so objects keep their identity. |
 | `EXPOSE a b c.` | First instruction of a method: shares these variables with the object. |
 | `::directive …` | Starts the directive section. The main program ends at the first directive. |
 
 Message terms bind tighter than prefix operators: `-a~size` is `-(a~size)`.
+
+### Loops
+
+All classic DO forms work unchanged. The extension adds these:
+
+| Form | Meaning |
+|---|---|
+| `DO x OVER coll` | `x` takes each item of an Array, List or Queue, each index of a Directory, StringTable or Table, or each tail of a stem (`DO t OVER st.`). Other objects are asked for `makeArray`. |
+| `DO x OVER coll FOR n` | At most `n` iterations. |
+| `DO WITH INDEX i ITEM x OVER coll` | Sets both the index and the item: the position and the element for an Array, the key and the value for a Directory or Table, the tail and its value for a stem. Either part can be left out, and the order of `INDEX` and `ITEM` doesn't matter. `FOR n` works here too. Other objects are asked for `supplier`, or else for `makeArray`. |
+| `DO COUNTER c …` | Sets `c` to 0 when the loop starts and adds 1 before each pass through the body, so afterwards `c` holds the number of passes. Works with every kind of loop. |
+| `DO LABEL name …` | Names the loop for `LEAVE name`, `ITERATE name` and `END name`. The loop's control variable (`i` in `DO i = …`, `x` in `DO x OVER …`) still works there too. A plain `DO LABEL name` group runs once, and `LEAVE name` leaves it. |
+| `LOOP …` | The same as `DO`, except that `LOOP` with no repetitor and no condition repeats until `LEAVE` (like `DO FOREVER`). |
+
+`WHILE` and `UNTIL` work with all of them. In an OVER loop, `WHILE` is
+tested after the variables are set to the next item. The collection is
+copied when the loop starts, so changing it in the body doesn't change the
+loop. `LABEL` and `COUNTER` come first, in either order:
+`DO LABEL outer COUNTER n i = 1 TO 10`.
+
+```rexx
+d = .directory~new
+d['apple'] = 3; d['pear'] = 5
+do counter n with index fruit item count over d
+  say n':' fruit count
+end
+loop label search i = 1 to 100
+  if i * i > 50 then leave search
+end
+```
+
+`LOOP`, `COUNTER`, `LABEL`, `WITH`, `EXPOSE` and `USE ARG` are keywords
+only in a program that has a `::` directive line, or after a message
+operator or `[` earlier in the source, or in INTERPRET data of a program
+that uses objects. Everywhere else they stay ordinary symbols, so a classic
+program with a variable named `counter` or a command named `loop` runs as
+before.
 
 ### Directives
 
@@ -127,7 +164,7 @@ English except German.
 - **No garbage collection.** Objects live until the program ends. A program
   that creates millions of short-lived objects uses a lot of memory.
 - Not implemented: `GUARD`, `REPLY`, `START` (concurrency), `FORWARD`,
-  `RAISE`, `SIGNAL ON USER`, `DO … OVER … FOR`, `::resource`, and the
+  `RAISE`, `SIGNAL ON USER`, `SELECT LABEL`, `::resource`, and the
   `.methods`, `.routines` and `.context` environment symbols.
 - An error in a file loaded by `::requires` names the main program, not the
   required file.

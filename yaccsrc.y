@@ -90,7 +90,8 @@ void newlabel( const tsd_t *TSD, internal_parser_type *ipt, nodeptr thisptr ) ;
 static nodeptr optgluelast( nodeptr p1, nodeptr p2 );
 static void move_labels( nodeptr front, nodeptr end, int level );
 static nodeptr do_over_var( nodeptr rep );
-static void transform_do_over( nodeptr dostat, nodeptr var );
+static void finish_do( nodeptr dostat, nodeptr opts );
+extern int __regina_do_is_loop; /* lexsrc.l: the DO token was LOOP */
 extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 
 #define IS_EXPRLIST(x) ( ( (x) != NULL )                   \
@@ -133,6 +134,7 @@ extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 %token PLACEHOLDER NOTREADY CONSYMBOL SIMSYMBOL EXFUNCNAME INFUNCNAME
 %token LABEL DOVARIABLE HEXSTRING STRING VERSION LINEIN WHATEVER NAME
 %token FAILURE BINSTRING OPTIONS ENVIRONMENT LOSTDIGITS
+%token DOLABEL DOCOUNTER DOWITH DOINDEX DOITEM DOOVER
 %token GTGT LTLT NOTGTGT NOTLTLT GTGTE LTLTE
 %token INPUT OUTPUT ERROR NORMAL APPEND REPLACE STREAM STEM LIFO FIFO NOEOL
 %token LOWER CASELESS
@@ -364,6 +366,8 @@ call         : CALL                    { $$ = makenode(X_CALL,0) ;
 do           : DO                      { $$ = makenode(X_DO,0) ;
                                          $$->lineno = parser_data.tline ;
                                          $$->charnr = parser_data.tstart ;
+                                         /* OO: LOOP, see finish_do() */
+                                         $$->u.nonansi = __regina_do_is_loop ;
                                          level++; }
              ;
 exit         : EXIT                    { $$ = makenode(X_EXIT,0) ;
@@ -577,38 +581,43 @@ end          : end_stat simsymb        { $$ = $1 ;
              | end_stat simsymb error  {  exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
              ;
 
-do_stat      : do repetitor conditional ncl nxstats end
-                                       { nodeptr overvar;
-                                         $$ = $1;
-                                         $$->p[0] = $2;
-                                         $$->p[1] = $3;
-                                         $$->p[2] = optgluelast( $4, $5 );
+do_stat      : do do_opts repetitor conditional ncl nxstats end
+                                       { $$ = $1;
+                                         $$->p[0] = $3;
+                                         $$->p[1] = $4;
+                                         $$->p[2] = optgluelast( $5, $6 );
                                          if ( $$->p[2] )
                                             $$->p[2]->o.last = NULL;
-                                         $$->p[3] = $6;
-                                         overvar = do_over_var( $2 );
-                          if ( overvar )
-                          {
-                             /* OO: DO name OVER collection */
-                             if ( $$->p[3]->name
-                               && Str_cmp( $$->p[3]->name, overvar->name ) != 0 )
-                                exiterror( ERR_UNMATCHED_END, 0 );
-                             transform_do_over( $$, overvar );
-                          }
-                          else
-                          {
-                          if (($$->p[0]==NULL || $$->p[0]->name==NULL)
-                              && $$->p[3]->name)
-                                            exiterror( ERR_UNMATCHED_END, 0 );
-                          if (($$->p[0])&&($$->p[0]->name)&&
-                              ($$->p[3]->name)&&
-                              (($$->p[3]->name->len != $$->p[0]->name->len)||
-                               (strncmp($$->p[3]->name->value,
-                                        $$->p[0]->name->value,
-                                        $$->p[0]->name->len))))
-                                            exiterror( ERR_UNMATCHED_END, 0 );
-                          }
-                                       }
+                                         $$->p[3] = $7;
+                                         finish_do( $$, $2 ); }
+             ;
+
+   /* OO extension: DO LABEL name COUNTER var ... */
+do_opts      :                         { $$ = NULL ; }
+             | do_opts dolabel         { $$ = $1 ? $1 : makenode(X_OO_DOOPTS,0) ;
+                                         if ( $$->name )
+                                            exiterror( ERR_INVALID_DO_SYNTAX, 1, "LABEL" ) ;
+                                         $$->name = (streng *) $2 ; }
+             | do_opts docounter       { $$ = $1 ? $1 : makenode(X_OO_DOOPTS,0) ;
+                                         if ( $$->p[0] )
+                                            exiterror( ERR_INVALID_DO_SYNTAX, 1, "COUNTER" ) ;
+                                         $$->p[0] = $2 ; }
+             ;
+
+dolabel      : DOLABEL                 { $$ = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
+             ;
+docounter    : DOCOUNTER               { $$ = create_head( retvalue ) ; }
+             ;
+doindex      : DOINDEX                 { $$ = create_head( retvalue ) ; }
+             ;
+doitem       : DOITEM                  { $$ = create_head( retvalue ) ; }
+             ;
+
+   /* OO extension: DO WITH INDEX i ITEM x OVER coll */
+withvars     : doindex                 { $$ = makenode(X_OO_DOOPTS,2,$1,NULL) ; }
+             | doitem                  { $$ = makenode(X_OO_DOOPTS,2,NULL,$1) ; }
+             | doindex doitem          { $$ = makenode(X_OO_DOOPTS,2,$1,$2) ; }
+             | doitem doindex          { $$ = makenode(X_OO_DOOPTS,2,$2,$1) ; }
              ;
 
 repetitor    : dovar '=' expr nspace tobyfor tobyfor tobyfor
@@ -630,6 +639,18 @@ repetitor    : dovar '=' expr nspace tobyfor tobyfor tobyfor
              | FOREVER error { exiterror( ERR_INV_SUBKEYWORD, 16, "WHILE UNTIL", __reginatext ) ; }
              | expr nspace             { $1 = makenode(X_DO_EXPR,1,$1) ;
                                          $$ = makenode(X_REP,2,NULL,$1) ; }
+               /* OO: DO name OVER coll FOR n (the lexer allows FOR) */
+             | expr nspace FOR expr nspace
+                                       { $1 = makenode(X_DO_EXPR,1,$1) ;
+                                         $$ = makenode(X_REP,3,NULL,$1,
+                                                       makenode(X_DO_FOR,1,$4)) ;
+                                         if ( do_over_var( $$ ) == NULL )
+                                            exiterror( ERR_INVALID_DO_SYNTAX, 1, "FOR" ) ; }
+             | DOWITH withvars DOOVER expr nspace
+                                       { $$ = makenode(X_OO_DOWITH,4,$4,$2->p[0],$2->p[1],NULL) ; }
+             | DOWITH withvars DOOVER expr nspace FOR expr nspace
+                                       { $$ = makenode(X_OO_DOWITH,4,$4,$2->p[0],$2->p[1],
+                                                       makenode(X_DO_FOR,1,$7)) ; }
              |                         { $$ = NULL ; }
              ;
 
@@ -2286,21 +2307,47 @@ static nodeptr do_over_var( nodeptr rep )
    return l->p[0];
 }
 
+/* one "var = item" step of an OVER loop; mode is NULL, "INDEX" or "ITEM" */
+static nodeptr over_item( const char *abuf, const char *ibuf, const char *mode )
+{
+   nodeptr m = NULL;
+
+   if ( mode )
+   {
+      m = makenode( X_STRING, 0 );
+      m->name = Str_cre_TSD( parser_data.TSD, mode );
+   }
+   return makenode( X_OO_OVERITEM, 3, create_head( abuf ), create_head( ibuf ), m );
+}
+
+static nodeptr over_step( nodeptr dostat, nodeptr var, nodeptr item )
+{
+   nodeptr asg = makenode( X_OO_OVERSTEP, 2, var, item );
+
+   asg->lineno = dostat->lineno;
+   asg->charnr = dostat->charnr;
+   return asg;
+}
+
 /*
  * Rewrites the loop into
- *    DO <idx> = 1 TO <snapshot of the collection, its item count>
+ *    DO <idx> = 1 TO <snapshot of the collection, its item count> [FOR n]
  *       name = <item idx of the snapshot>
  *       ...
  * with two hidden variables that a program cannot name.
+ *
+ * "DO name OVER coll": var is name, oversym the symbol OVER (for the
+ * classic meaning). "DO WITH INDEX i ITEM x OVER coll": var is NULL and
+ * idxvar/itemvar are set (one may be NULL); the snapshot holds pairs.
  */
-static void transform_do_over( nodeptr dostat, nodeptr var )
+static void transform_over( nodeptr dostat, nodeptr var, nodeptr coll, nodeptr oversym,
+                            nodeptr idxvar, nodeptr itemvar, nodeptr fornode )
 {
    static unsigned long counter = 0;
    char abuf[32], ibuf[32];
-   nodeptr coll, rep, init, over, to, asg, item;
+   nodeptr rep, init, over, to, asg, item, iitem = NULL, xitem = NULL, marker = NULL;
    streng *arrname, *idxname;
 
-   coll = dostat->p[0]->p[1]->p[0]->p[1];
    counter++;
    sprintf( abuf, "\001OVERA%lu", counter );
    arrname = Str_cre_TSD( parser_data.TSD, abuf );
@@ -2309,36 +2356,149 @@ static void transform_do_over( nodeptr dostat, nodeptr var )
 
    init = makenode( X_STRING, 0 );
    init->name = Str_cre_TSD( parser_data.TSD, "1" );
+   if ( var == NULL )
+   {
+      marker = makenode( X_STRING, 0 );
+      marker->name = Str_cre_TSD( parser_data.TSD, "WITH" );
+   }
    /*
     * p[1] and p[2] let the run time recognize the classic meaning
     * "DO expr" of "DO x OVER y" (x and OVER empty, y a whole number).
+    * p[3] marks DO WITH.
     */
-   over = makenode( X_OO_OVERINIT, 3, coll, var,
-                    dostat->p[0]->p[1]->p[0]->p[0]->p[1] );
+   over = makenode( X_OO_OVERINIT, 4, coll, var, oversym, marker );
    over->name = Str_dup_TSD( parser_data.TSD, arrname );
+   Free_string_TSD( parser_data.TSD, arrname );
    to = makenode( X_DO_TO, 1, over );
-   rep = makenode( X_REP, 2, init, to );
+   if ( fornode )
+      rep = makenode( X_REP, 3, init, to, fornode );
+   else
+      rep = makenode( X_REP, 2, init, to );
    rep->name = idxname;
 
-   item = makenode( X_OO_OVERITEM, 2, create_head( abuf ), create_head( ibuf ) );
-   Free_string_TSD( parser_data.TSD, arrname );
-   asg = makenode( X_OO_OVERSTEP, 2, var, item );
-   asg->lineno = dostat->lineno;
-   asg->charnr = dostat->charnr;
+   if ( var )
+   {
+      item = over_item( abuf, ibuf, NULL );
+      asg = over_step( dostat, var, item );
+   }
+   else
+   {
+      asg = NULL;
+      if ( idxvar )
+      {
+         iitem = over_item( abuf, ibuf, "INDEX" );
+         asg = over_step( dostat, idxvar, iitem );
+      }
+      if ( itemvar )
+      {
+         xitem = over_item( abuf, ibuf, "ITEM" );
+         asg = optgluelast( asg, over_step( dostat, itemvar, xitem ) );
+      }
+      item = NULL;
+   }
 
    /*
-    * WHILE is tested after the control variable is set: the condition
-    * assigns the item itself before it is evaluated.
+    * WHILE is tested after the control variables are set: the condition
+    * assigns them itself before it is evaluated. OVERSTEP and OVERWHILE
+    * share the item nodes.
     */
    if ( dostat->p[1] && dostat->p[1]->type == X_WHILE )
-      dostat->p[1]->p[0] = makenode( X_OO_OVERWHILE, 3, var, item,
-                                     dostat->p[1]->p[0] );
-   /* OVERSTEP and OVERWHILE share the item node */
+   {
+      if ( var )
+         dostat->p[1]->p[0] = makenode( X_OO_OVERWHILE, 3, var, item,
+                                        dostat->p[1]->p[0] );
+      else
+      {
+         if ( itemvar )
+            dostat->p[1]->p[0] = makenode( X_OO_OVERWHILE, 3, itemvar, xitem,
+                                           dostat->p[1]->p[0] );
+         if ( idxvar )
+            dostat->p[1]->p[0] = makenode( X_OO_OVERWHILE, 3, idxvar, iitem,
+                                           dostat->p[1]->p[0] );
+      }
+   }
 
    dostat->p[0] = rep;
    dostat->p[2] = optgluelast( asg, dostat->p[2] );
    dostat->p[2]->o.last = NULL;
    /* LEAVE name and ITERATE name use the visible name */
+   if ( var == NULL )
+      var = itemvar ? itemvar : idxvar;
    dostat->name = Str_dup_TSD( parser_data.TSD, var->name );
+}
+
+static int same_name( const streng *a, const streng *b )
+{
+   return a && b && Str_cmp( a, b ) == 0;
+}
+
+/*
+ * Checks the END name of a DO loop and applies the OO forms: DO name OVER,
+ * DO WITH, LABEL, COUNTER and LOOP. Classic loops are checked as before.
+ */
+static void finish_do( nodeptr dostat, nodeptr opts )
+{
+   nodeptr rep = dostat->p[0], overvar;
+   streng *endname = dostat->p[3]->name;
+   streng *label = opts ? opts->name : NULL;
+   nodeptr counter = opts ? opts->p[0] : NULL;
+   int isloop = dostat->u.nonansi;
+
+   dostat->u.nonansi = 0;
+   if ( rep && rep->type == X_OO_DOWITH )
+   {
+      if ( endname && !same_name( endname, label )
+        && !( rep->p[1] && same_name( endname, rep->p[1]->name ) )
+        && !( rep->p[2] && same_name( endname, rep->p[2]->name ) ) )
+         exiterror( ERR_UNMATCHED_END, 0 );
+      transform_over( dostat, NULL, rep->p[0], NULL, rep->p[1], rep->p[2], rep->p[3] );
+   }
+   else if ( ( overvar = do_over_var( rep ) ) != NULL )
+   {
+      /* OO: DO name OVER collection [FOR n] */
+      if ( endname && !same_name( endname, label )
+        && !same_name( endname, overvar->name ) )
+         exiterror( ERR_UNMATCHED_END, 0 );
+      transform_over( dostat, overvar, rep->p[1]->p[0]->p[1],
+                      rep->p[1]->p[0]->p[0]->p[1], NULL, NULL, rep->p[2] );
+   }
+   else
+   {
+      if ( endname && !same_name( endname, label ) )
+      {
+         if ( rep == NULL || rep->name == NULL )
+            exiterror( ERR_UNMATCHED_END, 0 );
+         if ( ( endname->len != rep->name->len )
+           || strncmp( endname->value, rep->name->value, rep->name->len ) )
+            exiterror( ERR_UNMATCHED_END, 0 );
+      }
+      /*
+       * LOOP without a repetitor loops forever. A plain DO group with
+       * LABEL or COUNTER becomes a loop running once, so LEAVE works.
+       */
+      if ( rep == NULL && dostat->p[1] == NULL && isloop )
+         dostat->p[0] = makenode( X_REP_FOREVER, 0 );
+      else if ( rep == NULL && dostat->p[1] == NULL && ( label || counter ) )
+      {
+         nodeptr one = makenode( X_STRING, 0 );
+         one->name = Str_cre_TSD( parser_data.TSD, "1" );
+         dostat->p[0] = makenode( X_REP, 2, NULL, makenode( X_DO_EXPR, 1, one ) );
+      }
+   }
+   if ( label )
+   {
+      /* the DO node owns the label now, the tree frees every name once */
+      opts->name = NULL;
+      if ( dostat->name )
+      {
+         /* OVER loop: its variable stays usable, see LEAVE in interprt.c */
+         nodeptr alias = makenode( X_SIM_SYMBOL, 0 );
+         alias->name = dostat->name;
+         dostat->p[3]->p[1] = alias;
+      }
+      dostat->name = label;
+   }
+   if ( counter )
+      dostat->p[3]->p[0] = counter;
 }
 

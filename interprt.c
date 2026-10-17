@@ -70,6 +70,7 @@ typedef struct _stackelem {
 #endif
    nodeptr            thisptr ;
    cnodeptr           incr_node;
+   long               counter ; /* OO: DO COUNTER c, iterations started */
    struct _stackelem *prev ; /* needed for a look back */
 } stackelem;
 
@@ -593,7 +594,8 @@ reinterpret:
    TSD->currentnode = thisptr ;
    if ( TSD->trace_stat != 'O' && TSD->trace_stat != 'N' && TSD->trace_stat != 'F' )
    {
-      if (thisptr->type != X_DO)  /* let do-stats trace themselves */
+      /* let do-stats trace themselves; DO OVER steps are part of them */
+      if (thisptr->type != X_DO && thisptr->type != X_OO_OVERSTEP)
          traceline( TSD, thisptr, TSD->trace_stat, 0 );
    }
 
@@ -663,6 +665,10 @@ reinterpret:
          s.number = -1;
 #endif
          s.incrdir = 1 ;
+         s.counter = 0 ;
+         /* OO: DO COUNTER c, the END node carries the counter variable */
+         if ( thisptr->p[3] && thisptr->p[3]->p[0] )
+            oo_do_counter( TSD, thisptr->p[3]->p[0], 0 );
          tmpstr = NULL ;
          /*
           * If we have a named variable as the iterator, get itl its in tmpstr
@@ -850,6 +856,8 @@ fprintf(stderr,"%s %d\n",__FILE__,__LINE__);
             if (!isboolean(TSD,thisptr->p[1]->p[0],3, NULL))
                goto endloop ;
          }
+         if ( thisptr->p[3] && thisptr->p[3]->p[0] )
+            oo_do_counter( TSD, thisptr->p[3]->p[0], ++s.counter );
          /*
           * Execute the code in the DO block
           */
@@ -2211,7 +2219,10 @@ oo_plain_assign:
             if ( ( ( iptr->p[0] != NULL ) &&
                    ( iptr->p[0]->name != NULL ) &&
                    ( Str_cmp( thisptr->name, iptr->p[0]->name ) == 0 ) )
-              || ( iptr->name != NULL && Str_cmp( thisptr->name, iptr->name ) == 0 ) )
+              || ( iptr->name != NULL && Str_cmp( thisptr->name, iptr->name ) == 0 )
+              /* OO: the variable of a DO LABEL x v OVER c loop */
+              || ( iptr->p[3] != NULL && iptr->p[3]->p[1] != NULL
+                && Str_cmp( thisptr->name, iptr->p[3]->p[1]->name ) == 0 ) )
             {
                /*
                 * Iterator name equals our argument. Automatically pop one
