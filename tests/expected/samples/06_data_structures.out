@@ -1,0 +1,8 @@
+stack top c, size 3
+popped c b, left 1
+tree holds 6 distinct words
+in order : apple banana cherry kiwi mango peach
+has kiwi : 1
+has lemon: 0
+depth    : 5
+rc=0

@@ -36,6 +36,11 @@ done
 mkdir -p "$WORK/root/DEBIAN" "$WORK/root/usr/share/doc/regina-rexx-oo"
 cp "$SRC/COPYING-LIB" "$WORK/root/usr/share/doc/regina-rexx-oo/copyright"
 cp "$SRC/README.OO.md" "$WORK/root/usr/share/doc/regina-rexx-oo/README.OO.md"
+mkdir -p "$WORK/root/usr/share/doc/regina-rexx-oo/examples"
+cp "$SRC"/demo/oo_demo.rexx "$SRC"/demo/oo/* "$WORK/root/usr/share/doc/regina-rexx-oo/examples/"
+for m in "$SRC"/doc/Regina-OO-Manual.*; do
+  [ -f "$m" ] && cp "$m" "$WORK/root/usr/share/doc/regina-rexx-oo/"
+done
 [ -f "$WORK/root/etc/rxstack.conf" ] && echo /etc/rxstack.conf >"$WORK/root/DEBIAN/conffiles"
 SIZE=$(du -sk "$WORK/root" | cut -f1)
 DEPS=$(cd "$WORK/root" && dpkg-shlibdeps -O --ignore-missing-info \
@@ -55,10 +60,11 @@ Section: interpreters
 Priority: optional
 Homepage: https://github.com/mikebeer/REGINA2
 Description: Regina Rexx interpreter with optional OO syntax
- Regina $VER_DOT with the start of optional object-oriented extensions:
- message operators ~ and ->, cascades ~~ and ->>, array references [ ]
- and :: directives. Classic Rexx programs run unchanged. The object
- system itself is not implemented yet; OO terms raise error 91.
+ Regina $VER_DOT with an optional object-oriented extension in the style
+ of ooRexx: classes, methods, attributes and routines (:: directives),
+ message operators ~ and ->, cascades ~~ and ->>, collections, DO OVER
+ and DO WITH, USE ARG and stems passed by reference. Classic Rexx
+ programs run unchanged; --no-oo switches the extension off.
 EOC
 printf '#!/bin/sh\nset -e\n[ "$1" = configure ] && ldconfig || true\n' >"$WORK/root/DEBIAN/postinst"
 printf '#!/bin/sh\nset -e\n[ "$1" = remove ] && ldconfig || true\n' >"$WORK/root/DEBIAN/postrm"

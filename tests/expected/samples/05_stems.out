@@ -1,0 +1,13 @@
+1 Barney
+2 Betty
+3 Fred
+4 Wilma
+1 names longer than 5: Barney
+added by the routine: 4
+items 5 - first Barney - tails 0 1 2 3 4
+  0      4
+  1      Barney
+  2      Betty
+  3      Fred
+  4      Wilma
+rc=0

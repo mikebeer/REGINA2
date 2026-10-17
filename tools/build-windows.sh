@@ -58,20 +58,26 @@ rm -rf "$DIST" "$DIST.zip"; mkdir -p "$DIST/demo"
 cp rexx.exe "$DIST/"
 cp "$SRC"/*.mtb "$DIST/"
 cp "$SRC"/demo/*.rexx "$DIST/demo/"
+mkdir -p "$DIST/demo/oo"; cp "$SRC"/demo/oo/* "$DIST/demo/oo/"
+for m in "$SRC"/doc/Regina-OO-Manual.*; do [ -f "$m" ] && cp "$m" "$DIST/"; done
 cp "$SRC/COPYING-LIB" "$DIST/COPYING-LIB.txt"
 cp "$SRC/README.OO.md" "$DIST/README.OO.md"
 cat > "$DIST/README.txt" <<EOR
-Regina Rexx $VER_DOT with optional OO syntax - 64-bit Windows
+Regina Rexx $VER_DOT with the optional OO extension - 64-bit Windows
 
 rexx.exe is a standalone interpreter; it needs no DLL and no installation.
 Run a program with:   rexx.exe myprog.rexx
 
-Classic Rexx programs run unchanged. New, optional syntax:
-  obj~method(args)   obj -> method(args)     message send
-  obj~~m             obj ->> m(1) ->> n      cascade
-  a[i]  a[i, j]                              array reference
-  ::class, ::method, ::routine, ...          directives
-The object system is not implemented yet: OO terms raise error 91.
+Classic Rexx programs run unchanged. Object-oriented programs can use
+classes and methods (::class, ::method, ::attribute, ::routine,
+::requires), messages (obj~method, obj -> method, cascades ~~ and ->>),
+collections (Array, Directory, Table, Queue, Stem, ...), DO ... OVER,
+DO WITH INDEX/ITEM, USE ARG and stems passed by reference.
+
+  rexx.exe --oo prog.rexx      OO keywords on in every program
+  rexx.exe --no-oo prog.rexx   OO extension off (classic Regina 3.9.7)
+
+Manual: Regina-OO-Manual.pdf / .docx.  Samples: demo\oo\*.rexx
 
 Error messages in other languages: set REGINA_LANG (e.g. de) and
 REGINA_LANG_DIR to the folder containing the *.mtb files.

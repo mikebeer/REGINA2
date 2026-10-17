@@ -1,0 +1,16 @@
+A200 10    -> ok, left 5
+B310 3     -> ok, left 1
+C900 9     -> only 8 in stock
+X999 1     -> unknown article
+A100 25    -> ok, left 95
+
+Article Name          Qty    Value
+B320    Saw             30   720.00
+A100    Screwdriver     95   427.50
+C900    Toolbox          8   284.00
+B310    Drill            1    89.00
+A200    Hammer           5    64.50
+-----------------------------------
+Total                        1585.00
+Reorder: Hammer, Drill
+rc=0

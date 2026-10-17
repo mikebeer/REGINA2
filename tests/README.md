@@ -40,3 +40,9 @@ After editing `lexsrc.l` or `yaccsrc.y`, run `tools/regenerate-parser.sh`
 
 If `NAME.switches` exists next to `NAME.rexx`, its content is passed to the
 interpreter before the program, for example `--oo` or `--no-oo`.
+
+## Samples
+
+The `samples` suite runs the sample programs in `demo/oo` and compares
+their output with `tests/expected/samples`, so the samples in the
+packages and the manual keep working.

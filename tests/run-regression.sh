@@ -22,11 +22,12 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 SRC=$(cd "$HERE/.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/regina-regress.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
-SUITES="trip classic oo"
+SUITES="trip classic oo samples"
 
 cp -R "$SRC/trip" "$WORK/trip"
 cp -R "$HERE/classic" "$WORK/classic"
 cp -R "$HERE/oo" "$WORK/oo"
+cp -R "$SRC/demo/oo" "$WORK/samples"   # the sample programs of demo/oo
 ( cd "$WORK/trip" && for p in rc true std filter; do cc -o $p $p.c 2>/dev/null; done )
 PATH="$WORK/trip:$PATH"; export PATH
 
@@ -52,7 +53,7 @@ for suite in $SUITES; do run_suite $suite; done
 if [ "$MODE" = "--record" ]; then
   case " $SUITES " in
     *" $RECORD_SUITE "*) ;;
-    *) echo "usage: $0 REXX --record {trip|classic|oo}"; exit 2 ;;
+    *) echo "usage: $0 REXX --record {trip|classic|oo|samples}"; exit 2 ;;
   esac
   rm -rf "$HERE/expected/$RECORD_SUITE"; mkdir -p "$HERE/expected"
   cp -R "$WORK/out/$RECORD_SUITE" "$HERE/expected/"
