@@ -307,6 +307,8 @@
  98,  9,[Supplier hat keine weiteren Elemente]
  98, 10,[Klasse "%s" würde von sich selbst erben]|<name>
  98, 11,[Das Array hat %s Dimension(en), aber %s Index(e) wurden angegeben]|<value>,<value>
+ 98, 12,[Die Liste ist zirkulär]
+ 98, 13,[Ungültige Liste: %s]|<description>
  99,  0,[Übersetzungsfehler]
  99,  1,[Unbekannte Direktive "::%s"]|<name>
  99,  2,[Doppelte ::CLASS "%s"]|<name>

@@ -336,6 +336,8 @@
  98,  9,[Supplier has no more items]
  98, 10,[Class "%s" would inherit from itself]|<name>
  98, 11,[The array has %s dimension(s), but %s index(es) were given]|<value>,<value>
+ 98, 12,[The list is circular]
+ 98, 13,[Invalid list: %s]|<description>
  99,  0,[Translation error]
  99,  1,[Unknown directive "::%s"]|<name>
  99,  2,[Duplicate ::CLASS "%s"]|<name>

@@ -81,7 +81,7 @@ int oo_mode( void )
 
 enum {
    OK_PLAIN = 0, OK_CLASS, OK_NIL, OK_ARRAY, OK_DIRECTORY, OK_TABLE,
-   OK_QUEUE, OK_BUFFER, OK_SUPER, OK_SUPPLIER, OK_STRING, OK_STEM
+   OK_QUEUE, OK_BUFFER, OK_SUPER, OK_SUPPLIER, OK_STRING, OK_STEM, OK_CONS
 };
 
 #define MF_CLASS     0x0001   /* class method                    */
@@ -176,6 +176,7 @@ typedef struct oo_object {
       struct { struct oo_object *self; struct oo_object *start; } sup;
       struct { struct oo_object *items, *indexes; long pos; } sp;
       var_hashtable *pool;      /* Stem: private pool with stem "S." */
+      struct { streng *car, *cdr; } cons;   /* Cons: a LISP cell     */
    } u;
 } oo_object;
 
@@ -216,6 +217,7 @@ typedef struct oo_tsd {
    streng *s_self, *s_super, *s_string, *s_init, *s_unknown, *s_makearray;
    streng *s_stem;                   /* "S.", the stem inside a Stem      */
    struct oo_object *cStem;
+   struct oo_object *cCons, *cNilList;   /* LISP lists; methods of .nil */
    /* stem references of the arguments of the message being sent */
    const streng **pend_argv;
    paramboxptr pend_plist;
@@ -300,6 +302,8 @@ static streng *cats( tsd_t *TSD, streng *base, const streng *s )
 /* object table and handles                                           */
 /* ------------------------------------------------------------------ */
 
+static streng *hdup( tsd_t *TSD, oo_object *o );
+
 static oo_object *new_object( tsd_t *TSD, oo_object *cls, int kind )
 {
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
@@ -328,6 +332,12 @@ static oo_object *new_object( tsd_t *TSD, oo_object *cls, int kind )
    o->cls = cls;
    if ( kind == OK_STEM )
       o->u.pool = oo_pool_new( TSD );
+   if ( kind == OK_CONS )
+   {
+      /* a cell is never empty: (nil . nil) until INIT sets it */
+      o->u.cons.car = hdup( TSD, ot->nil );
+      o->u.cons.cdr = hdup( TSD, ot->nil );
+   }
    o->kind = kind;
    o->handle = Str_makeTSD( OO_HANDLE_LEN );
    o->handle->len = OO_HANDLE_LEN;
@@ -384,6 +394,13 @@ static void free_object( tsd_t *TSD, oo_object *o )
          FreeTSD( o->u.a.v );
       if ( o->u.a.dims )
          FreeTSD( o->u.a.dims );
+   }
+   if ( o->kind == OK_CONS )
+   {
+      if ( o->u.cons.car )
+         Free_stringTSD( o->u.cons.car );
+      if ( o->u.cons.cdr )
+         Free_stringTSD( o->u.cons.cdr );
    }
    Free_stringTSD( o->handle );
    FreeTSD( o );
@@ -583,6 +600,13 @@ static oo_method *lookup( tsd_t *TSD, oo_object *recv, const streng *name,
          *scope = cd->mro[i];
          return m;
       }
+   }
+   /* .nil is also the empty LISP list: car, cdr, length, ... */
+   if ( recv && recv->kind == OK_NIL && after == NULL && ot->cNilList
+     && ( m = find_in( ot->cNilList->u.c->imethods, name ) ) != NULL )
+   {
+      *scope = ot->cNilList;
+      return m;
    }
    return NULL;
 }
@@ -2794,6 +2818,10 @@ oo_object *oo_copy_object( tsd_t *TSD, oo_object *o )
             memcpy( n->u.a.dims, o->u.a.dims, o->u.a.ndims * sizeof( long ) );
          }
          break;
+      case OK_CONS:
+         n->u.cons.car = o->u.cons.car ? Str_dupTSD( o->u.cons.car ) : NULL;
+         n->u.cons.cdr = o->u.cons.cdr ? Str_dupTSD( o->u.cons.cdr ) : NULL;
+         break;
       case OK_DIRECTORY:
       case OK_TABLE:
       {
@@ -3122,6 +3150,774 @@ static void env_put( tsd_t *TSD, oo_tsd *ot, const char *key, streng *value )
    Free_stringTSD( k );
 }
 
+
+/* ------------------------------------------------------------------ */
+/* LISP-style lists: the Cons class; .nil is the empty list           */
+/* ------------------------------------------------------------------ */
+
+#define LISP_MAX_CELLS 100000000L   /* also the guard against cycles     */
+
+static oo_object *cons_of( tsd_t *TSD, const streng *s )
+{
+   oo_object *o = s ? obj_of( TSD, s ) : NULL;
+   return ( o && o->kind == OK_CONS ) ? o : NULL;
+}
+
+static int is_nil( tsd_t *TSD, const streng *s )
+{
+   oo_object *o = s ? obj_of( TSD, s ) : NULL;
+   return o && o->kind == OK_NIL;
+}
+
+static streng *nil_handle( tsd_t *TSD )
+{
+   return hdup( TSD, ( (oo_tsd *) TSD->oo_tsd )->nil );
+}
+
+/* a new cell; takes over car and cdr (NULL means .nil) */
+static streng *new_cons( tsd_t *TSD, streng *car, streng *cdr )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *o = new_object( TSD, ot->cCons, OK_CONS );
+
+   Free_stringTSD( o->u.cons.car );
+   Free_stringTSD( o->u.cons.cdr );
+   o->u.cons.car = car ? car : nil_handle( TSD );
+   o->u.cons.cdr = cdr ? cdr : nil_handle( TSD );
+   return hdup( TSD, o );
+}
+
+/* the receiver as a list: a Cons, or NULL for .nil */
+static oo_object *list_self( tsd_t *TSD, oo_call *c )
+{
+   if ( c->self && c->self->kind == OK_CONS )
+      return c->self;
+   if ( c->self && c->self->kind == OK_NIL )
+      return NULL;
+   err_nomethod( TSD, c->selfstr, c->name );
+   return NULL;
+}
+
+/*
+ * Walks the cells starting at o: n is the number of cells, *tail the
+ * value after the last cell (.nil for a proper list). A circular list is
+ * error 98.12.
+ */
+static long list_cells( tsd_t *TSD, oo_object *o, const streng **tail )
+{
+   oo_object *slow = o, *fast = o;
+   long n = 0;
+
+   *tail = NULL;
+   while ( fast )
+   {
+      n++;
+      *tail = fast->u.cons.cdr;
+      fast = cons_of( TSD, fast->u.cons.cdr );
+      if ( ( n & 1 ) == 0 )
+      {
+         slow = cons_of( TSD, slow->u.cons.cdr );
+         if ( fast && fast == slow )
+            exiterror( ERR_EXECUTION_ERROR, 12 );
+      }
+      if ( n > LISP_MAX_CELLS )
+         exiterror( ERR_EXECUTION_ERROR, 12 );
+   }
+   return n;
+}
+
+/* the items of the list o as an array of borrowed strings, n of them */
+static const streng **list_items( tsd_t *TSD, oo_object *o, long *n )
+{
+   const streng *tail, **v;
+   long i;
+
+   *n = o ? list_cells( TSD, o, &tail ) : 0;
+   v = (const streng **) MallocTSD( ( *n + 1 ) * sizeof( streng * ) );
+   for ( i = 0; i < *n; i++ )
+   {
+      v[i] = o->u.cons.car;
+      o = cons_of( TSD, o->u.cons.cdr );
+   }
+   return v;
+}
+
+/* a new proper list of the strings v[0..n-1] (copied), ending in tail */
+static streng *list_from( tsd_t *TSD, const streng **v, long n, const streng *tail )
+{
+   streng *acc = tail ? Str_dupTSD( tail ) : nil_handle( TSD );
+   long i;
+
+   for ( i = n - 1; i >= 0; i-- )
+      acc = new_cons( TSD, v[i] ? Str_dupTSD( v[i] ) : NULL, acc );
+   return acc;
+}
+
+/*
+ * Calls the function named fname with the arguments argv: an internal
+ * routine of the program, a ::ROUTINE, a built-in function, or else the
+ * message fname sent to argv[0] with the other arguments.
+ */
+static streng *lisp_call( tsd_t *TSD, const streng *fname, int argc, const streng **argv )
+{
+   streng *u = oo_stringify( TSD, fname ), *r;
+   nodeptr entry;
+   char bif[64];
+
+   if ( u == NULL )
+      u = Str_dupTSD( fname );
+   mem_upper( u->value, u->len );
+   {
+      /*
+       * An internal routine of the program that named it: the label is
+       * looked up in the callers' levels, so mapcar('f', l) called through
+       * the lisp library finds F in the main program. The routine runs as
+       * if called from that level (its variables, EXPOSE, labels).
+       */
+      proclevel cur = TSD->currlevel, lev;
+      entry = NULL;
+      for ( lev = cur; lev && entry == NULL; lev = entry ? lev : lev->prev )
+      {
+         TSD->currlevel = lev;
+         entry = getlabel( TSD, u );
+         if ( entry && entry->u.trace_only )
+            entry = NULL;
+         if ( entry )
+            break;
+      }
+      TSD->currlevel = cur;
+      if ( entry )
+      {
+         proclevel keep = lev->next;
+         set_reserved_value( TSD, POOL0_SIGL, NULL, TSD->currentnode->lineno, VFLAG_NUM );
+         /* the new level copies lev; it must not take over lev's callees */
+         lev->next = NULL;
+         TSD->currlevel = lev;
+         r = CallInternalFunction( TSD, entry->next, TSD->currentnode,
+                                   make_plist( TSD, argc, argv ) );
+         TSD->currlevel = cur;
+         lev->next = keep;
+         goto called;
+      }
+   }
+   if ( 0 )
+      ;
+   else if ( oo_has_routine( TSD, u ) )
+      r = oo_call_routine( TSD, u, make_plist( TSD, argc, argv ) );
+   else
+   {
+      r = NOFUNC;
+      if ( u->len < (int) sizeof( bif ) )
+      {
+         memcpy( bif, u->value, u->len );
+         bif[u->len] = '\0';
+         r = call_bif( TSD, bif, argc, argv, u );
+      }
+      if ( r == NOFUNC )
+      {
+         if ( argc < 1 )
+            exiterror( ERR_ROUTINE_NOT_FOUND, 1, tmpstr_of( TSD, u ) );
+         r = send_msg( TSD, argv[0], u, argc - 1, argv + 1 );
+      }
+   }
+called:
+   if ( r == NULL )
+      exiterror( ERR_NO_DATA_RETURNED, 1, tmpstr_of( TSD, u ) );
+   Free_stringTSD( u );
+   return r;
+}
+
+/* the result of a FILTER function must be 0 or 1, as for IF (error 34) */
+static int lisp_bool( tsd_t *TSD, const streng *r )
+{
+   streng *v = oo_stringify( TSD, r );
+   const streng *t = v ? v : r;
+   int b = -1, i = 0, j = t->len;
+
+   while ( i < j && rx_isspace( t->value[i] ) )
+      i++;
+   while ( j > i && rx_isspace( t->value[j - 1] ) )
+      j--;
+   if ( j - i == 1 && ( t->value[i] == '0' || t->value[i] == '1' ) )
+      b = t->value[i] == '1';
+   if ( b < 0 )
+      exiterror( ERR_UNLOGICAL_VALUE, 1, tmpstr_of( TSD, t ) );
+   if ( v )
+      Free_stringTSD( v );
+   return b;
+}
+
+/* deep equality: equal atoms (strict ==) or lists of equal elements */
+static int lisp_equal( tsd_t *TSD, const streng *a, const streng *b, int depth )
+{
+   oo_object *ca, *cb;
+   long n = 0;
+
+   if ( depth > 10000 )
+      exiterror( ERR_EXECUTION_ERROR, 12 );
+   for ( ;; )
+   {
+      ca = cons_of( TSD, a );
+      cb = cons_of( TSD, b );
+      if ( ca == NULL || cb == NULL )
+         return ca == NULL && cb == NULL && str_eq( a, b );
+      if ( ca == cb )
+         return 1;
+      if ( !lisp_equal( TSD, ca->u.cons.car, cb->u.cons.car, depth + 1 ) )
+         return 0;
+      a = ca->u.cons.cdr;
+      b = cb->u.cons.cdr;
+      if ( ++n > LISP_MAX_CELLS )
+         exiterror( ERR_EXECUTION_ERROR, 12 );
+   }
+}
+
+/* the printed form of an atom: quoted if it contains blanks or parens */
+static streng *atom_text( tsd_t *TSD, streng *out, const streng *x )
+{
+   streng *v = oo_stringify( TSD, x );
+   const streng *t = v ? v : x;
+   int i, quote = ( t->len == 0 );
+
+   for ( i = 0; i < t->len && !quote; i++ )
+      if ( rx_isspace( t->value[i] ) || t->value[i] == '(' || t->value[i] == ')'
+        || t->value[i] == '"' || t->value[i] == ';' )
+         quote = 1;
+   if ( quote )
+   {
+      out = catc( TSD, out, "\"" );
+      for ( i = 0; i < t->len; i++ )
+      {
+         char ch[3] = { t->value[i], '\0', '\0' };
+         if ( t->value[i] == '"' )
+            ch[1] = '"';
+         out = catc( TSD, out, ch );
+      }
+      out = catc( TSD, out, "\"" );
+   }
+   else
+      out = cats( TSD, out, t );
+   if ( v )
+      Free_stringTSD( v );
+   return out;
+}
+
+static streng *lisp_print( tsd_t *TSD, streng *out, const streng *x, int depth )
+{
+   oo_object *o = cons_of( TSD, x );
+   long n = 0;
+
+   if ( o == NULL )
+      return is_nil( TSD, x ) ? catc( TSD, out, "NIL" ) : atom_text( TSD, out, x );
+   if ( depth > 1000 )
+      return catc( TSD, out, "(...)" );
+   out = catc( TSD, out, "(" );
+   for ( ;; )
+   {
+      out = lisp_print( TSD, out, o->u.cons.car, depth + 1 );
+      x = o->u.cons.cdr;
+      if ( is_nil( TSD, x ) )
+         break;
+      if ( ( o = cons_of( TSD, x ) ) == NULL )
+      {
+         out = catc( TSD, out, " . " );
+         out = atom_text( TSD, out, x );
+         break;
+      }
+      if ( ++n > 100000 )
+      {
+         out = catc( TSD, out, " ..." );
+         break;
+      }
+      out = catc( TSD, out, " " );
+   }
+   return catc( TSD, out, ")" );
+}
+
+/* reads one s-expression at *p: atoms, "strings", (lists) and (a . b) */
+static streng *lisp_read( tsd_t *TSD, const streng *src, int *p, int depth )
+{
+   const char *s = src->value;
+   int len = src->len, start;
+   streng *r;
+
+   while ( *p < len && ( rx_isspace( s[*p] ) || s[*p] == ';' ) )
+   {
+      if ( s[*p] == ';' )       /* a comment up to the end of the line */
+         while ( *p < len && s[*p] != '\n' )
+            ( *p )++;
+      else
+         ( *p )++;
+   }
+   if ( *p >= len )
+      exiterror( ERR_EXECUTION_ERROR, 13, "unexpected end" );
+   if ( depth > 1000 )
+      exiterror( ERR_EXECUTION_ERROR, 13, "lists nested too deeply" );
+   if ( s[*p] == ')' )
+      exiterror( ERR_EXECUTION_ERROR, 13, "unexpected \")\"" );
+   if ( s[*p] == '(' )
+   {
+      streng **v = NULL, *tail = NULL;
+      long n = 0, cap = 0, i;
+      ( *p )++;
+      for ( ;; )
+      {
+         while ( *p < len && rx_isspace( s[*p] ) )
+            ( *p )++;
+         if ( *p >= len )
+            exiterror( ERR_EXECUTION_ERROR, 13, "missing \")\"" );
+         if ( s[*p] == ')' )
+         {
+            ( *p )++;
+            break;
+         }
+         if ( s[*p] == '.' && n > 0 && *p + 1 < len
+           && ( rx_isspace( s[*p + 1] ) || s[*p + 1] == '(' ) )
+         {
+            ( *p )++;
+            tail = lisp_read( TSD, src, p, depth + 1 );
+            while ( *p < len && rx_isspace( s[*p] ) )
+               ( *p )++;
+            if ( *p >= len || s[*p] != ')' )
+               exiterror( ERR_EXECUTION_ERROR, 13, "\")\" expected after a dotted pair" );
+            ( *p )++;
+            break;
+         }
+         if ( n >= cap )
+         {
+            streng **nv;
+            cap = cap ? cap * 2 : 8;
+            nv = (streng **) MallocTSD( cap * sizeof( streng * ) );
+            if ( v )
+            {
+               memcpy( nv, v, n * sizeof( streng * ) );
+               FreeTSD( v );
+            }
+            v = nv;
+         }
+         v[n++] = lisp_read( TSD, src, p, depth + 1 );
+      }
+      r = tail ? tail : nil_handle( TSD );
+      for ( i = n - 1; i >= 0; i-- )
+         r = new_cons( TSD, v[i], r );
+      if ( v )
+         FreeTSD( v );
+      return r;
+   }
+   if ( s[*p] == '"' )
+   {
+      r = Str_creTSD( "" );
+      for ( ( *p )++; ; ( *p )++ )
+      {
+         char ch[2] = { 0, 0 };
+         if ( *p >= len )
+            exiterror( ERR_EXECUTION_ERROR, 13, "missing closing quote" );
+         if ( s[*p] == '"' )
+         {
+            if ( *p + 1 < len && s[*p + 1] == '"' )
+               ( *p )++;
+            else
+            {
+               ( *p )++;
+               break;
+            }
+         }
+         ch[0] = s[*p];
+         r = Str_catTSD( r, Str_creTSD( ch ) );
+      }
+      return r;
+   }
+   start = *p;
+   while ( *p < len && !rx_isspace( s[*p] ) && s[*p] != '(' && s[*p] != ')'
+        && s[*p] != '"' && s[*p] != ';' )
+      ( *p )++;
+   r = Str_ncreTSD( s + start, *p - start );
+   if ( r->len == 3 && rx_toupper( r->value[0] ) == 'N' && rx_toupper( r->value[1] ) == 'I'
+     && rx_toupper( r->value[2] ) == 'L' )
+   {
+      Free_stringTSD( r );
+      return nil_handle( TSD );
+   }
+   return r;
+}
+
+/* .cons~new(car, cdr) */
+static streng *m_cons_init( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = c->self;
+   const streng *a = opt_arg( c, 0 ), *d = opt_arg( c, 1 );
+
+   if ( o == NULL || o->kind != OK_CONS )
+      err_nomethod( TSD, c->selfstr, c->name );
+   if ( o->u.cons.car )
+      Free_stringTSD( o->u.cons.car );
+   if ( o->u.cons.cdr )
+      Free_stringTSD( o->u.cons.cdr );
+   o->u.cons.car = a ? Str_dupTSD( a ) : nil_handle( TSD );
+   o->u.cons.cdr = d ? Str_dupTSD( d ) : nil_handle( TSD );
+   return NULL;
+}
+
+/* .cons~of(a, b, c): the list (a b c); no arguments: .nil */
+static streng *m_cons_of( tsd_t *TSD, oo_call *c )
+{
+   return list_from( TSD, c->argv, c->argc, NULL );
+}
+
+/* .cons~read('(1 (2 3) "x y")') */
+static streng *m_cons_read( tsd_t *TSD, oo_call *c )
+{
+   const streng *src = need_arg( TSD, c, 0 ), *t;
+   streng *v = oo_stringify( TSD, src ), *r;
+   int p = 0;
+
+
+   t = v ? v : src;
+   r = lisp_read( TSD, t, &p, 0 );
+   /* only blanks and ; comments may follow */
+   while ( p < t->len && ( rx_isspace( t->value[p] ) || t->value[p] == ';' ) )
+   {
+      if ( t->value[p] == ';' )
+         while ( p < t->len && t->value[p] != '\n' )
+            p++;
+      else
+         p++;
+   }
+   if ( p < t->len )
+      exiterror( ERR_EXECUTION_ERROR, 13, "text after the expression" );
+   if ( v )
+      Free_stringTSD( v );
+   return r;
+}
+
+/* .cons~apply(f, list): calls f with the items of list as arguments */
+static streng *m_cons_apply( tsd_t *TSD, oo_call *c )
+{
+   const streng *f = need_arg( TSD, c, 0 ), **v;
+   const streng *l = opt_arg( c, 1 );
+   long n;
+   streng *r;
+
+   v = list_items( TSD, l ? cons_of( TSD, l ) : NULL, &n );
+   r = lisp_call( TSD, f, (int) n, v );
+   FreeTSD( (void *) v );
+   return r;
+}
+
+static streng *m_cons_car( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   return o ? Str_dupTSD( o->u.cons.car ) : nil_handle( TSD );
+}
+
+static streng *m_cons_cdr( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   return o ? Str_dupTSD( o->u.cons.cdr ) : nil_handle( TSD );
+}
+
+static streng *m_cons_set( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   streng **slot;
+
+   if ( o == NULL )
+      err_nomethod( TSD, c->selfstr, c->name );
+   slot = str_eqc( c->name, "SETCAR" ) ? &o->u.cons.car : &o->u.cons.cdr;
+   Free_stringTSD( *slot );
+   *slot = Str_dupTSD( need_arg( TSD, c, 0 ) );
+   return NULL;
+}
+
+/* the cell n steps further, or NULL */
+static oo_object *list_skip( tsd_t *TSD, oo_object *o, long n )
+{
+   while ( o && n-- > 0 )
+      o = cons_of( TSD, o->u.cons.cdr );
+   return o;
+}
+
+/* second, third, l[n] (1-based) */
+static streng *m_cons_nth( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   long n;
+
+   if ( str_eqc( c->name, "SECOND" ) )
+      n = 2;
+   else if ( str_eqc( c->name, "THIRD" ) )
+      n = 3;
+   else
+      n = whole_arg( TSD, c, 0, 1 );
+   o = list_skip( TSD, o, n - 1 );
+   return o ? Str_dupTSD( o->u.cons.car ) : nil_handle( TSD );
+}
+
+/* nthcdr(n), 0-based as in LISP */
+static streng *m_cons_nthcdr( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   long n = whole_arg( TSD, c, 0, 0 );
+
+   if ( o == NULL )
+      return nil_handle( TSD );
+   if ( n == 0 )
+      return Str_dupTSD( c->selfstr );
+   o = list_skip( TSD, o, n - 1 );
+   return o ? Str_dupTSD( o->u.cons.cdr ) : nil_handle( TSD );
+}
+
+static streng *m_cons_length( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   const streng *tail;
+
+   return mkint( TSD, o ? list_cells( TSD, o, &tail ) : 0 );
+}
+
+static streng *m_cons_islist( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   const streng *tail;
+
+   if ( o == NULL )
+      return mkbool( TSD, 1 );
+   list_cells( TSD, o, &tail );
+   return mkbool( TSD, is_nil( TSD, tail ) );
+}
+
+/* last: the last cell (as LISP); lastItem: its car */
+static streng *m_cons_last( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c ), *n;
+   const streng *tail;
+
+   if ( o == NULL )
+      return nil_handle( TSD );
+   n = list_skip( TSD, o, list_cells( TSD, o, &tail ) - 1 );
+   if ( str_eqc( c->name, "LASTITEM" ) )
+      return Str_dupTSD( n->u.cons.car );
+   return hdup( TSD, n );
+}
+
+static streng *m_cons_reverse( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   streng *acc = nil_handle( TSD );
+   const streng *tail;
+   long n = o ? list_cells( TSD, o, &tail ) : 0;
+
+   for ( ; n > 0; n-- )
+   {
+      acc = new_cons( TSD, Str_dupTSD( o->u.cons.car ), acc );
+      o = cons_of( TSD, o->u.cons.cdr );
+   }
+   return acc;
+}
+
+/* copy: a new list with the same items (the cells are copied) */
+static streng *m_cons_copy( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   const streng **v, *tail = NULL;
+   long n;
+   streng *r;
+
+   if ( o == NULL )
+      return nil_handle( TSD );
+   v = list_items( TSD, o, &n );
+   list_cells( TSD, o, &tail );
+   r = list_from( TSD, v, n, tail );
+   FreeTSD( (void *) v );
+   return r;
+}
+
+/* append(l2, l3, ...): a new list; the last argument is shared */
+static streng *m_cons_append( tsd_t *TSD, oo_call *c )
+{
+   streng *r;
+   int k;
+   const streng **v;
+   long n;
+
+   if ( c->argc == 0 )
+      return Str_dupTSD( c->self && c->self->kind == OK_CONS ? c->selfstr : NULL );
+   r = Str_dupTSD( need_arg( TSD, c, c->argc - 1 ) );
+   for ( k = c->argc - 2; k >= -1; k-- )
+   {
+      const streng *l = ( k >= 0 ) ? need_arg( TSD, c, k ) : c->selfstr;
+      oo_object *o = cons_of( TSD, l );
+      if ( o == NULL && !is_nil( TSD, l ) )
+         exiterror( ERR_INVALID_ARGUMENT, 4, tmpstr_of( TSD, c->name ), k + 1,
+                    tmpstr_of( TSD, l ) );
+      v = list_items( TSD, o, &n );
+      {
+         streng *nr = list_from( TSD, v, n, r );
+         Free_stringTSD( r );
+         r = nr;
+      }
+      FreeTSD( (void *) v );
+   }
+   return r;
+}
+
+/* member(x): the rest of the list starting at x, or .nil */
+static streng *m_cons_member( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   const streng *x = need_arg( TSD, c, 0 ), *tail;
+   long n = o ? list_cells( TSD, o, &tail ) : 0;
+
+   for ( ; n > 0; n-- )
+   {
+      if ( lisp_equal( TSD, o->u.cons.car, x, 0 ) )
+         return hdup( TSD, o );
+      o = cons_of( TSD, o->u.cons.cdr );
+   }
+   return nil_handle( TSD );
+}
+
+/* assoc(key): the first item that is a pair whose car equals key */
+static streng *m_cons_assoc( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c ), *p;
+   const streng *k = need_arg( TSD, c, 0 ), *tail;
+   long n = o ? list_cells( TSD, o, &tail ) : 0;
+
+   for ( ; n > 0; n-- )
+   {
+      if ( ( p = cons_of( TSD, o->u.cons.car ) ) != NULL
+        && lisp_equal( TSD, p->u.cons.car, k, 0 ) )
+         return hdup( TSD, p );
+      o = cons_of( TSD, o->u.cons.cdr );
+   }
+   return nil_handle( TSD );
+}
+
+/* map(f), filter(f), reduce(f [, initial]) */
+static streng *m_cons_hof( tsd_t *TSD, oo_call *c )
+{
+   oo_object *o = list_self( TSD, c );
+   const streng *f = need_arg( TSD, c, 0 ), **v, *args[2];
+   long n, i, k = 0;
+   streng *r, *acc;
+   int mode = str_eqc( c->name, "MAP" ) ? 0 : str_eqc( c->name, "FILTER" ) ? 1 : 2;
+
+   v = list_items( TSD, o, &n );
+   if ( mode == 2 )
+   {
+      /* reduce: acc = f(acc, item), starting with initial or the first item */
+      i = 0;
+      if ( opt_arg( c, 1 ) )
+         acc = Str_dupTSD( opt_arg( c, 1 ) );
+      else if ( n > 0 )
+         acc = Str_dupTSD( v[i++] );
+      else
+         acc = nil_handle( TSD );
+      for ( ; i < n; i++ )
+      {
+         args[0] = acc;
+         args[1] = v[i];
+         r = lisp_call( TSD, f, 2, args );
+         Free_stringTSD( acc );
+         acc = r;
+      }
+      FreeTSD( (void *) v );
+      return acc;
+   }
+   {
+      const streng **out = (const streng **) MallocTSD( ( n + 1 ) * sizeof( streng * ) );
+      streng **owned = (streng **) MallocTSD( ( n + 1 ) * sizeof( streng * ) );
+      long nown = 0;
+      for ( i = 0; i < n; i++ )
+      {
+         args[0] = v[i];
+         r = lisp_call( TSD, f, 1, args );
+         if ( mode == 0 )
+            out[k++] = owned[nown++] = r;
+         else
+         {
+            int b = lisp_bool( TSD, r );
+            Free_stringTSD( r );
+            if ( b )
+               out[k++] = v[i];
+         }
+      }
+      r = list_from( TSD, out, k, NULL );
+      for ( i = 0; i < nown; i++ )
+         Free_stringTSD( owned[i] );
+      FreeTSD( (void *) out );
+      FreeTSD( owned );
+   }
+   FreeTSD( (void *) v );
+   return r;
+}
+
+static streng *m_cons_equal( tsd_t *TSD, oo_call *c )
+{
+   list_self( TSD, c );
+   return mkbool( TSD, lisp_equal( TSD, c->selfstr, need_arg( TSD, c, 0 ), 0 ) );
+}
+
+static streng *m_cons_makearray( tsd_t *TSD, oo_call *c )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   oo_object *arr = new_object( TSD, ot->cArray, OK_ARRAY );
+   const streng **v;
+   long n, i;
+
+   v = list_items( TSD, list_self( TSD, c ), &n );
+   for ( i = 0; i < n; i++ )
+      oo_array_put( TSD, arr, i + 1, Str_dupTSD( v[i] ) );
+   FreeTSD( (void *) v );
+   return hdup( TSD, arr );
+}
+
+static streng *m_cons_string( tsd_t *TSD, oo_call *c )
+{
+   list_self( TSD, c );
+   return lisp_print( TSD, Str_creTSD( "" ), c->selfstr, 0 );
+}
+
+static void init_lisp( tsd_t *TSD, oo_tsd *ot )
+{
+   oo_object *c, *nl;
+   int k;
+
+   ot->cCons = c = new_class( TSD, "Cons", NULL, ot->cObject, OK_CONS );
+   add_methods( TSD, c, "OF", m_cons_of, MF_CLASS );
+   add_methods( TSD, c, "READ", m_cons_read, MF_CLASS );
+   add_methods( TSD, c, "APPLY", m_cons_apply, MF_CLASS );
+   add_methods( TSD, c, "INIT", m_cons_init, 0 );
+
+   /* .nil answers the list methods as the empty list; hidden class */
+   ot->cNilList = nl = new_class( TSD, "NilList", NULL, ot->cObject, OK_PLAIN );
+   for ( k = 0; k < 2; k++ )
+   {
+      oo_object *t = k ? nl : c;
+      add_methods( TSD, t, "CAR FIRST", m_cons_car, 0 );
+      add_methods( TSD, t, "CDR REST", m_cons_cdr, 0 );
+      add_methods( TSD, t, "SECOND THIRD [] AT", m_cons_nth, 0 );
+      add_methods( TSD, t, "NTHCDR", m_cons_nthcdr, 0 );
+      add_methods( TSD, t, "LENGTH ITEMS", m_cons_length, 0 );
+      add_methods( TSD, t, "ISLIST", m_cons_islist, 0 );
+      add_methods( TSD, t, "LAST LASTITEM", m_cons_last, 0 );
+      add_methods( TSD, t, "REVERSE", m_cons_reverse, 0 );
+      add_methods( TSD, t, "APPEND", m_cons_append, 0 );
+      add_methods( TSD, t, "MEMBER", m_cons_member, 0 );
+      add_methods( TSD, t, "ASSOC", m_cons_assoc, 0 );
+      add_methods( TSD, t, "MAP FILTER REDUCE", m_cons_hof, 0 );
+      add_methods( TSD, t, "MAKEARRAY", m_cons_makearray, 0 );
+   }
+   add_methods( TSD, c, "SETCAR SETCDR", m_cons_set, 0 );
+   add_methods( TSD, c, "COPY", m_cons_copy, 0 );
+   add_methods( TSD, c, "EQUAL", m_cons_equal, 0 );
+   add_methods( TSD, c, "STRING", m_cons_string, 0 );
+   /* keep the hidden class out of the environment and .classes */
+   if ( ot->nclasses > 0 && ot->classes[ot->nclasses - 1] == nl )
+      ot->nclasses--;
+}
+
 static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
 {
    int i;
@@ -3143,6 +3939,7 @@ static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
    ot->cBuffer = new_class( TSD, "MutableBuffer", NULL, ot->cObject, OK_BUFFER );
    ot->cSupplier = new_class( TSD, "Supplier", NULL, ot->cObject, OK_SUPPLIER );
    ot->cStem = new_class( TSD, "Stem", NULL, ot->cObject, OK_STEM );
+   init_lisp( TSD, ot );
 
    /* Object */
    add_methods( TSD, ot->cObject, "INIT", m_nothing, 0 );
@@ -3709,24 +4506,179 @@ static void run_prolog( tsd_t *TSD, void *data )
       Free_stringTSD( r );
 }
 
+/*
+ * Libraries built into the interpreter, used by ::REQUIRES when no file of
+ * that name is found. The source is lib/lisp.cls of the distribution.
+ */
+static const char lisp_library[] =
+   "/* lisp.cls - LISP-style list functions for Regina Rexx OO\n"
+   " *\n"
+   " * ::requires 'lisp' loads this library. It is built into the\n"
+   " * interpreter, so no file is needed; a file named lisp.cls next to the\n"
+   " * program or in REGINA_MACROS takes precedence.\n"
+   " *\n"
+   " * Lists are made of Cons cells; .nil is the empty list. The functions\n"
+   " * call the methods of the Cons class. Names that are Rexx built-in\n"
+   " * functions get an L in front: LLENGTH, LREVERSE.\n"
+   " */\n"
+   "::routine cons public           /* (cons a d) */\n"
+   "  use arg a, d\n"
+   "  return .cons~new(a, d)\n"
+   "::routine car public\n"
+   "  use arg x\n"
+   "  return x~car\n"
+   "::routine cdr public\n"
+   "  use arg x\n"
+   "  return x~cdr\n"
+   "::routine caar public\n"
+   "  use arg x\n"
+   "  return x~car~car\n"
+   "::routine cadr public\n"
+   "  use arg x\n"
+   "  return x~cdr~car\n"
+   "::routine cdar public\n"
+   "  use arg x\n"
+   "  return x~car~cdr\n"
+   "::routine cddr public\n"
+   "  use arg x\n"
+   "  return x~cdr~cdr\n"
+   "::routine caddr public\n"
+   "  use arg x\n"
+   "  return x~cdr~cdr~car\n"
+   "::routine list public           /* (list a b c) */\n"
+   "  r = .nil\n"
+   "  do i = arg() to 1 by -1\n"
+   "    r = .cons~new(arg(i), r)\n"
+   "  end\n"
+   "  return r\n"
+   "::routine null public           /* 1 for the empty list */\n"
+   "  use arg x\n"
+   "  return x~isNil\n"
+   "::routine atom public           /* 1 for anything but a cell */\n"
+   "  use arg x\n"
+   "  return \\x~isA(.cons)\n"
+   "::routine consp public\n"
+   "  use arg x\n"
+   "  return x~isA(.cons)\n"
+   "::routine listp public\n"
+   "  use arg x\n"
+   "  return x~isNil | x~isA(.cons)\n"
+   "::routine nth public            /* (nth n l), 0-based as in LISP */\n"
+   "  use arg n, l\n"
+   "  return l~nthcdr(n)~car\n"
+   "::routine nthcdr public\n"
+   "  use arg n, l\n"
+   "  return l~nthcdr(n)\n"
+   "::routine llength public        /* LENGTH is a Rexx built-in function */\n"
+   "  use arg l\n"
+   "  return l~length\n"
+   "::routine lreverse public       /* REVERSE is a Rexx built-in function */\n"
+   "  use arg l\n"
+   "  return l~reverse\n"
+   "::routine last public           /* the last cell */\n"
+   "  use arg l\n"
+   "  return l~last\n"
+   "::routine append public         /* (append l1 l2 ...) */\n"
+   "  if arg() = 0 then return .nil\n"
+   "  r = arg(arg())\n"
+   "  do i = arg() - 1 to 1 by -1\n"
+   "    r = arg(i)~append(r)\n"
+   "  end\n"
+   "  return r\n"
+   "::routine member public         /* (member x l) */\n"
+   "  use arg x, l\n"
+   "  return l~member(x)\n"
+   "::routine assoc public          /* (assoc key alist) */\n"
+   "  use arg k, al\n"
+   "  return al~assoc(k)\n"
+   "::routine mapcar public         /* (mapcar 'f l) */\n"
+   "  use arg f, l\n"
+   "  return l~map(f)\n"
+   "::routine filter public         /* the items for which f returns 1 */\n"
+   "  use arg f, l\n"
+   "  return l~filter(f)\n"
+   "::routine reduce public         /* (reduce 'f l [initial]) */\n"
+   "  use arg f, l, init\n"
+   "  if arg(3, 'E') then return l~reduce(f, init)\n"
+   "  return l~reduce(f)\n"
+   "::routine apply public          /* (apply 'f l) */\n"
+   "  use arg f, l\n"
+   "  return .cons~apply(f, l)\n"
+   "::routine equal public          /* the same structure and atoms */\n"
+   "  use arg a, b\n"
+   "  if a~isA(.cons) then return a~equal(b)\n"
+   "  return a == b\n"
+   "::routine eq public             /* the same object, or equal atoms */\n"
+   "  use arg a, b\n"
+   "  return a == b\n"
+   "::routine rplaca public         /* changes the car of a cell */\n"
+   "  use arg c, x\n"
+   "  c~setCar(x)\n"
+   "  return c\n"
+   "::routine rplacd public         /* changes the cdr of a cell */\n"
+   "  use arg c, x\n"
+   "  c~setCdr(x)\n"
+   "  return c\n"
+   "::routine read public           /* the list written in a string */\n"
+   "  use arg s\n"
+   "  return .cons~read(s)\n"
+   "\n";
+
+/* the built-in library for name ("lisp", "lisp.cls"), or NULL */
+static const char *builtin_library( const streng *name )
+{
+   if ( ( name->len == 4 || ( name->len == 8 && memcmp( name->value + 4, ".cls", 4 ) == 0 )
+       || ( name->len == 8 && memcmp( name->value + 4, ".CLS", 4 ) == 0 ) )
+     && rx_toupper( name->value[0] ) == 'L' && rx_toupper( name->value[1] ) == 'I'
+     && rx_toupper( name->value[2] ) == 'S' && rx_toupper( name->value[3] ) == 'P' )
+      return lisp_library;
+   return NULL;
+}
+
 static void load_required( tsd_t *TSD, const streng *name, oo_program *from, nodeptr d )
 {
    oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
-   streng *path = find_required( TSD, name, from );
+   streng *path, *look;
    oo_program *p;
+   const char *builtin = builtin_library( name );
 
+   /*
+    * A built-in library is replaced only by a file of its name with .cls
+    * (lisp.cls), so that a program lisp.rexx doesn't hide it.
+    */
+   look = Str_dupTSD( name );
+   if ( builtin && name->len == 4 )
+      look = catc( TSD, look, ".cls" );
+   path = find_required( TSD, look, from );
    if ( path == NULL )
    {
-      streng *lower = Str_dupTSD( name );
-      mem_lower( lower->value, lower->len );
-      path = find_required( TSD, lower, from );
-      Free_stringTSD( lower );
+      mem_lower( look->value, look->len );
+      path = find_required( TSD, look, from );
    }
+   Free_stringTSD( look );
+   if ( path && builtin && path->len > 4
+     && memcmp( path->value + path->len - 4, ".cls", 4 ) != 0
+     && memcmp( path->value + path->len - 4, ".CLS", 4 ) != 0 )
+   {
+      Free_stringTSD( path );
+      path = NULL;
+   }
+   /* a program never loads itself */
+   if ( path && from && from->file && str_eq( path, from->file ) )
+   {
+      Free_stringTSD( path );
+      if ( builtin == NULL )
+         return;
+      path = NULL;
+   }
+   builtin = path ? NULL : builtin;
    FILE *fp;
    internal_parser_type parsing;
    oo_frame *frame;
    prolog_data pd;
 
+   if ( path == NULL && builtin != NULL )
+      path = Str_creTSD( "<built-in lisp>" );
    if ( path == NULL )
       exiterror( ERR_EXECUTION_ERROR, 3, tmpstr_of( TSD, name ) );
    for ( p = ot->programs; p; p = p->next )
@@ -3735,10 +4687,19 @@ static void load_required( tsd_t *TSD, const streng *name, oo_program *from, nod
          Free_stringTSD( path );
          return;
       }
-   if ( ( fp = fopen( path->value, "r" ) ) == NULL )
-      exiterror( ERR_EXECUTION_ERROR, 3, tmpstr_of( TSD, name ) );
-   fetch_file( TSD, fp, &parsing );
-   fclose( fp );
+   if ( builtin )
+   {
+      streng *src = Str_creTSD( builtin );
+      fetch_string( TSD, src, &parsing );
+      Free_stringTSD( src );
+   }
+   else
+   {
+      if ( ( fp = fopen( path->value, "r" ) ) == NULL )
+         exiterror( ERR_EXECUTION_ERROR, 3, tmpstr_of( TSD, name ) );
+      fetch_file( TSD, fp, &parsing );
+      fclose( fp );
+   }
    if ( parsing.result != 0 )
    {
       TSD->currentnode = d;

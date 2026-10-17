@@ -24,6 +24,11 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/regina-regress.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 SUITES="trip classic oo samples"
 
+# the built-in lisp library in oo.c must match lib/lisp.cls
+if ! python3 "$SRC/tools/embed-libraries.py" --check; then
+  echo "oo.c is out of date: run tools/embed-libraries.py"; exit 1
+fi
+
 cp -R "$SRC/trip" "$WORK/trip"
 cp -R "$HERE/classic" "$WORK/classic"
 cp -R "$HERE/oo" "$WORK/oo"
