@@ -47,7 +47,11 @@
 void ReginaSetMutex(void **mutex);
 void ReginaUnsetMutex(void **mutex);
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) && ( defined(_WIN64) || defined(__x86_64__) )
+/* 64-bit MinGW: no fs:0 SEH chain on x64; the lock alone (see mt_win32.h) */
+# define THREAD_PROTECT(varname)   ReginaSetMutex(&varname);
+# define THREAD_UNPROTECT(varname) ReginaUnsetMutex(&varname);
+#elif defined(__MINGW32__)
 # include <excpt.h>
 static EXCEPTION_DISPOSITION myHandler( struct _EXCEPTION_RECORD *p1, void *p2, struct _CONTEXT *p3, void *p4 ) {
   fprintf( stderr, "\nMinGW Exception handler\n" );
