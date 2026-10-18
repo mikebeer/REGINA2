@@ -342,8 +342,11 @@ English except German.
 
 ## Limitations
 
-- **No garbage collection.** Objects live until the program ends. A program
-  that creates millions of short-lived objects uses a lot of memory.
+- Garbage collection runs between clauses when the number of objects has
+  doubled (at least 10,000). `--no-gc` or `REGINA_GC=off` switch it off
+  (objects then live until the program ends); `--gc=stress` collects
+  before every clause. A handle kept only in the external queue or a file
+  does not keep its object alive.
 - Not implemented: `GUARD`, `REPLY`, `START` (concurrency), `FORWARD`,
   `RAISE`, `SIGNAL ON USER`, `SELECT LABEL`, `::resource`, and the
   `.methods`, `.routines` and `.context` environment symbols.

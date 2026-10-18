@@ -43,4 +43,4 @@ with :: define routines and classes, up to an empty line.
       CLEAR WS
       Y
       Y
-            rc=0
+      rc=0

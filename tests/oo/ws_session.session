@@ -44,6 +44,5 @@ x = 1 / 0
 )CLEAR
 )IN sessionpart
 )VARS
-address system 'rm -f sessiontest.rxws sessionpart.rxo'
 )OFF
 'not shown'

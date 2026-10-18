@@ -31,11 +31,7 @@ say []EX('x s. double nothere')
 say '['[]NL(2)']' 
 say 'in:' []IN('part')
 say x s.2 s.xyz
-call cleanup
 exit
-cleanup:
-  address system 'rm -f demo.rxws part.rxo'
-  return
 ::class point
 ::method init
   expose x y

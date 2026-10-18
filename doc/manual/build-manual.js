@@ -113,6 +113,8 @@ exit
     ['Stems', 'stems passed by reference with `USE ARG s.`, stems returned with `RETURN x.`'],
     ['Lists', 'LISP-style lists: the Cons class, and with `::requires \'lisp\'` the functions `cons`, `car`, `cdr`, `list`, `mapcar` and more'],
     ['Blocks', '`{ :x | x * 2 }` and `{ use arg x; ... }`: routines written where they are used, with the collection methods `do`, `select`, `reject`, `collect`, `detect`, `inject`, `count`, `anySatisfy`, `allSatisfy` and `sortWith`'],
+    ['Workspaces', 'In the style of APL: `[]NL`, `[]SAVE`, `[]LOAD`, `[]OUT`, `[]IN`, `[]FX` in programs, and an interactive session `rexx --ws` with `)SAVE`, `)LOAD`, `)VARS` and the other system commands'],
+    ['Memory', 'Garbage collection of objects that are no longer used; `--no-gc` switches it off'],
     ['Python', 'Python modules from Rexx: `.Python~import(\'statistics\')`, NumPy, pandas, json, datetime and more, through a Python interpreter built into Regina'],
     ['Control', 'markers `/* OOREGINA */` and `OPTIONS OOREGINA`, switches `--oo` and `--no-oo`, variable `REGINA_OO`'],
     ['Errors', 'error numbers 88, 91, 97, 98 and 99 as in ooRexx, in all message languages'],
@@ -331,7 +333,7 @@ const ch5 = [
   ]),
   H2('Different behaviour'),
   ...table(['Topic', 'ooRexx', 'Regina Rexx OO'], [
-    ['Memory', 'Garbage collection frees unused objects', 'Objects live until the program ends (Chapter 9)'],
+    ['Memory', 'Garbage collection frees unused objects', 'Garbage collection between clauses; `--no-gc` keeps all objects until the end (Chapter 9)'],
     ['Keywords', 'Always reserved where they apply', 'EXPOSE, USE ARG, LOOP and the DO options need a marker, a directive or `--oo` (Chapter 3)'],
     ['`.nil` and other environment symbols', 'Always objects', 'Constant symbols until the object system is active'],
     ['Stem assignment `r. = stemobject`', 'r. refers to the same Stem object', 'r. receives a copy'],
@@ -453,6 +455,53 @@ exit
     ['INIT', 'Runs for every new instance, with the arguments of `new`.'],
   ], W(2400, 7238), 'Special names in methods'),
   P('Method lookup searches the class, then its inherited mixins, then its superclasses. Private methods can be called only through SELF.'),
+  H2('Workspaces'),
+  P('A workspace, as in APL, is the set of variables of the current routine (or of the main program), the objects they refer to, and the routines and classes defined with `[]FX`. The workspace functions are written with `[]` in front of their name, like the quad functions of APL: `say []NL(2)`, `call []SAVE \'budget\'`. They work on the variables of the routine that calls them.'),
+  ...table(['Function', 'Meaning'], [
+    ['`[]NL([classes])`', 'The names, blank-separated and sorted: 2 variables (stems as `S.`), 3 routines, 9 classes defined by the program or the workspace. `[]NL(23)` gives both; without argument all three.'],
+    ['`[]FX(source [, more lines])`', 'Defines the routines and classes written in SOURCE (directives such as `::routine name` and its clauses; lines separated by `\'0a\'x` or given as more arguments). A name defined again replaces the old definition. Returns the names defined.'],
+    ['`[]CR(name)`', 'The source given to `[]FX` for a routine or class.'],
+    ['`[]EX(names)`', 'Erases variables, routines and classes; returns 1 or 0 for each name.'],
+    ['`[]WSID([name])`', 'The name of the workspace (`CLEAR WS` at first); sets it and returns the old one.'],
+    ['`[]CLEAR()`', 'Drops all variables, erases the `[]FX` definitions, and the name becomes `CLEAR WS`.'],
+    ['`[]SAVE([wsid])`', 'Writes the workspace to the file WSID.rxws (the extension is added if the name has none) and returns the file name. Without WSID the current name is used (error 98.19 if there is none).'],
+    ['`[]LOAD(wsid)`', '`[]CLEAR()`, then reads WSID.rxws; the workspace takes its name. Returns the names read.'],
+    ['`[]OUT(file [, names])`', 'Writes all or the named variables, routines and classes to FILE (extension .rxo), for `[]IN` in another workspace.'],
+    ['`[]IN(file [, names])`', 'Reads all or the named objects of a file written by `[]OUT` or `[]SAVE`, without clearing the workspace first.'],
+    ['`[]GC()`', 'Collects unused objects now; returns how many were freed.'],
+  ], W(2700, 6938), 'Workspace functions'),
+  P('A workspace file is text: the `[]FX` sources, statements that make the objects, and the assignments of the variables (the objects are rebuilt without running INIT; cycles and shared objects are kept). Saved are strings, stems, Arrays (also with several dimensions), Lists, Queues, Directories, Tables, Sets, Bags, Stems, Cons lists, Intervals, SortedCollections, Messages, Blocks (their source; the variables they keep are not saved) and instances of classes with their object variables. Python objects become `.nil`. RC, RESULT, SIGL and the variables named `__WS.` are not saved.'),
+  P('Instances of a class can only be read where the class exists: a class defined with `[]FX` is in the file, a class of a program file or of `::requires` must be defined by the program that reads the workspace.'),
+  H3('The workspace session'),
+  P('`rexx --ws` starts an interactive session; `rexx --ws=name` (or `rexx --ws name`) loads NAME.rxws first. Each line is a Rexx clause or instruction. A line that is an expression shows its value, as in APL; an instruction or an assignment runs as usual. Lines that begin with `::` define routines and classes, up to an empty line (the prompt is then `    :`). Errors are shown and the session goes on. The end of the input or `)OFF` ends the session.'),
+  ...table(['Command', 'Meaning'], [
+    ['`)SAVE [wsid]`, `)LOAD wsid`', 'Save the workspace, load one.'],
+    ['`)OUT file [names]`, `)IN file [names]`', 'Write and read all or some names.'],
+    ['`)VARS`, `)FNS`, `)CLASSES`', 'List variables, routines, classes.'],
+    ['`)ERASE names`, `)SHOW name`', 'Erase names; show the source of a routine or class.'],
+    ['`)WSID [name]`, `)CLEAR`, `)GC`', 'Show or set the name; empty the workspace; collect unused objects.'],
+    ['`)HELP`, `)OFF`', 'List the commands; end the session.'],
+  ], W(3300, 6338), 'Commands of the workspace session'),
+  ...screen(`$ rexx --ws
+Regina OO workspace session. )HELP lists the commands, )OFF ends it.
+      prices = .array~of(12.50, 8, 30)
+      prices~inject(0, { :s :x | s + x })
+50.50
+      ::routine vat
+    :   return format(arg(1) * 1.081, , 2)
+    :
+VAT
+      vat(50.50)
+54.59
+      )SAVE shop
+SAVED shop.rxws
+      )OFF
+$ rexx --ws=shop
+Regina OO workspace session. )HELP lists the commands, )OFF ends it.
+LOADED shop
+      )VARS
+PRICES`, 'A workspace session'),
+  P('In the session the command environment is WS, which shows the command instead of running it; `address system \'ls\'` runs a command. The session keeps its own variables in the stem `__WS.`, and EXIT or RETURN in a line ends it.'),
   H2('Operators'),
   P('If the left operand of an operator is an object, the operator is sent to it as a message: `a + b` is `a~"+"(b)`, and the prefix `-a` is `a~"-"()`. This works for the arithmetic, comparison, logical and concatenation operators. Without an operator method, objects compare by identity (`=`, `==`, `\\=`, `<>` and the others), and the other operators use the string value. If the left operand is not an object but the right one is, the right operand is used by its string value.'),
 ];
@@ -732,7 +781,9 @@ const ch9 = [
   H1('Chapter 9. Restrictions and Known Problems'),
   H2('Memory'),
   ...UL([
-    '**No garbage collection.** An object lives until the program ends, even when no variable refers to it any more. A program that creates many short-lived objects in a long loop uses more and more memory. Reuse objects in such loops, or keep the work in strings and stems.',
+    '**Garbage collection.** Objects that no variable, collection or object refers to any more are freed. The collection runs between clauses when the number of objects has doubled since the last one (at least 10,000 objects), so programs with few objects never pay for it. An object that a clause may still use (in `a + f()`, F may drop the last variable that refers to A) is kept until that clause has ended. `--no-gc` or `REGINA_GC=off` switch the collection off; then objects live until the program ends.',
+    'A handle kept only outside of variables and objects, for example in the external queue or in a file, does not keep its object alive. After the object has been collected the handle is an ordinary string.',
+    'While an external Rexx program called by the program runs, no collection takes place.',
     'All objects of a program are freed when the program ends, also when it is called through the REXX API.',
   ]),
   H2('Language'),
@@ -796,6 +847,9 @@ const appB = [
     ['`--oo`, `-O`', 'The OO keywords are on in every program, required file and INTERPRET string.'],
     ['`--no-oo`, `-N`', 'The extension is off: Regina 3.9.7 behaviour.'],
     ['`REGINA_OO`', '`on`, `1`, `yes` or `oo` act like `--oo`; `off`, `0`, `no` or `classic` like `--no-oo`. A command-line switch wins.'],
+    ['`--gc`, `-G` / `--no-gc`, `-g`', 'Garbage collection of objects on (the default) or off. `--gc=stress` collects before every clause, for testing.'],
+    ['`REGINA_GC`', '`on`, `off` (also `0`, `no`) or `stress`, like the switches; a command-line switch wins.'],
+    ['`--ws[=wsid]`, `-W`', 'An interactive workspace session; with WSID the workspace WSID.rxws is loaded first.'],
     ['`REGINA_MACROS`', 'Folders searched for external routines and for `::requires` files.'],
     ['`REGINA_LANG`, `REGINA_LANG_DIR`', 'Language of the error messages and the folder of the `*.mtb` files.'],
     ['`PYLIB`', 'Folders searched for Python modules, separated by `:` (`;` on Windows), before the library of the installation.'],
