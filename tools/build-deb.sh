@@ -36,6 +36,7 @@ done
 mkdir -p "$WORK/root/DEBIAN" "$WORK/root/usr/share/doc/regina-rexx-oo"
 cp "$SRC/COPYING-LIB" "$WORK/root/usr/share/doc/regina-rexx-oo/copyright"
 cp "$SRC/README.OO.md" "$WORK/root/usr/share/doc/regina-rexx-oo/README.OO.md"
+cp "$SRC/rgmqtt/README" "$WORK/root/usr/share/doc/regina-rexx-oo/README.rgmqtt"
 mkdir -p "$WORK/root/usr/share/doc/regina-rexx-oo/examples"
 cp "$SRC"/demo/oo_demo.rexx "$SRC"/demo/oo/* "$WORK/root/usr/share/doc/regina-rexx-oo/examples/"
 for m in "$SRC"/doc/Regina-OO-Manual.*; do
@@ -65,6 +66,7 @@ Description: Regina Rexx interpreter with optional OO syntax
  message operators ~ and ->, cascades ~~ and ->>, collections, DO OVER
  and DO WITH, USE ARG and stems passed by reference. Classic Rexx
  programs run unchanged; --no-oo switches the extension off.
+ Includes RgMqtt, an MQTT 3.1.1 client function package.
 EOC
 printf '#!/bin/sh\nset -e\n[ "$1" = configure ] && ldconfig || true\n' >"$WORK/root/DEBIAN/postinst"
 printf '#!/bin/sh\nset -e\n[ "$1" = remove ] && ldconfig || true\n' >"$WORK/root/DEBIAN/postrm"

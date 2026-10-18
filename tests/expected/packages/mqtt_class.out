@@ -1,0 +1,13 @@
+RgMqtt 1.0 (MQTT 3.1.1)
+connected to 127.0.0.1
+subscribe: 1
+  sensor/cellar=9.5
+  sensor/garden=12
+  sensor/kitchen=21.5
+listened: 3 average: 14.3333333
+until stop: 1 pending: 1
+left: sensor/later 0 0 0
+none: The NIL object
+refused: The NIL object connection refused: bad user name or password
+disconnect: 1 0
+rc=0

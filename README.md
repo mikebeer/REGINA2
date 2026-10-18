@@ -37,6 +37,18 @@ stats = .python~import('statistics')
 say stats~mean(.array~of(1, 2, 3, 4))      /* 2.5 */
 ```
 
+External function packages (RxSock, Rexx/SQL, Rexx/CURL, RegUtil, ...)
+work as before with the `regina` executable. New is **RgMqtt**, an MQTT
+3.1.1 client package ([rgmqtt/README](rgmqtt/README)), with an Mqtt class
+for OO programs:
+
+```rexx
+c = .mqtt~connect('localhost')
+c~subscribe('sensors/#')
+c~listen({ use arg m; say m~topic '=' m~message }, 10)
+::requires 'mqtt'
+```
+
 ## Downloads
 
 | System | File |

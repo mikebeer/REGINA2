@@ -301,6 +301,36 @@ QUEUE, INTERPRET, PARSE, or as the program's result. Assignment, arguments
 to your own routines and methods, RETURN, `USE ARG` and stem or collection
 storage all keep the object itself.
 
+### External function packages and MQTT
+
+RxSock, Rexx/SQL, Rexx/CURL, RegUtil and other SAA packages work as with
+Regina 3.9.7: the API of libregina is unchanged, objects reach external
+functions as their string values, and garbage collection never touches a
+package's data. Packages are loaded by `regina` (the executable that uses
+libregina); the standalone `rexx` executables can't load them, as before.
+The `packages` test suite checks this with `rgnet`, an RxSock-style test
+package with its own names (`NetSocket`, `NetConnect`, ...).
+
+RgMqtt (`rgmqtt/`, installed as `librgmqtt.so`) is an MQTT 3.1.1 client:
+
+```rexx
+call RxFuncAdd 'MqttLoadFuncs', 'rgmqtt', 'MqttLoadFuncs'
+call MqttLoadFuncs
+h = MqttConnect('localhost', 1883, 'rexx-1')   /* 0: see MqttError() */
+call MqttSubscribe h, 'sensors/#', 1
+call MqttPublish h, 'sensors/kitchen', 21.5, 1
+if MqttReceive(h, 'msg.', 5) then say msg.topic '=' msg.message
+call MqttDisconnect h
+```
+
+QoS 0, 1 and 2, retained messages, wills, user and password and
+keep-alive are supported; TLS is not. In OO programs `::requires 'mqtt'`
+gives the classes Mqtt and MqttMessage:
+`c = .mqtt~connect('localhost')` (`.nil` and `.mqtt~error` on failure),
+`c~publish(topic, msg [, qos [, retain]])`, `c~subscribe(filter [, qos])`,
+`c~receive([seconds])`, `c~listen(block [, seconds])`, `c~disconnect`.
+See `rgmqtt/README`.
+
 ## Built-in classes
 
 | Class | Methods |

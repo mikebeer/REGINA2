@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Copies lib/lisp.cls and lib/session.rexx into oo.c (lisp_library and
-   session_program).
+"""Copies lib/lisp.cls, lib/mqtt.cls and lib/session.rexx into oo.c
+   (lisp_library, mqtt_library and session_program).
 
    python3 tools/embed-libraries.py           update oo.c
    python3 tools/embed-libraries.py --check   exit 1 if oo.c is out of date
@@ -12,7 +12,8 @@ from pathlib import Path
 root = Path(__file__).resolve().parent.parent
 oo = (root / "oo.c").read_text(encoding="latin-1")
 new = oo
-for fname, cname in (("lisp.cls", "lisp_library"), ("session.rexx", "session_program")):
+for fname, cname in (("lisp.cls", "lisp_library"), ("mqtt.cls", "mqtt_library"),
+                      ("session.rexx", "session_program")):
     src = (root / "lib" / fname).read_text()
     body = "\n".join('   "' + l.replace("\\", "\\\\").replace('"', '\\"') + '\\n"'
                      for l in src.split("\n"))

@@ -11,6 +11,8 @@ tests/run-regression.sh /path/to/build/rexx
 | `trip` | Regina's own trip suite in `../trip` | unmodified Regina 3.9.7 |
 | `classic` | `tests/classic/*.rexx`: classic behaviour the OO syntax must not change (`~` as NOT, `-` and `>` near each other, brackets in strings, labels, PARSE templates, `USE`/`ARG` as plain symbols) | unmodified Regina 3.9.7 |
 | `oo` | `tests/oo/*.rexx`: the new syntax (`~`, `->`, `~~`, `->>`, `[ ]`, `::` directives) | reviewed output of the OO build |
+| `samples` | the sample programs in `demo/oo` | reviewed output of the OO build |
+| `packages` | `tests/packages/*.rexx`: external function packages (rgnet, RgMqtt) | reviewed output of the OO build |
 
 `trip` and `classic` must stay identical to 3.9.7. Never re-record them
 from a modified build; a difference there means classic behaviour changed.
@@ -40,6 +42,18 @@ After editing `lexsrc.l` or `yaccsrc.y`, run `tools/regenerate-parser.sh`
 
 If `NAME.switches` exists next to `NAME.rexx`, its content is passed to the
 interpreter before the program, for example `--oo` or `--no-oo`.
+
+## Packages
+
+The `packages` suite runs `tests/packages/*.rexx` with the dynamic
+`regina` found next to the given `rexx` (it is skipped, with a note, if
+there is none, or no libregina, C compiler or python3). It compiles
+`rgnet.c`, a small RxSock-style test package with its own function names,
+and uses `librgmqtt.so` of the build (or compiles `rgmqtt/rgmqtt.c`). If
+`NAME.server` exists, the Python server it names (`echoserver.py`,
+`minibroker.py`) is started first and its port is passed as the
+argument. The classic programs (`net_classic`, `mqtt_functions`) give the
+same output with unmodified Regina 3.9.7.
 
 ## Samples
 

@@ -1161,6 +1161,7 @@ LINKSHL="-L. -l${SHLFILE}"
 
 SHL_NAME_REGINA="${SHLPRE}${SHLFILE}${SHLPST}"
 SHL_NAME_REGUTIL="${SHLPRE}regutil${SHLPST}"
+SHL_NAME_RGMQTT="${SHLPRE}rgmqtt${SHLPST}"
 SHL_NAME_RXTEST1="${SHLPRE}rxtest1${SHLPST}"
 SHL_NAME_RXTEST2="${SHLPRE}rxtest2${SHLPST}"
 RANLIB_DYNAMIC=""
@@ -1182,6 +1183,7 @@ case "$target" in
                 LINKREG="${LINKSHL}"
                 SHL_NAME_REGINA="cygregina.dll"
                 SHL_NAME_REGUTIL="regutil.dll"
+                SHL_NAME_RGMQTT="rgmqtt.dll"
                 SHL_NAME_RXTEST1="rxtest1.dll"
                 SHL_NAME_RXTEST2="rxtest2.dll"
                 ;;
@@ -1206,7 +1208,7 @@ fi
 
 AC_MSG_CHECKING(if dynamic loading of external functions is supported)
 if test "$HAVE_DLFCN_H" = "1" -o "$ac_cv_header_dl_h" = "yes" -o "$ac_cv_header_dlfcn_h" = "yes" -o "$AIX_DYN" = "yes" -o "$BEOS_DYN" = "yes"; then
-   SHL_TARGETS="${SHL_NAME_REGINA} regina${binarybitprefix}${EXEEXT} ${SHL_NAME_REGUTIL} ${SHL_NAME_RXTEST1} ${SHL_NAME_RXTEST2} $EXTRATARGET"
+   SHL_TARGETS="${SHL_NAME_REGINA} regina${binarybitprefix}${EXEEXT} ${SHL_NAME_REGUTIL} ${SHL_NAME_RGMQTT} ${SHL_NAME_RXTEST1} ${SHL_NAME_RXTEST2} $EXTRATARGET"
    EXECISER_DEP="${SHL_BASE}"
    OTHER_INSTALLS="regina${binarybitprefix}${EXEEXT} $OTHER_INSTALLS"
    AC_MSG_RESULT("yes")
@@ -1280,6 +1282,7 @@ AC_SUBST(USE_ABI)
 AC_SUBST(RANLIB_DYNAMIC)
 AC_SUBST(SHL_NAME_REGINA)
 AC_SUBST(SHL_NAME_REGUTIL)
+AC_SUBST(SHL_NAME_RGMQTT)
 AC_SUBST(SHL_NAME_RXTEST1)
 AC_SUBST(SHL_NAME_RXTEST2)
 ])dnl

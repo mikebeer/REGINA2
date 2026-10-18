@@ -15,7 +15,7 @@ const DATE = '17 October 2026';
 const W = (...a) => a;                          // column widths helper
 const count = (dir, ext) => fs.readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith(ext)).length;
 const N = { trip: 23, classic: count('tests/classic', '.rexx'), oo: count('tests/oo', '.rexx'),
-            samples: count('demo/oo', '.rexx') };
+            samples: count('demo/oo', '.rexx'), packages: count('tests/packages', '.rexx') };
 
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const output = (name) => read(`tests/expected/samples/${name}.out`)
@@ -116,16 +116,18 @@ exit
     ['Workspaces', 'In the style of APL: `[]NL`, `[]SAVE`, `[]LOAD`, `[]OUT`, `[]IN`, `[]FX` in programs, and an interactive session `rexx --ws` with `)SAVE`, `)LOAD`, `)VARS` and the other system commands'],
     ['Memory', 'Garbage collection of objects that are no longer used; `--no-gc` switches it off'],
     ['Python', 'Python modules from Rexx: `.Python~import(\'statistics\')`, NumPy, pandas, json, datetime and more, through a Python interpreter built into Regina'],
+    ['MQTT', 'the RgMqtt package: an MQTT 3.1.1 client (`MqttConnect`, `MqttPublish`, `MqttSubscribe`, `MqttReceive` ...) and, with `::requires \'mqtt\'`, the Mqtt class'],
     ['Control', 'markers `/* OOREGINA */` and `OPTIONS OOREGINA`, switches `--oo` and `--no-oo`, variable `REGINA_OO`'],
     ['Errors', 'error numbers 88, 91, 97, 98 and 99 as in ooRexx, in all message languages'],
   ], W(1700, 7938), 'What the extension adds'),
   H2('How it was tested'),
-  P('Each build runs four test suites with `tests/run-regression.sh`. The results of this release are:'),
+  P('Each build runs five test suites with `tests/run-regression.sh`. The results of this release are:'),
   ...table(['Suite', 'What it checks', 'Result'], [
     ['trip', 'Regina\'s own test suite; output must be identical to Regina 3.9.7', '23 of 23 identical'],
     ['classic', 'classic programs, including programs that use the new words as variables; recorded with Regina 3.9.7', `${N.classic} of ${N.classic} identical`],
     ['oo', 'the extension: syntax, classes, collections, errors, loops, stems, switches', `${N.oo} of ${N.oo}`],
     ['samples', 'the sample programs of Chapter 8', `${N.samples} of ${N.samples}`],
+    ['packages', 'external function packages run by `regina`: an RxSock-style test package and RgMqtt against a test broker; the classic programs give the same output with Regina 3.9.7', `${N.packages} of ${N.packages}`],
   ], W(1300, 6338, 2000), 'Test suites'),
   P('The trip and classic suites are also identical to Regina 3.9.7 when the interpreter is run with `--no-oo`. The Linux build is checked with valgrind. The Windows build runs the oo suite under Wine. The macOS build is cross-compiled; see Chapter 9.'),
 ];
@@ -742,6 +744,45 @@ say addr.city addr.zip                        /* Bern 3000 */
 .python~print('a', 'b', .python~kw('sep', '-'))  /* a-b */`, 'Using Python modules'),
   H3('Where Python finds modules'),
   P('Modules are searched in the folder of the Rexx program (so a file `mymod.py` next to the program is imported with `.python~import(\'mymod\')`), in the folders of the environment variable PYLIB, in a folder `pylib` next to the rexx executable, and in `share/regina-rexx/pylib` of the installation (`/usr/share/regina-rexx/pylib` for the Debian package). The packages contain the library; in the source tree it is in `python/pylib`.'),
+  H2('External function packages'),
+  P('Packages such as RxSock, Rexx/SQL, Rexx/CURL and RegUtil work as with Regina 3.9.7. They use the SAA interface of libregina (`RexxRegisterFunctionDll`, `RexxVariablePool` ...), which the extension does not change, so packages built for earlier versions of Regina need not be rebuilt. An object passed to an external function arrives as its string value, and stem variables that a package sets are ordinary variables. Garbage collection never frees data that belongs to a package.'),
+  P('Packages are loaded by the interpreter `regina`, which uses the shared library libregina. The standalone `rexx` executables (the static Linux build, the Windows `rexx.exe` and the macOS build) cannot load packages, as in Regina 3.9.7.'),
+  P('The `packages` test suite checks this: `rgnet`, a small package written the way RxSock is written (it has its own function names, NetSocket, NetConnect and so on, so that it is not mistaken for RxSock), exchanges data with a TCP server from a classic program and from an OO program that uses blocks, a Bag and garbage collection in stress mode. The classic programs give the same output with Regina 3.9.7.'),
+  H2('MQTT: the RgMqtt package and the Mqtt class'),
+  P('RgMqtt is an MQTT 3.1.1 client, built and installed with Regina as `librgmqtt.so`, like RegUtil. MQTT is the publish/subscribe protocol of many IoT devices and platforms; RgMqtt works with any broker such as Mosquitto, HiveMQ or EMQX. It supports QoS 0, 1 and 2 in both directions, retained messages, wills, user name and password, and keep-alive. TLS is not supported; a local TLS tunnel such as stunnel can be used instead.'),
+  ...table(['Function', 'Meaning'], [
+    ['`MqttConnect(host [, port] [, clientid] [, options.])`', 'A connection handle, or 0 (`MqttError()` says why). PORT defaults to 1883. The stem OPTIONS. can set KEEPALIVE (60), CLEAN (1), USER, PASSWORD, WILLTOPIC, WILLMESSAGE, WILLQOS, WILLRETAIN and TIMEOUT (10 seconds).'],
+    ['`MqttPublish(h, topic, message [, qos] [, retain])`', 'Publishes MESSAGE (any bytes); QoS 1 and 2 wait for the acknowledgement. 0, or -1 on error.'],
+    ['`MqttSubscribe(h, filter [, qos])`', 'Subscribes to a topic filter with `+` and `#`. The granted QoS, 128 if refused, -1 on error.'],
+    ['`MqttUnsubscribe(h, filter)`', '0, or -1.'],
+    ['`MqttReceive(h, stem. [, seconds])`', '1 and STEM.TOPIC, STEM.MESSAGE, STEM.QOS, STEM.RETAIN, STEM.DUP when a message came within SECONDS (default 0), 0 if none, -1 if the connection was lost.'],
+    ['`MqttPending(h)`, `MqttPing(h)`', 'Messages received but not yet returned; a round trip to the broker.'],
+    ['`MqttDisconnect(h)`', 'Disconnects; the will is not published.'],
+    ['`MqttError()`, `MqttVersion()`', 'The text of the last error; the version.'],
+    ['`MqttLoadFuncs()`, `MqttDropFuncs()`', 'Registers or removes the functions.'],
+  ], W(4000, 5638), 'Functions of RgMqtt'),
+  P('Messages that arrive while RgMqtt waits for an acknowledgement are queued, and MqttReceive returns them in order. Keep-alive pings are sent while RgMqtt waits. Wrong arguments, a QoS of 3 for example, are error 40.'),
+  ...screen(`call RxFuncAdd 'MqttLoadFuncs', 'rgmqtt', 'MqttLoadFuncs'
+call MqttLoadFuncs
+opt.willtopic = 'status/rexx'; opt.willmessage = 'offline'
+h = MqttConnect('localhost', 1883, 'rexx-1', 'opt.')
+if h = 0 then do; say 'no connection:' MqttError(); exit 1; end
+call MqttSubscribe h, 'sensors/#', 1
+call MqttPublish h, 'status/rexx', 'online', 1, 1   /* retained */
+do while MqttReceive(h, 'msg.', 30)              /* until 30 s pass quietly */
+  say msg.topic '=' msg.message
+end
+call MqttDisconnect h`, 'RgMqtt in a classic program'),
+  P('In OO programs `::requires \'mqtt\'` gives the classes Mqtt and MqttMessage (the library is built into the interpreter). `.mqtt~connect(host [, port] [, clientid] [, options])` returns an Mqtt object, or `.nil` with the reason in `.mqtt~error`; OPTIONS is a Directory with the names of the stem tails above. The methods are `publish` (1 or 0), `subscribe` (the granted QoS, -1 if refused), `unsubscribe`, `receive([seconds])` (an MqttMessage with `topic`, `message`, `qos`, `retain` and `dup`, or `.nil`), `listen(block [, seconds])`, `pending`, `ping`, `isConnected`, `error` and `disconnect`. `listen` calls the block for every message until none comes for SECONDS (forever if omitted) or the block returns 0, and returns the number of messages.'),
+  ...screen(`c = .mqtt~connect('localhost', 1883, 'rexx-2')
+if c == .nil then do; say .mqtt~error; exit 1; end
+c~subscribe('sensors/#', 1)
+temps = .table~new
+n = c~listen({ use arg m; temps[m~topic] = m~message }, 10)
+say n 'readings, average' temps~inject(0, { :s :t | s + t }) / temps~items
+c~disconnect
+::requires 'mqtt'`, 'The Mqtt class'),
+  P('The details are in `rgmqtt/README`. The `packages` test suite runs RgMqtt against `tests/packages/minibroker.py`, a small broker written for the tests; it was also checked against Mosquitto 2.0.'),
 ];
 
 // ------------------------------------------------------------------
@@ -820,9 +861,9 @@ const ch9 = [
   ]),
   H2('Platforms'),
   ...table(['Package', 'Status'], [
-    ['Linux x86-64 (`.deb`)', 'Built and tested natively: all four test suites, valgrind.'],
-    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. The oo test suite passes under Wine; not yet tested on Windows itself. No readline, curses or GCI.'],
-    ['macOS (tar.gz)', 'Cross-compiled with zig for Apple Silicon and Intel, macOS 11 or later. The same sources and configuration pass all test suites on Linux, but the binary has not yet been run on a Mac. It is ad-hoc signed, not notarized (see Chapter 2). No readline, curses or GCI.'],
+    ['Linux x86-64 (`.deb`)', 'Built and tested natively: all five test suites, valgrind. Contains `regina`, which loads external function packages such as RgMqtt.'],
+    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. The oo test suite passes under Wine; not yet tested on Windows itself. No readline, curses or GCI, and no external function packages (rexx.exe is standalone).'],
+    ['macOS (tar.gz)', 'Cross-compiled with zig for Apple Silicon and Intel, macOS 11 or later. The same sources and configuration pass all test suites on Linux, but the binary has not yet been run on a Mac. It is ad-hoc signed, not notarized (see Chapter 2). No readline, curses or GCI, and no external function packages.'],
   ], W(2400, 7238), 'Platform status'),
   H2('Performance'),
   P('Classic programs run at the speed of Regina 3.9.7: built with the same compiler options, the REXXCPS benchmark gave a median of 9.67 million clauses per second against 9.51 million for Regina 3.9.7 (seven runs each), a difference within the noise of the measurement. A message is slower than a call of an internal routine, because it creates a new variable scope and looks up the method. Collections are implemented in C and are fast; a loop over thousands of items is no problem.'),
@@ -859,7 +900,7 @@ const appB = [
 const appC = [
   H1('Appendix C. Contents of the Packages'),
   ...table(['Package', 'Contents'], [
-    ['Debian', '`/usr/bin`: rexx, regina, rxstack, rxqueue, regina-config\n`/usr/lib/<arch>`: libregina.so, libregina.a, add-on libraries\n`/usr/share/regina-rexx`: message files, the classic examples and `pylib` (the Python library)\n`/usr/share/doc/regina-rexx-oo`: README.OO.md, this manual, examples (the OO samples)\n`/usr/share/man/man1`: man pages'],
+    ['Debian', '`/usr/bin`: rexx, regina, rxstack, rxqueue, regina-config\n`/usr/lib/<arch>`: libregina.so, libregina.a, the packages RegUtil and RgMqtt (librgmqtt.so)\n`/usr/share/regina-rexx`: message files, the classic examples and `pylib` (the Python library)\n`/usr/share/doc/regina-rexx-oo`: README.OO.md, this manual, examples (the OO samples)\n`/usr/share/man/man1`: man pages'],
     ['Windows', '`rexx.exe`, `*.mtb`, `pylib` (the Python library), `README.txt`, `README.OO.md`, this manual, `COPYING-LIB.txt`, `demo` with the classic examples and `demo\\oo` with the OO samples'],
     ['macOS', '`rexx` (universal), `*.mtb`, `pylib`, `INSTALL-macOS.txt`, `README.OO.md`, this manual, `COPYING-LIB.txt`, `demo` and `demo/oo`'],
   ], W(1600, 8038), 'Package contents'),
