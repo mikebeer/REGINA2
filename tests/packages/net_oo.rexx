@@ -1,5 +1,5 @@
 /* OOREGINA - rgnet, an RxSock-style test package, with OO features */
-parse arg port
+parse arg host port
 call rxfuncadd 'NetLoadFuncs', 'rgnet', 'NetLoadFuncs'
 call NetLoadFuncs
 say 'host:' NetHostByName('localhost', 'host.') host.addr

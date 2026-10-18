@@ -1,5 +1,5 @@
 /* OOREGINA - RgMqtt through the Mqtt class of ::requires 'mqtt' */
-parse arg port
+parse arg host port
 say .mqtt~version
 c = .mqtt~connect('127.0.0.1', port, 'oo-client', .directory~new~~put(10, 'keepAlive'))
 if c == .nil then do; say 'failed:' .mqtt~error; exit 1; end

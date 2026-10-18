@@ -39,6 +39,8 @@ cp "$SRC/README.OO.md" "$WORK/root/usr/share/doc/regina-rexx-oo/README.OO.md"
 cp "$SRC/rgmqtt/README" "$WORK/root/usr/share/doc/regina-rexx-oo/README.rgmqtt"
 mkdir -p "$WORK/root/usr/share/doc/regina-rexx-oo/examples"
 cp "$SRC"/demo/oo_demo.rexx "$SRC"/demo/oo/* "$WORK/root/usr/share/doc/regina-rexx-oo/examples/"
+mkdir -p "$WORK/root/usr/share/doc/regina-rexx-oo/examples/mqtt"
+cp "$SRC"/demo/mqtt/* "$WORK/root/usr/share/doc/regina-rexx-oo/examples/mqtt/"
 for m in "$SRC"/doc/Regina-OO-Manual.*; do
   [ -f "$m" ] && cp "$m" "$WORK/root/usr/share/doc/regina-rexx-oo/"
 done

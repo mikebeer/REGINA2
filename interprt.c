@@ -20,6 +20,8 @@
 #include "rexx.h"
 #if !defined(_WIN32) && !defined(_WIN64)
 # include <sys/resource.h>
+#else
+# include <windows.h>                  /* VirtualQuery */
 #endif
 #include <stdio.h>
 #include <string.h>
@@ -3036,10 +3038,19 @@ static long oo_stack_limit = 0;
  * How much of the C stack nested methods may use before "Control stack
  * full" is raised instead of crashing.
  */
-static long oo_stack_budget( void )
+static long oo_stack_budget( char *base )
 {
 #if defined(_WIN32) || defined(_WIN64)
-   return 192L * 1024 * 1024;    /* rexx.exe is linked with a 256 MB stack */
+   /*
+    * The stack of this thread ends at the allocation base of the region
+    * that holds base (rexx.exe has 256 MB, regina.exe 16 MB).
+    */
+   MEMORY_BASIC_INFORMATION mbi;
+   long lim = 1024L * 1024;
+
+   if ( VirtualQuery( base, &mbi, sizeof( mbi ) ) )
+      lim = (long) ( base - (char *) mbi.AllocationBase );
+   return lim - lim / 4;         /* leave a quarter for everything else */
 #else
    struct rlimit rl;
    long lim = 8L * 1024 * 1024;
@@ -3096,7 +3107,7 @@ static streng *run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
       if ( TSD->oo_stack_base == NULL || TSD->oo_depth == 0 )
       {
          TSD->oo_stack_base = &probe;
-         oo_stack_limit = oo_stack_budget();
+         oo_stack_limit = oo_stack_budget( &probe );
       }
       used = (long) ( TSD->oo_stack_base - &probe );
       if ( used < 0 )

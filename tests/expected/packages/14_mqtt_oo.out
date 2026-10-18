@@ -1,0 +1,10 @@
+connected to 127.0.0.1
+requests answered: 5
+1: 6 * 7 = 42
+2: 2 ** 10 = 1024
+3: 22 / 7 = 3.1429
+4: 1 / 0 = division by zero
+5: 17 // 5 = 2
+notes read: 2 left: 1
+last: calc/reply/x=note 3
+rc=0

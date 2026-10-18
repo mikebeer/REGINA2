@@ -15,10 +15,11 @@ const DATE = '17 October 2026';
 const W = (...a) => a;                          // column widths helper
 const count = (dir, ext) => fs.readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith(ext)).length;
 const N = { trip: 23, classic: count('tests/classic', '.rexx'), oo: count('tests/oo', '.rexx'),
-            samples: count('demo/oo', '.rexx'), packages: count('tests/packages', '.rexx') };
+            samples: count('demo/oo', '.rexx'),
+            packages: count('tests/packages', '.rexx') + count('demo/mqtt', '.rexx') };
 
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const output = (name) => read(`tests/expected/samples/${name}.out`)
+const output = (name, suite = 'samples') => read(`tests/expected/${suite}/${name}.out`)
   .split('\n').filter((l) => !/^rc=\d+$/.test(l)).join('\n');
 
 // ------------------------------------------------------------------
@@ -129,7 +130,7 @@ exit
     ['samples', 'the sample programs of Chapter 8', `${N.samples} of ${N.samples}`],
     ['packages', 'external function packages run by `regina`: an RxSock-style test package and RgMqtt against a test broker; the classic programs give the same output with Regina 3.9.7', `${N.packages} of ${N.packages}`],
   ], W(1300, 6338, 2000), 'Test suites'),
-  P('The trip and classic suites are also identical to Regina 3.9.7 when the interpreter is run with `--no-oo`. The Linux build is checked with valgrind. The Windows build runs the oo suite under Wine. The macOS build is cross-compiled; see Chapter 9.'),
+  P('The trip and classic suites are also identical to Regina 3.9.7 when the interpreter is run with `--no-oo`. The Linux build is checked with valgrind. The Windows build runs the oo and samples suites under Wine, with `rexx.exe` and with `regina.exe`, and the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`. The macOS build is cross-compiled; see Chapter 9.'),
 ];
 
 // ------------------------------------------------------------------
@@ -140,7 +141,7 @@ const ch2 = [
   H2('What you need'),
   ...table(['System', 'Package', 'Notes'], [
     ['Linux (Debian, Ubuntu; x86-64)', '`regina-rexx-oo_3.9.7+oo1_amd64.deb`', 'Replaces the distribution\'s `regina-rexx` package. Includes the library, `rexx`, `regina`, `rxstack`, `rxqueue`, man pages, samples and this manual.'],
-    ['Windows (64-bit)', '`regina-rexx-oo-3.9.7-win64.zip`', 'A standalone `rexx.exe`; no DLL, no installation.'],
+    ['Windows (64-bit)', '`regina-rexx-oo-3.9.7-win64.zip`', 'A standalone `rexx.exe` (no DLL, no installation), and `regina.exe` with `regina.dll`, which loads external function packages such as the included `rgmqtt.dll`.'],
     ['macOS 11 or later', '`regina-rexx-oo-3.9.7-macos.tar.gz`', 'One universal `rexx` for Apple Silicon and Intel Macs.'],
     ['Any other system', 'the source', 'See "Building from source" below.'],
   ], W(2200, 3238, 4200), 'Installation packages'),
@@ -157,6 +158,7 @@ rexx /usr/share/doc/regina-rexx-oo/examples/01_classes.rexx`, 'Installing on Deb
     'Add the folder to the PATH, or call `rexx.exe` with its full path.',
     'Run a sample: `rexx demo\\oo\\01_classes.rexx`.',
   ], 's2'),
+  P('The zip holds two interpreters. `rexx.exe` is standalone. `regina.exe` uses `regina.dll` and can load external function packages (DLLs) such as `rgmqtt.dll`, the MQTT client (Chapter 7); keep `regina.exe`, `regina.dll` and the package DLLs in one folder. Both run the same programs: `regina demo\\mqtt\\15_public_broker.rexx` connects to the public test broker test.mosquitto.org.'),
   P('`rexx.exe` contains the English error messages. For another language, set `REGINA_LANG` (for example `de`) and `REGINA_LANG_DIR` to the folder with the `*.mtb` files.'),
   H2('macOS'),
   P('Unpack the archive in Terminal. Files downloaded from the internet carry a quarantine mark, and the binary is not notarized by Apple, so remove the mark before the first run:'),
@@ -746,10 +748,10 @@ say addr.city addr.zip                        /* Bern 3000 */
   P('Modules are searched in the folder of the Rexx program (so a file `mymod.py` next to the program is imported with `.python~import(\'mymod\')`), in the folders of the environment variable PYLIB, in a folder `pylib` next to the rexx executable, and in `share/regina-rexx/pylib` of the installation (`/usr/share/regina-rexx/pylib` for the Debian package). The packages contain the library; in the source tree it is in `python/pylib`.'),
   H2('External function packages'),
   P('Packages such as RxSock, Rexx/SQL, Rexx/CURL and RegUtil work as with Regina 3.9.7. They use the SAA interface of libregina (`RexxRegisterFunctionDll`, `RexxVariablePool` ...), which the extension does not change, so packages built for earlier versions of Regina need not be rebuilt. An object passed to an external function arrives as its string value, and stem variables that a package sets are ordinary variables. Garbage collection never frees data that belongs to a package.'),
-  P('Packages are loaded by the interpreter `regina`, which uses the shared library libregina. The standalone `rexx` executables (the static Linux build, the Windows `rexx.exe` and the macOS build) cannot load packages, as in Regina 3.9.7.'),
+  P('Packages are loaded by the interpreter `regina`, which uses the shared library libregina (on Windows `regina.exe` with `regina.dll`). The standalone `rexx` executables (the static Linux build, the Windows `rexx.exe` and the macOS build) cannot load packages, as in Regina 3.9.7.'),
   P('The `packages` test suite checks this: `rgnet`, a small package written the way RxSock is written (it has its own function names, NetSocket, NetConnect and so on, so that it is not mistaken for RxSock), exchanges data with a TCP server from a classic program and from an OO program that uses blocks, a Bag and garbage collection in stress mode. The classic programs give the same output with Regina 3.9.7.'),
   H2('MQTT: the RgMqtt package and the Mqtt class'),
-  P('RgMqtt is an MQTT 3.1.1 client, built and installed with Regina as `librgmqtt.so`, like RegUtil. MQTT is the publish/subscribe protocol of many IoT devices and platforms; RgMqtt works with any broker such as Mosquitto, HiveMQ or EMQX. It supports QoS 0, 1 and 2 in both directions, retained messages, wills, user name and password, and keep-alive. TLS is not supported; a local TLS tunnel such as stunnel can be used instead.'),
+  P('RgMqtt is an MQTT 3.1.1 client, built and installed with Regina as `librgmqtt.so` (`rgmqtt.dll` in the Windows zip), like RegUtil. MQTT is the publish/subscribe protocol of many IoT devices and platforms; RgMqtt works with any broker such as Mosquitto, HiveMQ or EMQX. It supports QoS 0, 1 and 2 in both directions, retained messages, wills, user name and password, and keep-alive. TLS is not supported; a local TLS tunnel such as stunnel can be used instead.'),
   ...table(['Function', 'Meaning'], [
     ['`MqttConnect(host [, port] [, clientid] [, options.])`', 'A connection handle, or 0 (`MqttError()` says why). PORT defaults to 1883. The stem OPTIONS. can set KEEPALIVE (60), CLEAN (1), USER, PASSWORD, WILLTOPIC, WILLMESSAGE, WILLQOS, WILLRETAIN and TIMEOUT (10 seconds).'],
     ['`MqttPublish(h, topic, message [, qos] [, retain])`', 'Publishes MESSAGE (any bytes); QoS 1 and 2 wait for the acknowledgement. 0, or -1 on error.'],
@@ -782,6 +784,7 @@ n = c~listen({ use arg m; temps[m~topic] = m~message }, 10)
 say n 'readings, average' temps~inject(0, { :s :t | s + t }) / temps~items
 c~disconnect
 ::requires 'mqtt'`, 'The Mqtt class'),
+  P('To try RgMqtt without a broker of your own, use the public test server test.mosquitto.org of the Eclipse Mosquitto project: port 1883 without a password, or port 1884 with user `rw` and password `readwrite` (RgMqtt has no TLS, so the encrypted ports cannot be used). Everybody can read what is published there. The sample `demo/mqtt/15_public_broker.rexx` in Chapter 8 uses it.'),
   P('The details are in `rgmqtt/README`. The `packages` test suite runs RgMqtt against `tests/packages/minibroker.py`, a small broker written for the tests; it was also checked against Mosquitto 2.0.'),
 ];
 
@@ -802,17 +805,29 @@ const samples = [
   ['11_blocks', 'Blocks', 'A small book list processed with blocks: select, collect, inject, count, anySatisfy, detect, reject with a variable of the program, sortWith, a counter that keeps its state in a block, and a block with several clauses.'],
   ['12_extensions', 'More collections and extensions', 'Words counted with a Bag and a Set, the longest words in a SortedCollection with a sort block, set intersection, an Interval, new methods for String and Array with `::extension`, and cleanup with `ensure` followed by `condition(\'O\')`.'],
 ];
+const mqttSamples = [
+  ['13_mqtt', 'MQTT with the function package', 'A home monitor written as a classic program with the functions of RgMqtt: one connection publishes temperatures as retained messages, a second one subscribes with a wildcard, computes statistics and publishes an alarm, and a third connection, opened later, still receives the retained values. A will announces when the monitor disappears.'],
+  ['14_mqtt_oo', 'MQTT with the Mqtt class', 'A calculator service and its client on two connections, written with `::requires \'mqtt\'`. The service answers each request in a method of a Calculator class called from a `listen` block; the client collects the replies in a SortedCollection. The last part shows `listen` stopping when its block returns 0.'],
+  ['15_public_broker', 'A public test broker', 'Without arguments the program connects to test.mosquitto.org, the free test server of the Eclipse Mosquitto project (port 1883 without a password; port 1884 with user `rw` and password `readwrite`). It works below a topic of its own, publishes with QoS 0, 1 and 2, reads the messages back, and removes its retained message at the end. Never publish anything private on a public broker: everybody can read it.'],
+];
 const ch8 = [
   H1('Chapter 8. Sample Programs'),
   P('The sample programs are in the folder `demo/oo` of every package and of the repository; the Debian package installs them in `/usr/share/doc/regina-rexx-oo/examples`. Each section below shows a program and its output. The output is checked by the `samples` test suite, so it is what the program prints.'),
   ...table(['Program', 'Shows'], samples.map(([f, t]) => [`\`${f}.rexx\``, t])
-    .concat([['`shapes.cls`', 'The class library used by 02_inheritance']]), W(3100, 6538), 'The sample programs'),
+    .concat([['`shapes.cls`', 'The class library used by 02_inheritance']])
+    .concat(mqttSamples.map(([f, t]) => [`\`mqtt/${f}.rexx\``, t])), W(3100, 6538), 'The sample programs'),
 ];
 for (const [f, title, desc] of samples) {
   ch8.push(H2(title), P(desc), ...screen(read(`demo/oo/${f}.rexx`), `${f}.rexx`));
   if (f === '02_inheritance')
     ch8.push(...screen(read('demo/oo/shapes.cls'), 'shapes.cls'));
   ch8.push(...screen(`rexx ${f}.rexx\n` + output(f), `Output of ${f}.rexx`));
+}
+ch8.push(H2('MQTT samples'),
+  P('The folder `demo/mqtt` holds three programs that use the RgMqtt package (Chapter 7). They need `regina` (on Windows `regina.exe`, not the standalone `rexx`) and a broker: the host and port are the arguments, for example `regina 13_mqtt.rexx localhost 1883`; 15_public_broker.rexx uses the public test broker test.mosquitto.org by default. The `packages` test suite runs them against its test broker; the outputs below are from those runs (the port of the test broker is shown as @PORT@). With test.mosquitto.org, 15_public_broker.rexx first prints the broker\'s version, for example `broker: mosquitto version 2.0.18`.'));
+for (const [f, title, desc] of mqttSamples) {
+  ch8.push(H3(title), P(desc), ...screen(read(`demo/mqtt/${f}.rexx`), `${f}.rexx`));
+  ch8.push(...screen(`regina ${f}.rexx 127.0.0.1 @PORT@\n` + output(f, 'packages'), `Output of ${f}.rexx`));
 }
 
 // ------------------------------------------------------------------
@@ -862,7 +877,7 @@ const ch9 = [
   H2('Platforms'),
   ...table(['Package', 'Status'], [
     ['Linux x86-64 (`.deb`)', 'Built and tested natively: all five test suites, valgrind. Contains `regina`, which loads external function packages such as RgMqtt.'],
-    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. The oo test suite passes under Wine; not yet tested on Windows itself. No readline, curses or GCI, and no external function packages (rexx.exe is standalone).'],
+    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. Under Wine, the oo and samples suites pass with `rexx.exe` and `regina.exe`, and the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`; not yet tested on Windows itself. No readline, curses or GCI. `regina.exe` has a 16 MB stack, so its limit for nested methods is lower than that of `rexx.exe`.'],
     ['macOS (tar.gz)', 'Cross-compiled with zig for Apple Silicon and Intel, macOS 11 or later. The same sources and configuration pass all test suites on Linux, but the binary has not yet been run on a Mac. It is ad-hoc signed, not notarized (see Chapter 2). No readline, curses or GCI, and no external function packages.'],
   ], W(2400, 7238), 'Platform status'),
   H2('Performance'),
@@ -901,7 +916,7 @@ const appC = [
   H1('Appendix C. Contents of the Packages'),
   ...table(['Package', 'Contents'], [
     ['Debian', '`/usr/bin`: rexx, regina, rxstack, rxqueue, regina-config\n`/usr/lib/<arch>`: libregina.so, libregina.a, the packages RegUtil and RgMqtt (librgmqtt.so)\n`/usr/share/regina-rexx`: message files, the classic examples and `pylib` (the Python library)\n`/usr/share/doc/regina-rexx-oo`: README.OO.md, this manual, examples (the OO samples)\n`/usr/share/man/man1`: man pages'],
-    ['Windows', '`rexx.exe`, `*.mtb`, `pylib` (the Python library), `README.txt`, `README.OO.md`, this manual, `COPYING-LIB.txt`, `demo` with the classic examples and `demo\\oo` with the OO samples'],
+    ['Windows', '`rexx.exe`, `regina.exe`, `regina.dll`, `rgmqtt.dll`, `README.rgmqtt.txt`, `*.mtb`, `pylib` (the Python library), `README.txt`, `README.OO.md`, this manual, `COPYING-LIB.txt`, `demo` with the classic examples, `demo\\oo` with the OO samples and `demo\\mqtt` with the MQTT samples'],
     ['macOS', '`rexx` (universal), `*.mtb`, `pylib`, `INSTALL-macOS.txt`, `README.OO.md`, this manual, `COPYING-LIB.txt`, `demo` and `demo/oo`'],
   ], W(1600, 8038), 'Package contents'),
 ];

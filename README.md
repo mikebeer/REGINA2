@@ -38,9 +38,11 @@ say stats~mean(.array~of(1, 2, 3, 4))      /* 2.5 */
 ```
 
 External function packages (RxSock, Rexx/SQL, Rexx/CURL, RegUtil, ...)
-work as before with the `regina` executable. New is **RgMqtt**, an MQTT
-3.1.1 client package ([rgmqtt/README](rgmqtt/README)), with an Mqtt class
-for OO programs:
+work as before with the `regina` executable (on Windows `regina.exe` with
+`regina.dll`). New is **RgMqtt**, an MQTT 3.1.1 client package
+([rgmqtt/README](rgmqtt/README), samples in [demo/mqtt](demo/mqtt), one of
+them using the public broker test.mosquitto.org), with an Mqtt class for
+OO programs:
 
 ```rexx
 c = .mqtt~connect('localhost')

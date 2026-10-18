@@ -1,0 +1,12 @@
+kitchen   21.5 C
+garden    12.0 C
+cellar     9.5 C
+office    26.5 C
+ALARM received: office is too warm: 26.5 C
+4 readings, average 17.4 C, from 9.5 to 26.5
+a late subscriber got 4 retained values:
+  home/cellar/temperature = 9.5 (retained: 1)
+  home/garden/temperature = 12.0 (retained: 1)
+  home/kitchen/temperature = 21.5 (retained: 1)
+  home/office/temperature = 26.5 (retained: 1)
+rc=0

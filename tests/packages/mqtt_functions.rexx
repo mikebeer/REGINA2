@@ -1,5 +1,5 @@
 /* RgMqtt: the function interface, from a classic program */
-parse arg port
+parse arg host port
 call RxFuncAdd 'MqttLoadFuncs', 'rgmqtt', 'MqttLoadFuncs'
 call MqttLoadFuncs
 say MqttVersion()

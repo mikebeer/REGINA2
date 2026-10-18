@@ -32,6 +32,11 @@
  * Copyright (C) 2026 Mike Beer. Distributed under the GNU Library General
  * Public License, like Regina.
  */
+#ifdef _WIN32
+# include <winsock2.h>          /* before windows.h, which rexxsaa.h includes */
+# include <ws2tcpip.h>
+# include <windows.h>
+#endif
 #define INCL_RXSHV
 #define INCL_RXFUNC
 #include "rexxsaa.h"
@@ -42,9 +47,6 @@
 #include <time.h>
 
 #ifdef _WIN32
-# include <winsock2.h>
-# include <ws2tcpip.h>
-# include <windows.h>
 # define CLOSESOCK closesocket
 typedef SOCKET sock_t;
 # define BADSOCK INVALID_SOCKET

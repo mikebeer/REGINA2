@@ -307,11 +307,15 @@ RxSock, Rexx/SQL, Rexx/CURL, RegUtil and other SAA packages work as with
 Regina 3.9.7: the API of libregina is unchanged, objects reach external
 functions as their string values, and garbage collection never touches a
 package's data. Packages are loaded by `regina` (the executable that uses
-libregina); the standalone `rexx` executables can't load them, as before.
+libregina; on Windows `regina.exe` with `regina.dll`); the standalone `rexx`
+executables can't load them, as before.
 The `packages` test suite checks this with `rgnet`, an RxSock-style test
 package with its own names (`NetSocket`, `NetConnect`, ...).
 
-RgMqtt (`rgmqtt/`, installed as `librgmqtt.so`) is an MQTT 3.1.1 client:
+RgMqtt (`rgmqtt/`, installed as `librgmqtt.so`; `rgmqtt.dll` in the Windows
+zip) is an MQTT 3.1.1 client. `demo/mqtt` has three samples; the third uses
+the public test broker test.mosquitto.org (port 1883, or 1884 with user
+`rw`, password `readwrite`):
 
 ```rexx
 call RxFuncAdd 'MqttLoadFuncs', 'rgmqtt', 'MqttLoadFuncs'

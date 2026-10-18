@@ -7,7 +7,8 @@
 #   oo       the new OO syntax
 #   samples  the sample programs of demo/oo
 #   packages external function packages (tests/packages: the rgnet test
-#            package and RgMqtt) run by the dynamic `regina` next to REXX;
+#            package and RgMqtt; and the MQTT samples of demo/mqtt) run by
+#            the dynamic `regina` next to REXX;
 #            skipped when there is no `regina`, libregina, cc or python3
 #
 # trip and classic are compared against output recorded from the unmodified
@@ -76,6 +77,10 @@ elif ! command -v python3 >/dev/null 2>&1; then skip_packages="no python3"
 fi
 if [ -z "$skip_packages" ]; then
   cp -R "$HERE/packages" "$WORK/packages"
+  # the MQTT samples of demo/mqtt run against the test broker, too
+  for f in "$SRC"/demo/mqtt/*.rexx; do
+    cp "$f" "$WORK/packages/"; echo minibroker.py >"$WORK/packages/$(basename "${f%.rexx}").server"
+  done
   mkdir -p "$WORK/lib" "$WORK/out/packages"
   case $(uname -s) in Darwin) SHFLAGS="-dynamiclib -undefined dynamic_lookup"; SO=dylib ;;
                       *) SHFLAGS="-shared -fPIC"; SO=so ;; esac
@@ -102,10 +107,14 @@ if [ -z "$skip_packages" ]; then
       i=0; while [ ! -s "$WORK/port" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
       port=$(cat "$WORK/port" 2>/dev/null)
     fi
-    timeout 60 "$BINDIR/regina" $sw "./$f" $port </dev/null >"$WORK/raw" 2>&1
+    # the argument is "host port" of the server
+    timeout 60 "$BINDIR/regina" $sw "./$f" ${port:+127.0.0.1 $port} </dev/null >"$WORK/raw" 2>&1
     echo "rc=$?" >>"$WORK/raw"
     [ -n "$pid" ] && { kill $pid 2>/dev/null; wait $pid 2>/dev/null; }
-    normalize <"$WORK/raw" >"$WORK/out/packages/${f%.rexx}.out"
+    # the server's port changes from run to run
+    if [ -n "$port" ]; then sed -e "s/\([^0-9]\)$port\([^0-9]\|\$\)/\1@PORT@\2/g" "$WORK/raw" >"$WORK/raw2"
+    else cp "$WORK/raw" "$WORK/raw2"; fi
+    normalize <"$WORK/raw2" >"$WORK/out/packages/${f%.rexx}.out"
   done
   SUITES="$SUITES packages"
 fi

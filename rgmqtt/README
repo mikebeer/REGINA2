@@ -3,14 +3,22 @@ RgMqtt - an MQTT 3.1.1 client package for Regina Rexx
 
 RgMqtt lets Rexx programs talk to an MQTT broker (Mosquitto, HiveMQ, EMQX,
 the brokers of IoT platforms, ...). It is an external function package
-like RegUtil: the shared library librgmqtt.so (rgmqtt.dll in a Windows DLL build),
+like RegUtil: the shared library librgmqtt.so (rgmqtt.dll in the Windows zip),
 built and installed together with Regina. It needs nothing but the system's
 sockets. TLS is not supported; use a local TLS tunnel (stunnel) or a broker
 listener without TLS.
 
 External function packages are loaded by the dynamic interpreter `regina`
-(which uses libregina). The standalone `rexx` executables (the static
-Linux build, the Windows rexx.exe and the macOS build) can't load packages.
+(which uses libregina; in the Windows zip regina.exe with regina.dll and
+rgmqtt.dll). The standalone `rexx` executables (the static Linux build, the
+Windows rexx.exe and the macOS build) can't load packages.
+
+To try it without a broker of your own, use the public test server
+test.mosquitto.org of the Eclipse Mosquitto project: port 1883 without a
+password, or 1884 with user "rw" and password "readwrite" (the TLS ports
+can't be used). Everybody can read what is published there.
+demo/mqtt/15_public_broker.rexx does this; 13_mqtt.rexx and
+14_mqtt_oo.rexx take a host and port.
 
 Loading
 -------
