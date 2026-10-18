@@ -149,6 +149,7 @@
 # define HAVE_SETJMP_H
 # define HAVE_PROCESS_H
 # define HAVE_SIGNAL_H
+# define HAVE_STDINT_H     /* OpenWatcom 1.0 and later */
 # define HAVE_STRERROR
 # define HAVE_STRING_H
 # define HAVE_SYS_SELECT_H /* at least OpenWatcom */

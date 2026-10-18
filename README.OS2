@@ -55,3 +55,19 @@ Cheers, Mark.
 * Maintainer of Regina Rexx interpreter and Rexx/Tk
 * Use Rexx? join the Rexx Language Association: http://www.rexxla.org/
 ------------------------------------------------------------------------
+
+Building with OpenWatcom v2 (no C runtime DLLs needed)
+------------------------------------------------------
+The whole OS/2 set - REGINA.DLL (multi-threaded), REGINA.EXE, REXX.EXE,
+RXQUEUE.EXE, RXSTACK.EXE and REGUTIL.DLL - builds with OpenWatcom v2, on
+OS/2 or cross-compiled on Linux or Windows. The ROSE project's script
+(https://github.com/mikebeer/ROSE, tools/packages/regina/build-src.sh) shows
+the compiler and linker commands; the programs it builds use only OS/2's
+own DLLs (DOSCALLS, and SO32DLL/TCPIP32 for the external queues).
+
+The OpenWatcom RexxUtil uses the OS/2 API where the EMX build used Unix
+calls: SysFileTree lists files the way IBM's RexxUtil does
+("10/18/26  10:26p        4692  A----  C:\REGINA\REGINA.EXE"),
+SysDriveInfo, SysDriveMap and SysSetPriority work. SysFileTree's 'S' option
+uses DosFindFirst too, so it finds sub-directories on every file system.
+INI files written by SysIni are not locked.

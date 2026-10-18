@@ -72,7 +72,7 @@ extern "C" {
 #define EXTNAME(n)
 #endif
 
-#if !defined(OS2_VAC_C) && !defined(_OS2EMX_H) && !defined(__RSXNT__) && !defined(__MINGW32__)
+#if !defined(OS2_VAC_C) && !defined(_OS2EMX_H) && !defined(__RSXNT__) && !defined(__MINGW32__) && !(defined(__WATCOMC__) && defined(OS2_INCLUDED))
 
 # if !defined(VOID_TYPEDEFED) && !defined(VOID)
 typedef void VOID ;
@@ -168,7 +168,7 @@ typedef CONST char *PCSZ ;
 # define APIRET ULONG
 #endif
 
-#if !defined(_OS2EMX_H) && !defined( PFN_TYPEDEFED )
+#if !defined(_OS2EMX_H) && !defined( PFN_TYPEDEFED ) && !(defined(__WATCOMC__) && defined(OS2_INCLUDED))
 typedef APIRET (APIENTRY *PFN)();
 #endif
 
@@ -195,8 +195,10 @@ typedef struct REXXDATETIME_type
    ULONG  yearday;             /* day number within the year   */
    USHORT valid;               /* valid time stamp marker      */
 } REXXDATETIME;
+#if !(defined(__WATCOMC__) && defined(OS2_INCLUDED)) /* <os2.h> has its own */
 #define DATETIME REXXDATETIME
 typedef REXXDATETIME *PDATETIME;
+#endif
 #endif
 
 #define RXAUTOBUFLEN  256L

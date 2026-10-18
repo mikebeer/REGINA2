@@ -48,6 +48,11 @@
 #elif defined(REXXTRANS)
 # include "rexxtrans.h"
 #else
+# if defined(__WATCOMC__) && defined(OS2)  /* OpenWatcom under OS/2 */
+#  include <os2.h>
+#  define strcasecmp stricmp
+#  define strncasecmp strnicmp
+# endif
 # include "rexxsaa.h"
 #endif
 

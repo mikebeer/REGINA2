@@ -18,6 +18,7 @@
  */
 
 #if defined(__WATCOMC__) && defined(OS2)
+# include <stddef.h>   /* size_t the OpenWatcom 2 way before the TCP/IP types */
 # include <os2/types.h>
 #endif
 #include "rexx.h"
@@ -57,6 +58,13 @@
 #  include <arpa/inet.h>
 # endif
 # define closesocket(x) close(x)
+#endif
+#if defined(__WATCOMC__) && defined(OS2)
+/* OS/2 TCP/IP (OpenWatcom): sockets are not file handles; errors in sock_errno() */
+# include <sys/time.h>
+# include <nerrno.h>
+# undef closesocket
+# define closesocket(x) soclose(x)
 #endif
 
 #include <stdio.h>
