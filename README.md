@@ -61,7 +61,8 @@ c~listen({ use arg m; say m~topic '=' m~message }, 10)
 
 Checksums are in [dist/SHA256SUMS](dist/SHA256SUMS). The macOS build is
 cross-compiled and has not yet been run on a Mac; the Windows build is
-tested under Wine. See chapter 9 of the manual.
+tested under Wine and was checked on Windows 11. See chapter 9 of the
+manual.
 
 ## Documentation
 

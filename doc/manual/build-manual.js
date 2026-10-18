@@ -877,7 +877,7 @@ const ch9 = [
   H2('Platforms'),
   ...table(['Package', 'Status'], [
     ['Linux x86-64 (`.deb`)', 'Built and tested natively: all five test suites, valgrind. Contains `regina`, which loads external function packages such as RgMqtt.'],
-    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. Under Wine, the oo and samples suites pass with `rexx.exe` and `regina.exe`, and the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`; not yet tested on Windows itself. No readline, curses or GCI. Both executables have a 256 MB stack; `--stack=SIZE` or `REGINA_STACK` sets another size. `tools/test-windows.sh` also checks programs with a console (input typed in, Ctrl-Z, programs that end).'],
+    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. Under Wine, the oo and samples suites pass with `rexx.exe` and `regina.exe`, and the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`. On Windows 11 itself: programs typed in and ended with Ctrl-Z, `animal.rexx`, `--stack=512M` with deeply nested methods, and the MQTT sample with the public broker test.mosquitto.org. No readline, curses or GCI. Both executables have a 256 MB stack; `--stack=SIZE` or `REGINA_STACK` sets another size. `tools/test-windows.sh` also checks programs with a console (input typed in, Ctrl-Z, programs that end).'],
     ['macOS (tar.gz)', 'Cross-compiled with zig for Apple Silicon and Intel, macOS 11 or later. The same sources and configuration pass all test suites on Linux, but the binary has not yet been run on a Mac. It is ad-hoc signed, not notarized (see Chapter 2). No readline, curses or GCI, and no external function packages.'],
   ], W(2400, 7238), 'Platform status'),
   H2('Performance'),
