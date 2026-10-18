@@ -2919,6 +2919,11 @@ char *yytext;
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#ifndef S_ISREG
+# define S_ISREG(m) ( ( (m) & S_IFMT ) == S_IFREG )
+#endif
 
 /* Define ASCII_0_TERMINATES_STRING if you want that ASCII-0 terminates
  * an input string. Normally this should not happen. Input strings are
@@ -3093,6 +3098,13 @@ static int inEOF=0 ;
 static int singlequote=0, doblequote=0 ;
 static int firstln=0 ;
 static int bufptr=0 ;
+/*
+ * A program read from a stream that can't be read twice (the keyboard, a
+ * pipe) is kept here by has_directive_line, and the lexer reads it from
+ * here instead of from the stream.
+ */
+static char *pre_buf = NULL ;
+static long pre_len = 0, pre_pos = 0 ;
 /* Previous bug. 8-bits clean combined with EOF ==> need an int */
 static int chbuffer[LOOKAHEAD] ;
 static int ipretflag=0, cch=0 ;
@@ -3110,14 +3122,14 @@ static int fill_buffer( char *buf, int max_size ) ;
 #define SET_NEXTSTART() (nextstart += yyleng)
 
 #define YY_FATAL_ERROR(s) exiterror( ERR_PROG_UNREADABLE, 1, s )
-#line 3114 "lexsrc.c"
+#line 3126 "lexsrc.c"
 
-#line 243 "lexsrc.l"
-#line 3117 "lexsrc.c"
+#line 255 "lexsrc.l"
+#line 3129 "lexsrc.c"
 /*
  * ANSI 6.2.2 definitions (partially with extensions)
  */
-#line 257 "lexsrc.l"
+#line 269 "lexsrc.l"
                   /*
                    * sigh, we need the reversed classes. flex isn't smart
                    * enough to provide it.
@@ -3142,7 +3154,7 @@ static int fill_buffer( char *buf, int max_size ) ;
                   /*
                    * The list of keywords.
                    */
-#line 3146 "lexsrc.c"
+#line 3158 "lexsrc.c"
 
 #define INITIAL 0
 #define comm 1
@@ -3380,7 +3392,7 @@ YY_DECL
 		}
 
 	{
-#line 379 "lexsrc.l"
+#line 391 "lexsrc.l"
 
 
    {
@@ -3441,7 +3453,7 @@ YY_DECL
      expression_ended = 0 ;
    }
 
-#line 3445 "lexsrc.c"
+#line 3457 "lexsrc.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -3505,14 +3517,14 @@ do_action:	/* This label is used only to access EOF actions. */
 	{ /* beginning of action switch */
 case 1:
 YY_RULE_SETUP
-#line 439 "lexsrc.l"
+#line 451 "lexsrc.l"
 {
    SET_NEXTSTART() ; }
 	YY_BREAK
 case 2:
 /* rule 2 can match eol */
 YY_RULE_SETUP
-#line 442 "lexsrc.l"
+#line 454 "lexsrc.l"
 {
    /*
     * Fixes bug 579597, "[;\r?\n]" instead of "{EOL}" causes the bug.
@@ -3535,7 +3547,7 @@ YY_RULE_SETUP
 case 3:
 /* rule 3 can match eol */
 YY_RULE_SETUP
-#line 461 "lexsrc.l"
+#line 473 "lexsrc.l"
 {
    char *ptr;
    BEGIN comm ;
@@ -3571,7 +3583,7 @@ YY_LINENO_REWIND_TO(yy_bp + 5);
 (yy_c_buf_p) = yy_cp = yy_bp + 5;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 489 "lexsrc.l"
+#line 501 "lexsrc.l"
 {
    int  i;
    char work[16];
@@ -3593,7 +3605,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 508 "lexsrc.l"
+#line 520 "lexsrc.l"
 {
    BEGIN value1 ; /* Allow a following VALUE keyword */
    seek_with = seek_with_from_address ;
@@ -3604,7 +3616,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 516 "lexsrc.l"
+#line 528 "lexsrc.l"
 {
    BEGIN other ;
    in_parse = 1 ;
@@ -3613,7 +3625,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 522 "lexsrc.l"
+#line 534 "lexsrc.l"
 {
    BEGIN signal ;
    in_call = 1 ;
@@ -3622,7 +3634,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 528 "lexsrc.l"
+#line 540 "lexsrc.l"
 {
    BEGIN do1 ;
    assert( do_level >=0 ) ;
@@ -3635,7 +3647,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 538 "lexsrc.l"
+#line 550 "lexsrc.l"
 {
    /*
     * OO extension: LOOP is DO, but without a repetitor it loops forever.
@@ -3655,7 +3667,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 555 "lexsrc.l"
+#line 567 "lexsrc.l"
 {
    /* OO extension: EXPOSE instruction in methods */
    if ( !OO_KEYWORDS )
@@ -3667,7 +3679,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 564 "lexsrc.l"
+#line 576 "lexsrc.l"
 {
    /* OO extension: USE ARG instruction in methods and routines */
    if ( !OO_KEYWORDS )
@@ -3679,7 +3691,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 573 "lexsrc.l"
+#line 585 "lexsrc.l"
 {
    BEGIN other ;
    in_parse = 1 ;
@@ -3688,7 +3700,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 579 "lexsrc.l"
+#line 591 "lexsrc.l"
 {
    BEGIN comm ;
    SET_NEXTSTART() ;
@@ -3696,7 +3708,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 584 "lexsrc.l"
+#line 596 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3704,7 +3716,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 589 "lexsrc.l"
+#line 601 "lexsrc.l"
 {
    BEGIN ifcont ;
    in_then = 1 ;
@@ -3714,7 +3726,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 596 "lexsrc.l"
+#line 608 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3722,7 +3734,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 601 "lexsrc.l"
+#line 613 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3730,7 +3742,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 606 "lexsrc.l"
+#line 618 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3738,7 +3750,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 611 "lexsrc.l"
+#line 623 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3746,7 +3758,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 616 "lexsrc.l"
+#line 628 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3754,7 +3766,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 621 "lexsrc.l"
+#line 633 "lexsrc.l"
 {
    BEGIN numeric ;
    SET_NEXTSTART() ;
@@ -3762,7 +3774,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 626 "lexsrc.l"
+#line 638 "lexsrc.l"
 {
    BEGIN parse ;
    in_parse = 1 ;
@@ -3771,7 +3783,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 632 "lexsrc.l"
+#line 644 "lexsrc.l"
 {
    BEGIN procd ;
    SET_NEXTSTART() ;
@@ -3779,7 +3791,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 637 "lexsrc.l"
+#line 649 "lexsrc.l"
 {
    BEGIN other ;
    in_parse = 1 ;
@@ -3788,7 +3800,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 643 "lexsrc.l"
+#line 655 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3796,7 +3808,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 648 "lexsrc.l"
+#line 660 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3804,7 +3816,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 653 "lexsrc.l"
+#line 665 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3812,7 +3824,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 658 "lexsrc.l"
+#line 670 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -3820,7 +3832,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 663 "lexsrc.l"
+#line 675 "lexsrc.l"
 {
    BEGIN other ;
    assert( do_level >= 0 ) ;
@@ -3830,7 +3842,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 670 "lexsrc.l"
+#line 682 "lexsrc.l"
 {
    BEGIN signal ;
    in_signal = 1 ;
@@ -3839,7 +3851,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 676 "lexsrc.l"
+#line 688 "lexsrc.l"
 {
    BEGIN value1 ;
    in_trace = 1 ;
@@ -3848,7 +3860,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 682 "lexsrc.l"
+#line 694 "lexsrc.l"
 {
    BEGIN other ;
    in_parse = 1 ;
@@ -3857,7 +3869,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 688 "lexsrc.l"
+#line 700 "lexsrc.l"
 {
    BEGIN ifcont ;
    in_then = 1 ;
@@ -3867,7 +3879,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 695 "lexsrc.l"
+#line 707 "lexsrc.l"
 {
    BEGIN comm ;
    SET_NEXTSTART() ;
@@ -3875,7 +3887,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 700 "lexsrc.l"
+#line 712 "lexsrc.l"
 {
    BEGIN other ;
    assert( do_level >= 0 ) ;
@@ -3890,7 +3902,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 712 "lexsrc.l"
+#line 724 "lexsrc.l"
 {
    if (in_parse)
    {
@@ -3902,7 +3914,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 721 "lexsrc.l"
+#line 733 "lexsrc.l"
 {
    if (in_parse)
    {
@@ -3917,7 +3929,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 733 "lexsrc.l"
+#line 745 "lexsrc.l"
 {
    /* .var = */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -3952,7 +3964,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 765 "lexsrc.l"
+#line 777 "lexsrc.l"
 {
    /* var = */
    BEGIN other ;
@@ -3964,7 +3976,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 774 "lexsrc.l"
+#line 786 "lexsrc.l"
 {
    /* .var += */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -3999,7 +4011,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 806 "lexsrc.l"
+#line 818 "lexsrc.l"
 {
    /* var += */
    BEGIN other ;
@@ -4011,7 +4023,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 815 "lexsrc.l"
+#line 827 "lexsrc.l"
 {
    /* .var -= */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -4046,7 +4058,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 847 "lexsrc.l"
+#line 859 "lexsrc.l"
 {
    /* var -= */
    BEGIN other ;
@@ -4058,7 +4070,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 856 "lexsrc.l"
+#line 868 "lexsrc.l"
 {
    /* .var *= */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -4093,7 +4105,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 888 "lexsrc.l"
+#line 900 "lexsrc.l"
 {
    /* var *= */
    BEGIN other ;
@@ -4105,7 +4117,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 897 "lexsrc.l"
+#line 909 "lexsrc.l"
 {
    /* .var /= */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -4140,7 +4152,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 929 "lexsrc.l"
+#line 941 "lexsrc.l"
 {
    /* var /= */
    BEGIN other ;
@@ -4152,7 +4164,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 938 "lexsrc.l"
+#line 950 "lexsrc.l"
 {
    /* .var %= */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -4187,7 +4199,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 970 "lexsrc.l"
+#line 982 "lexsrc.l"
 {
    /* var %= */
    BEGIN other ;
@@ -4199,7 +4211,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 979 "lexsrc.l"
+#line 991 "lexsrc.l"
 {
    /* .var //= */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -4234,7 +4246,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 1011 "lexsrc.l"
+#line 1023 "lexsrc.l"
 {
    /* var //= */
    BEGIN other ;
@@ -4246,7 +4258,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 1020 "lexsrc.l"
+#line 1032 "lexsrc.l"
 {
    /* .var |= */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -4281,7 +4293,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 1052 "lexsrc.l"
+#line 1064 "lexsrc.l"
 {
    /* var |= */
    BEGIN other ;
@@ -4293,7 +4305,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 1061 "lexsrc.l"
+#line 1073 "lexsrc.l"
 {
    /* .var &= */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -4328,7 +4340,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 1093 "lexsrc.l"
+#line 1105 "lexsrc.l"
 {
    /* var &= */
    BEGIN other ;
@@ -4340,7 +4352,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 56:
 YY_RULE_SETUP
-#line 1102 "lexsrc.l"
+#line 1114 "lexsrc.l"
 {
    /* .var &&= */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -4375,7 +4387,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 1134 "lexsrc.l"
+#line 1146 "lexsrc.l"
 {
    /* var &&= */
    BEGIN other ;
@@ -4387,7 +4399,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 1143 "lexsrc.l"
+#line 1155 "lexsrc.l"
 {
    /* .var ||= */
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -4422,7 +4434,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 1175 "lexsrc.l"
+#line 1187 "lexsrc.l"
 {
    /* var ||= */
    BEGIN other ;
@@ -4434,7 +4446,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 60:
 YY_RULE_SETUP
-#line 1184 "lexsrc.l"
+#line 1196 "lexsrc.l"
 {
    if (in_call)
    {
@@ -4461,7 +4473,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 61:
 YY_RULE_SETUP
-#line 1208 "lexsrc.l"
+#line 1220 "lexsrc.l"
 {
    BEGIN sgtype ;
    SET_NEXTSTART() ;
@@ -4469,7 +4481,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 62:
 YY_RULE_SETUP
-#line 1213 "lexsrc.l"
+#line 1225 "lexsrc.l"
 {
    BEGIN sgtype ;
    SET_NEXTSTART() ;
@@ -4477,7 +4489,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 63:
 YY_RULE_SETUP
-#line 1218 "lexsrc.l"
+#line 1230 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4485,7 +4497,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 64:
 YY_RULE_SETUP
-#line 1223 "lexsrc.l"
+#line 1235 "lexsrc.l"
 {
    BEGIN signame ;
    SET_NEXTSTART() ;
@@ -4493,7 +4505,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 65:
 YY_RULE_SETUP
-#line 1228 "lexsrc.l"
+#line 1240 "lexsrc.l"
 {
    BEGIN signame ;
    SET_NEXTSTART() ;
@@ -4501,7 +4513,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 66:
 YY_RULE_SETUP
-#line 1233 "lexsrc.l"
+#line 1245 "lexsrc.l"
 {
    BEGIN signame ;
    SET_NEXTSTART() ;
@@ -4509,7 +4521,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 67:
 YY_RULE_SETUP
-#line 1238 "lexsrc.l"
+#line 1250 "lexsrc.l"
 {
    BEGIN signame ;
    SET_NEXTSTART() ;
@@ -4517,7 +4529,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 68:
 YY_RULE_SETUP
-#line 1243 "lexsrc.l"
+#line 1255 "lexsrc.l"
 {
    BEGIN signame ;
    SET_NEXTSTART() ;
@@ -4525,7 +4537,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 69:
 YY_RULE_SETUP
-#line 1248 "lexsrc.l"
+#line 1260 "lexsrc.l"
 {
    BEGIN signame ;
    SET_NEXTSTART() ;
@@ -4533,7 +4545,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 70:
 YY_RULE_SETUP
-#line 1253 "lexsrc.l"
+#line 1265 "lexsrc.l"
 {
    BEGIN signame ;
    SET_NEXTSTART() ;
@@ -4541,7 +4553,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 71:
 YY_RULE_SETUP
-#line 1258 "lexsrc.l"
+#line 1270 "lexsrc.l"
 {
    if (!in_trace) REJECT ;
    strcpy(retvalue,rmspc( yytext )) ;
@@ -4550,7 +4562,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 72:
 YY_RULE_SETUP
-#line 1264 "lexsrc.l"
+#line 1276 "lexsrc.l"
 {
    BEGIN other ;
    in_parse = 1 ;
@@ -4559,28 +4571,28 @@ YY_RULE_SETUP
 	YY_BREAK
 case 73:
 YY_RULE_SETUP
-#line 1270 "lexsrc.l"
+#line 1282 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return UPPER ; }
 	YY_BREAK
 case 74:
 YY_RULE_SETUP
-#line 1274 "lexsrc.l"
+#line 1286 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return LOWER ; }
 	YY_BREAK
 case 75:
 YY_RULE_SETUP
-#line 1278 "lexsrc.l"
+#line 1290 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return CASELESS ; }
 	YY_BREAK
 case 76:
 YY_RULE_SETUP
-#line 1282 "lexsrc.l"
+#line 1294 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4588,7 +4600,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 77:
 YY_RULE_SETUP
-#line 1287 "lexsrc.l"
+#line 1299 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4596,7 +4608,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 78:
 YY_RULE_SETUP
-#line 1292 "lexsrc.l"
+#line 1304 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4604,7 +4616,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 79:
 YY_RULE_SETUP
-#line 1297 "lexsrc.l"
+#line 1309 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4612,7 +4624,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 80:
 YY_RULE_SETUP
-#line 1302 "lexsrc.l"
+#line 1314 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4620,7 +4632,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 81:
 YY_RULE_SETUP
-#line 1307 "lexsrc.l"
+#line 1319 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4628,7 +4640,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 82:
 YY_RULE_SETUP
-#line 1312 "lexsrc.l"
+#line 1324 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4636,7 +4648,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 83:
 YY_RULE_SETUP
-#line 1317 "lexsrc.l"
+#line 1329 "lexsrc.l"
 {
    BEGIN other ;
    in_parse = 2; /* accept a variable and treat func(a) as func (a) */
@@ -4645,7 +4657,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 84:
 YY_RULE_SETUP
-#line 1323 "lexsrc.l"
+#line 1335 "lexsrc.l"
 {
    seek_with = seek_with_from_parse ;
    in_trace = 0 ;
@@ -4656,7 +4668,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 85:
 YY_RULE_SETUP
-#line 1331 "lexsrc.l"
+#line 1343 "lexsrc.l"
 {
    in_then = 0 ;
    SET_NEXTSTART() ;
@@ -4664,7 +4676,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 86:
 YY_RULE_SETUP
-#line 1336 "lexsrc.l"
+#line 1348 "lexsrc.l"
 {
    if (in_then!=1) REJECT ;
    BEGIN comm ;
@@ -4674,7 +4686,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 87:
 YY_RULE_SETUP
-#line 1343 "lexsrc.l"
+#line 1355 "lexsrc.l"
 {
    if ( oo_in_name )
       REJECT ;
@@ -4694,7 +4706,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 88:
 YY_RULE_SETUP
-#line 1361 "lexsrc.l"
+#line 1373 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4702,7 +4714,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 89:
 YY_RULE_SETUP
-#line 1366 "lexsrc.l"
+#line 1378 "lexsrc.l"
 {
    BEGIN nmform ;
    next_numform = 1 ;
@@ -4711,21 +4723,21 @@ YY_RULE_SETUP
 	YY_BREAK
 case 90:
 YY_RULE_SETUP
-#line 1372 "lexsrc.l"
+#line 1384 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return SCIENTIFIC ; }
 	YY_BREAK
 case 91:
 YY_RULE_SETUP
-#line 1376 "lexsrc.l"
+#line 1388 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return ENGINEERING ; }
 	YY_BREAK
 case 92:
 YY_RULE_SETUP
-#line 1380 "lexsrc.l"
+#line 1392 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -4737,7 +4749,7 @@ YY_RULE_SETUP
     */
 case 93:
 YY_RULE_SETUP
-#line 1389 "lexsrc.l"
+#line 1401 "lexsrc.l"
 {
    if ( !OO_KEYWORDS )
       REJECT ;
@@ -4747,7 +4759,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 94:
 YY_RULE_SETUP
-#line 1396 "lexsrc.l"
+#line 1408 "lexsrc.l"
 {
    if ( !OO_KEYWORDS )
       REJECT ;
@@ -4760,7 +4772,7 @@ case 95:
 (yy_c_buf_p) = yy_cp -= 5;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 1403 "lexsrc.l"
+#line 1415 "lexsrc.l"
 {
    if ( !OO_KEYWORDS )
       REJECT ;
@@ -4773,7 +4785,7 @@ case 96:
 (yy_c_buf_p) = yy_cp -= 4;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 1410 "lexsrc.l"
+#line 1422 "lexsrc.l"
 {
    if ( !OO_KEYWORDS )
       REJECT ;
@@ -4783,7 +4795,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 97:
 YY_RULE_SETUP
-#line 1417 "lexsrc.l"
+#line 1429 "lexsrc.l"
 {
    oo_second_word( yytext ) ;
    SET_NEXTSTART() ;
@@ -4791,7 +4803,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 98:
 YY_RULE_SETUP
-#line 1422 "lexsrc.l"
+#line 1434 "lexsrc.l"
 {
    oo_second_word( yytext ) ;
    SET_NEXTSTART() ;
@@ -4799,7 +4811,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 99:
 YY_RULE_SETUP
-#line 1427 "lexsrc.l"
+#line 1439 "lexsrc.l"
 {
    BEGIN other ;
    in_do = 4 ;     /* only FOR, WHILE and UNTIL may follow */
@@ -4808,7 +4820,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 100:
 YY_RULE_SETUP
-#line 1433 "lexsrc.l"
+#line 1445 "lexsrc.l"
 {
    /* "DO name OVER ...": remember it, then lex it as an expression */
    if ( OO_KEYWORDS )
@@ -4817,7 +4829,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 101:
 YY_RULE_SETUP
-#line 1439 "lexsrc.l"
+#line 1451 "lexsrc.l"
 {
    BEGIN other ;
    assert(in_do) ;
@@ -4827,7 +4839,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 102:
 YY_RULE_SETUP
-#line 1446 "lexsrc.l"
+#line 1458 "lexsrc.l"
 {
    if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
       REJECT ;
@@ -4846,7 +4858,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 103:
 YY_RULE_SETUP
-#line 1462 "lexsrc.l"
+#line 1474 "lexsrc.l"
 {
    if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
       REJECT ;
@@ -4865,7 +4877,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 104:
 YY_RULE_SETUP
-#line 1478 "lexsrc.l"
+#line 1490 "lexsrc.l"
 {
    if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
       REJECT ;
@@ -4886,7 +4898,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 105:
 YY_RULE_SETUP
-#line 1496 "lexsrc.l"
+#line 1508 "lexsrc.l"
 {
    if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
       REJECT ;
@@ -4906,7 +4918,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 106:
 YY_RULE_SETUP
-#line 1513 "lexsrc.l"
+#line 1525 "lexsrc.l"
 {
    if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
       REJECT ;
@@ -4928,7 +4940,7 @@ case 107:
 (yy_c_buf_p) = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 1530 "lexsrc.l"
+#line 1542 "lexsrc.l"
 {
    BEGIN other ;
    in_do = 2 ;
@@ -4943,7 +4955,7 @@ case 108:
 (yy_c_buf_p) = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 1539 "lexsrc.l"
+#line 1551 "lexsrc.l"
 {
    BEGIN other ;
    in_do = 2 ;
@@ -4953,7 +4965,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 109:
 YY_RULE_SETUP
-#line 1546 "lexsrc.l"
+#line 1558 "lexsrc.l"
 {
    unsigned i;
    BEGIN comm ;
@@ -4976,7 +4988,7 @@ YY_RULE_SETUP
 case 110:
 /* rule 110 can match eol */
 YY_RULE_SETUP
-#line 1566 "lexsrc.l"
+#line 1578 "lexsrc.l"
 {
    BEGIN comm ;
 
@@ -4992,7 +5004,7 @@ YY_RULE_SETUP
     */
 case 111:
 YY_RULE_SETUP
-#line 1580 "lexsrc.l"
+#line 1592 "lexsrc.l"
 {
    int i, n = 0 ;
    if ( OO_OFF )
@@ -5014,7 +5026,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 112:
 YY_RULE_SETUP
-#line 1599 "lexsrc.l"
+#line 1611 "lexsrc.l"
 {
    int i ;
    if ( OO_OFF || !in_call )
@@ -5032,7 +5044,7 @@ YY_RULE_SETUP
 case 113:
 /* rule 113 can match eol */
 YY_RULE_SETUP
-#line 1613 "lexsrc.l"
+#line 1625 "lexsrc.l"
 {
    BEGIN other ;
 
@@ -5056,7 +5068,7 @@ YY_LINENO_REWIND_TO(yy_cp - 1);
 (yy_c_buf_p) = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 1631 "lexsrc.l"
+#line 1643 "lexsrc.l"
 {
    /*
     * fixes bug 617225.
@@ -5070,7 +5082,7 @@ YY_LINENO_REWIND_TO(yy_cp - 1);
 (yy_c_buf_p) = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 1639 "lexsrc.l"
+#line 1651 "lexsrc.l"
 {
    return process_hex_or_bin_string( yytext, yyleng, 2 ); }
 	YY_BREAK
@@ -5081,7 +5093,7 @@ YY_LINENO_REWIND_TO(yy_cp - 1);
 (yy_c_buf_p) = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 1642 "lexsrc.l"
+#line 1654 "lexsrc.l"
 {
    char c;
    int i,base,charcount,first,tuple;
@@ -5139,7 +5151,7 @@ YY_RULE_SETUP
 case 117:
 /* rule 117 can match eol */
 YY_RULE_SETUP
-#line 1696 "lexsrc.l"
+#line 1708 "lexsrc.l"
 {
    BEGIN other ;
 
@@ -5172,7 +5184,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 118:
 YY_RULE_SETUP
-#line 1727 "lexsrc.l"
+#line 1739 "lexsrc.l"
 {
    if (!in_parse)
       REJECT ;
@@ -5187,7 +5199,7 @@ YY_LINENO_REWIND_TO(yy_cp - 1);
 (yy_c_buf_p) = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 1734 "lexsrc.l"
+#line 1746 "lexsrc.l"
 {
    /*
     * This is the same as of the "{digit}+" rule above. flex is very stupid.
@@ -5210,7 +5222,7 @@ YY_LINENO_REWIND_TO(yy_cp - 1);
 (yy_c_buf_p) = yy_cp -= 1;
 YY_DO_BEFORE_ACTION; /* set up yytext again */
 YY_RULE_SETUP
-#line 1749 "lexsrc.l"
+#line 1761 "lexsrc.l"
 {
    /*
     * must split two rule parts because of the "/" rule-part.
@@ -5221,14 +5233,14 @@ YY_RULE_SETUP
 	YY_BREAK
 case 121:
 YY_RULE_SETUP
-#line 1757 "lexsrc.l"
+#line 1769 "lexsrc.l"
 {
    return process_number_or_const( yytext, yyleng );
 }
 	YY_BREAK
 case 122:
 YY_RULE_SETUP
-#line 1761 "lexsrc.l"
+#line 1773 "lexsrc.l"
 {
    int i,j;
    /*
@@ -5358,7 +5370,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 123:
 YY_RULE_SETUP
-#line 1888 "lexsrc.l"
+#line 1900 "lexsrc.l"
 {
    int i,j;
    /*
@@ -5410,7 +5422,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 124:
 YY_RULE_SETUP
-#line 1937 "lexsrc.l"
+#line 1949 "lexsrc.l"
 {
    expression_ended = 1 ;
    SET_NEXTSTART() ;
@@ -5418,7 +5430,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 125:
 YY_RULE_SETUP
-#line 1942 "lexsrc.l"
+#line 1954 "lexsrc.l"
 {
    BEGIN other ;
    if ( insert_abuttal )
@@ -5433,14 +5445,14 @@ YY_RULE_SETUP
 	YY_BREAK
 case 126:
 YY_RULE_SETUP
-#line 1954 "lexsrc.l"
+#line 1966 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return ',' ; }
 	YY_BREAK
 case 127:
 YY_RULE_SETUP
-#line 1958 "lexsrc.l"
+#line 1970 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -5448,7 +5460,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 128:
 YY_RULE_SETUP
-#line 1963 "lexsrc.l"
+#line 1975 "lexsrc.l"
 {
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -5456,42 +5468,42 @@ YY_RULE_SETUP
 	YY_BREAK
 case 129:
 YY_RULE_SETUP
-#line 1968 "lexsrc.l"
+#line 1980 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return '/' ; }
 	YY_BREAK
 case 130:
 YY_RULE_SETUP
-#line 1972 "lexsrc.l"
+#line 1984 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return '%' ; }
 	YY_BREAK
 case 131:
 YY_RULE_SETUP
-#line 1976 "lexsrc.l"
+#line 1988 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return '*' ; }
 	YY_BREAK
 case 132:
 YY_RULE_SETUP
-#line 1980 "lexsrc.l"
+#line 1992 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return '|' ; }
 	YY_BREAK
 case 133:
 YY_RULE_SETUP
-#line 1984 "lexsrc.l"
+#line 1996 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return '&' ; }
 	YY_BREAK
 case 134:
 YY_RULE_SETUP
-#line 1988 "lexsrc.l"
+#line 2000 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return '=' ; }
@@ -5511,7 +5523,7 @@ YY_RULE_SETUP
     */
 case 135:
 YY_RULE_SETUP
-#line 2005 "lexsrc.l"
+#line 2017 "lexsrc.l"
 {
    if ( OO_OFF )
       REJECT ;
@@ -5524,7 +5536,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 136:
 YY_RULE_SETUP
-#line 2015 "lexsrc.l"
+#line 2027 "lexsrc.l"
 {
    if ( OO_OFF )
       REJECT ;
@@ -5537,7 +5549,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 137:
 YY_RULE_SETUP
-#line 2025 "lexsrc.l"
+#line 2037 "lexsrc.l"
 {
    if ( !insert_abuttal || OO_OFF )
       REJECT ;
@@ -5550,7 +5562,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 138:
 YY_RULE_SETUP
-#line 2035 "lexsrc.l"
+#line 2047 "lexsrc.l"
 {
    if ( !insert_abuttal || OO_OFF )
       REJECT ;
@@ -5568,7 +5580,7 @@ YY_RULE_SETUP
     */
 case 139:
 YY_RULE_SETUP
-#line 2050 "lexsrc.l"
+#line 2062 "lexsrc.l"
 {
    int depth = 1, c, quote = 0, newlines = 0, col = 0;
    int startline = nextline;
@@ -5649,7 +5661,7 @@ YY_RULE_SETUP
     */
 case 140:
 YY_RULE_SETUP
-#line 2128 "lexsrc.l"
+#line 2140 "lexsrc.l"
 {
    if ( !insert_abuttal || OO_OFF )
       REJECT ;
@@ -5661,7 +5673,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 141:
 YY_RULE_SETUP
-#line 2137 "lexsrc.l"
+#line 2149 "lexsrc.l"
 {
    if ( bracket_depth == 0 )
       REJECT ;
@@ -5676,7 +5688,7 @@ YY_RULE_SETUP
     */
 case 142:
 YY_RULE_SETUP
-#line 2149 "lexsrc.l"
+#line 2161 "lexsrc.l"
 {
    if ( OO_OFF )
       REJECT ;
@@ -5687,7 +5699,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 143:
 YY_RULE_SETUP
-#line 2157 "lexsrc.l"
+#line 2169 "lexsrc.l"
 {
    /* why don't I have a {between} in the beginning of this re? bug? */
    BEGIN other ;
@@ -5696,126 +5708,126 @@ YY_RULE_SETUP
 	YY_BREAK
 case 144:
 YY_RULE_SETUP
-#line 2163 "lexsrc.l"
+#line 2175 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return GTGT ; }
 	YY_BREAK
 case 145:
 YY_RULE_SETUP
-#line 2167 "lexsrc.l"
+#line 2179 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return LTLT ; }
 	YY_BREAK
 case 146:
 YY_RULE_SETUP
-#line 2171 "lexsrc.l"
+#line 2183 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return NOTGTGT ; }
 	YY_BREAK
 case 147:
 YY_RULE_SETUP
-#line 2175 "lexsrc.l"
+#line 2187 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return NOTLTLT ; }
 	YY_BREAK
 case 148:
 YY_RULE_SETUP
-#line 2179 "lexsrc.l"
+#line 2191 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return GTGTE ; }
 	YY_BREAK
 case 149:
 YY_RULE_SETUP
-#line 2183 "lexsrc.l"
+#line 2195 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return LTLTE ; }
 	YY_BREAK
 case 150:
 YY_RULE_SETUP
-#line 2187 "lexsrc.l"
+#line 2199 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return GT ; }
 	YY_BREAK
 case 151:
 YY_RULE_SETUP
-#line 2191 "lexsrc.l"
+#line 2203 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return GTE ; }
 	YY_BREAK
 case 152:
 YY_RULE_SETUP
-#line 2195 "lexsrc.l"
+#line 2207 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return LT ; }
 	YY_BREAK
 case 153:
 YY_RULE_SETUP
-#line 2199 "lexsrc.l"
+#line 2211 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return LTE ; }
 	YY_BREAK
 case 154:
 YY_RULE_SETUP
-#line 2203 "lexsrc.l"
+#line 2215 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return DIFFERENT ; }
 	YY_BREAK
 case 155:
 YY_RULE_SETUP
-#line 2207 "lexsrc.l"
+#line 2219 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return EQUALEQUAL ; }
 	YY_BREAK
 case 156:
 YY_RULE_SETUP
-#line 2211 "lexsrc.l"
+#line 2223 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return NOTEQUALEQUAL ; }
 	YY_BREAK
 case 157:
 YY_RULE_SETUP
-#line 2215 "lexsrc.l"
+#line 2227 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return MODULUS ; }
 	YY_BREAK
 case 158:
 YY_RULE_SETUP
-#line 2219 "lexsrc.l"
+#line 2231 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return XOR ; }
 	YY_BREAK
 case 159:
 YY_RULE_SETUP
-#line 2223 "lexsrc.l"
+#line 2235 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return CONCATENATE ; }
 	YY_BREAK
 case 160:
 YY_RULE_SETUP
-#line 2227 "lexsrc.l"
+#line 2239 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    return EXP ; }
 	YY_BREAK
 case 161:
 YY_RULE_SETUP
-#line 2231 "lexsrc.l"
+#line 2243 "lexsrc.l"
 {
    if ( in_address == in_address_value ) /* Always allow spaces in the VALUE */
    {                                   /* part of the ADDRESS stmt.        */
@@ -5832,7 +5844,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 162:
 YY_RULE_SETUP
-#line 2245 "lexsrc.l"
+#line 2257 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -5840,7 +5852,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 163:
 YY_RULE_SETUP
-#line 2251 "lexsrc.l"
+#line 2263 "lexsrc.l"
 {
    /* OO extension: "~name:super" calls the superclass's method */
    if ( !oo_after_name )
@@ -5855,7 +5867,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 164:
 YY_RULE_SETUP
-#line 2263 "lexsrc.l"
+#line 2275 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -5863,7 +5875,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 165:
 YY_RULE_SETUP
-#line 2268 "lexsrc.l"
+#line 2280 "lexsrc.l"
 {
    SET_NEXTSTART() ;
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -5871,10 +5883,10 @@ YY_RULE_SETUP
 	YY_BREAK
 case 166:
 YY_RULE_SETUP
-#line 2274 "lexsrc.l"
+#line 2286 "lexsrc.l"
 ECHO;
 	YY_BREAK
-#line 5878 "lexsrc.c"
+#line 5890 "lexsrc.c"
 			case YY_STATE_EOF(INITIAL):
 			case YY_STATE_EOF(comm):
 			case YY_STATE_EOF(signal):
@@ -6867,7 +6879,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 2274 "lexsrc.l"
+#line 2286 "lexsrc.l"
 
 
 #define NORMALSTAT  0
@@ -7225,6 +7237,10 @@ static int get_next_line( char *line, int max, FILE *stream )
             c = *interptr++ ;
 #endif
       }
+      else if (pre_buf)
+      {
+         c = ( pre_pos < pre_len ) ? (unsigned char) pre_buf[pre_pos++] : EOF ;
+      }
       else
       {
          c = getc(stream) ;
@@ -7273,6 +7289,11 @@ static int get_next_line( char *line, int max, FILE *stream )
       {
          if ((interptr < interptrmax) && (*interptr == pairChar))
             interptr++;
+      }
+      else if (pre_buf)
+      {
+         if ((pre_pos < pre_len) && (pre_buf[pre_pos] == (char) pairChar))
+            pre_pos++;
       }
       else
       {
@@ -7957,8 +7978,49 @@ static int has_directive_line( FILE *fptr, const streng *str )
 
    if ( str != NULL )
       return oo_prescan( str->value, str->len );
-   if ( fptr == NULL || ( pos = ftell( fptr ) ) < 0 )
+   if ( fptr == NULL )
       return 0;
+   {
+      /*
+       * Only a regular file can be read and then read again from pos. The
+       * keyboard or a pipe is read once into pre_buf, which the lexer then
+       * reads (on Windows ftell works on the console, too, so it can't
+       * tell).
+       */
+      struct stat st;
+      int regular = fstat( fileno( fptr ), &st ) == 0 && S_ISREG( st.st_mode );
+      pos = regular ? ftell( fptr ) : -1;
+      if ( pos < 0 )
+         regular = 0;
+      if ( !regular )
+      {
+         buf = NULL;
+         for ( ;; )
+         {
+            if ( len + 4096 > cap )
+            {
+               char *nb;
+               cap = cap ? cap * 2 : 65536;
+               nb = (char *) realloc( buf, cap );
+               if ( nb == NULL )
+                  break;
+               buf = nb;
+            }
+            n = fread( buf + len, 1, (size_t) ( cap - len ), fptr );
+            len += (long) n;
+            /*
+             * A short read means end of input (Ctrl-D or Ctrl-Z on the
+             * keyboard); reading again would wait for another one.
+             */
+            if ( n < (size_t) ( cap - len + n ) || feof( fptr ) || ferror( fptr ) )
+               break;
+         }
+         pre_buf = buf ? buf : (char *) malloc( 1 );
+         pre_len = buf ? len : 0;
+         pre_pos = 0;
+         return buf ? oo_prescan( buf, len ) : 0;
+      }
+   }
    buf = NULL;
    for ( ;; )
    {
@@ -7987,6 +8049,12 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
                   internal_parser_type *result)
 {
    init_it_all( TSD ) ;
+   if ( pre_buf )               /* left by a parse that ended in an error */
+   {
+      free( pre_buf );
+      pre_buf = NULL;
+   }
+   pre_len = pre_pos = 0;
 
    /*
     * OO extension: the OO keywords are on in programs with directives or an
@@ -8033,6 +8101,12 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
    BEGIN comm ;
    NewProg();
    parser_data.result = __reginaparse();
+   if ( pre_buf )
+   {
+      free( pre_buf );
+      pre_buf = NULL;
+      pre_len = pre_pos = 0;
+   }
 
 #ifdef FLEX_SCANNER
    yy_delete_buffer(YY_CURRENT_BUFFER) ;

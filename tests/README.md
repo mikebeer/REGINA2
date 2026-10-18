@@ -52,6 +52,11 @@ input comes from a file or pipe.
 If `NAME.switches` exists next to `NAME.rexx`, its content is passed to the
 interpreter before the program, for example `--oo` or `--no-oo`.
 
+If `NAME.pipe` exists, the program is given to the interpreter through a
+pipe (`cat NAME.rexx | rexx`) instead of by name. After the suites,
+`console-check.py` types a short program into the interpreter on a
+terminal and ends it with Ctrl-D, with the default, `--oo` and `--no-oo`.
+
 ## Packages
 
 The `packages` suite runs `tests/packages/*.rexx` with the dynamic

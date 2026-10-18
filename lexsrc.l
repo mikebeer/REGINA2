@@ -35,6 +35,11 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#ifndef S_ISREG
+# define S_ISREG(m) ( ( (m) & S_IFMT ) == S_IFREG )
+#endif
 
 /* Define ASCII_0_TERMINATES_STRING if you want that ASCII-0 terminates
  * an input string. Normally this should not happen. Input strings are
@@ -209,6 +214,13 @@ static int inEOF=0 ;
 static int singlequote=0, doblequote=0 ;
 static int firstln=0 ;
 static int bufptr=0 ;
+/*
+ * A program read from a stream that can't be read twice (the keyboard, a
+ * pipe) is kept here by has_directive_line, and the lexer reads it from
+ * here instead of from the stream.
+ */
+static char *pre_buf = NULL ;
+static long pre_len = 0, pre_pos = 0 ;
 /* Previous bug. 8-bits clean combined with EOF ==> need an int */
 static int chbuffer[LOOKAHEAD] ;
 static int ipretflag=0, cch=0 ;
@@ -2627,6 +2639,10 @@ static int get_next_line( char *line, int max, FILE *stream )
             c = *interptr++ ;
 #endif
       }
+      else if (pre_buf)
+      {
+         c = ( pre_pos < pre_len ) ? (unsigned char) pre_buf[pre_pos++] : EOF ;
+      }
       else
       {
          c = getc(stream) ;
@@ -2675,6 +2691,11 @@ static int get_next_line( char *line, int max, FILE *stream )
       {
          if ((interptr < interptrmax) && (*interptr == pairChar))
             interptr++;
+      }
+      else if (pre_buf)
+      {
+         if ((pre_pos < pre_len) && (pre_buf[pre_pos] == (char) pairChar))
+            pre_pos++;
       }
       else
       {
@@ -3359,8 +3380,49 @@ static int has_directive_line( FILE *fptr, const streng *str )
 
    if ( str != NULL )
       return oo_prescan( str->value, str->len );
-   if ( fptr == NULL || ( pos = ftell( fptr ) ) < 0 )
+   if ( fptr == NULL )
       return 0;
+   {
+      /*
+       * Only a regular file can be read and then read again from pos. The
+       * keyboard or a pipe is read once into pre_buf, which the lexer then
+       * reads (on Windows ftell works on the console, too, so it can't
+       * tell).
+       */
+      struct stat st;
+      int regular = fstat( fileno( fptr ), &st ) == 0 && S_ISREG( st.st_mode );
+      pos = regular ? ftell( fptr ) : -1;
+      if ( pos < 0 )
+         regular = 0;
+      if ( !regular )
+      {
+         buf = NULL;
+         for ( ;; )
+         {
+            if ( len + 4096 > cap )
+            {
+               char *nb;
+               cap = cap ? cap * 2 : 65536;
+               nb = (char *) realloc( buf, cap );
+               if ( nb == NULL )
+                  break;
+               buf = nb;
+            }
+            n = fread( buf + len, 1, (size_t) ( cap - len ), fptr );
+            len += (long) n;
+            /*
+             * A short read means end of input (Ctrl-D or Ctrl-Z on the
+             * keyboard); reading again would wait for another one.
+             */
+            if ( n < (size_t) ( cap - len + n ) || feof( fptr ) || ferror( fptr ) )
+               break;
+         }
+         pre_buf = buf ? buf : (char *) malloc( 1 );
+         pre_len = buf ? len : 0;
+         pre_pos = 0;
+         return buf ? oo_prescan( buf, len ) : 0;
+      }
+   }
    buf = NULL;
    for ( ;; )
    {
@@ -3389,6 +3451,12 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
                   internal_parser_type *result)
 {
    init_it_all( TSD ) ;
+   if ( pre_buf )               /* left by a parse that ended in an error */
+   {
+      free( pre_buf );
+      pre_buf = NULL;
+   }
+   pre_len = pre_pos = 0;
 
    /*
     * OO extension: the OO keywords are on in programs with directives or an
@@ -3435,6 +3503,12 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
    BEGIN comm ;
    NewProg();
    parser_data.result = __reginaparse();
+   if ( pre_buf )
+   {
+      free( pre_buf );
+      pre_buf = NULL;
+      pre_len = pre_pos = 0;
+   }
 
 #ifdef FLEX_SCANNER
    yy_delete_buffer(YY_CURRENT_BUFFER) ;

@@ -891,6 +891,33 @@ static long requested_stack_size( int argc, char *argv[], const char **text )
    return parse_stack_size( *text );
 }
 
+/*
+ * A temporary file for the workspace session program. On Windows the
+ * tmpfile() of msvcrt creates it in the root of the drive, where users
+ * usually may not write; use the TEMP folder and delete it when closed.
+ */
+static FILE *session_tmpfile( void )
+{
+#if defined(_WIN32) || defined(_WIN64)
+   char dir[MAX_PATH], path[MAX_PATH + 64];
+   DWORD n = GetTempPathA( sizeof( dir ), dir );
+   int i;
+
+   if ( n > 0 && n < sizeof( dir ) )
+   {
+      for ( i = 0; i < 100; i++ )
+      {
+         FILE *fp;
+         sprintf( path, "%sregina-ws-%lu-%d.rexx", dir, (unsigned long) GetCurrentProcessId(), i );
+         fp = fopen( path, "w+bTD" );   /* T: temporary, D: deleted on close */
+         if ( fp )
+            return fp;
+      }
+   }
+#endif
+   return tmpfile();
+}
+
 typedef struct { int argc; char **argv; int rc; } main_args;
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -1046,7 +1073,7 @@ static int interpreter_main( int argc, char *argv[] )
       {
          /* the session program of oo.c; stdin stays for the user's lines */
          extern const char *oo_session_source( void );
-         FILE *fp = tmpfile();
+         FILE *fp = session_tmpfile();
          stdinput = 0;
          if ( fp == NULL )
             exiterror( ERR_PROG_UNREADABLE, 1, "No temporary file for the workspace session" );

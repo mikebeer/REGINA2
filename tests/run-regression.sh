@@ -58,6 +58,9 @@ run_suite() {   # $1 = suite name
     if [ -f "${f%.rexx}.session" ]; then
       # a workspace session: NAME.session is typed in, NAME.rexx is ignored
       timeout 60 "$REXX" $sw --ws <"${f%.rexx}.session" >"$WORK/raw" 2>&1
+    elif [ -f "${f%.rexx}.pipe" ]; then
+      # NAME.pipe: the program comes through a pipe, not as a file name
+      cat "./$f" | timeout 60 "$REXX" $sw >"$WORK/raw" 2>&1
     else
       timeout 60 "$REXX" $sw "./$f" </dev/null >"$WORK/raw" 2>&1
     fi
@@ -153,4 +156,10 @@ for suite in $SUITES; do
   [ $fail -eq 0 ] || status=1
 done
 [ -n "$skip_packages" ] && echo "packages: skipped ($skip_packages)"
+# a program typed in on a terminal and ended with Ctrl-D
+for sw in "" "--oo" "--no-oo"; do
+  r=$(python3 "$HERE/console-check.py" "$REXX" $sw 2>&1)
+  echo "console ${sw:-(default)}: $r"
+  [ "$r" = ok ] || status=1
+done
 exit $status

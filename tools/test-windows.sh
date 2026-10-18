@@ -8,7 +8,9 @@
 #   tests/packages/minibroker.py;
 # - with a console (tools/wine-console.py): programs end after EXIT, after
 #   an empty input line and with --stack, and rexx reads a program typed in
-#   up to Ctrl-Z. Pipes alone don't show console problems.
+#   up to Ctrl-Z (also one with directives). Pipes alone don't show console
+#   problems;
+# - a program given through a pipe (type prog.rexx | rexx.exe).
 # Exit status 0 = everything passed.
 set -u
 SRC=$(cd "$(dirname "$0")/.." && pwd)
@@ -78,5 +80,12 @@ for exe in rexx.exe regina.exe; do
   console "$exe --stack=512M" "" "hi" wine "$D/$exe" --stack=512M "$WORK/t/exit.rexx"
   console "$exe animal (empty answer)" "yes|no|" "save" wine "$D/$exe" animal.rexx
   console "$exe program from the console" 'say "abc"|^Z' "abc" wine "$D/$exe"
+  console "$exe program with directives from the console" 'say f()|::routine f|return "routine ok"|^Z' "routine ok" wine "$D/$exe"
+  # a program through a pipe (type prog.rexx | rexx)
+  for t in classic/pipe_program oo/pipe_program; do
+    if diff <(cat "$SRC/tests/$t.rexx" | wine "$D/$exe" 2>&1 | tr -d '\r'; echo "rc=0") \
+            "$SRC/tests/expected/$t.out" >/dev/null; then echo "pipe $exe $t: ok"
+    else echo "pipe $exe $t: FAILED"; status=1; fi
+  done
 done
 exit $status
