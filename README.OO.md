@@ -213,6 +213,14 @@ first uses `.Python`.
 | `--no-oo` or `-N` | `REGINA_OO=off` (also `0`, `no`, `classic`) | The extension is off completely: no message operators, `[ ]`, directives, `.name` symbols, `DO … OVER` or new keywords, and markers are ignored. Programs behave exactly as in Regina 3.9.7. Regina's own trip suite and the classic tests give identical output in this mode. |
 | neither | `REGINA_OO` unset | Decided per program, as described above. |
 
+Other switches of the extension: `--gc`/`--no-gc` (`REGINA_GC`, see
+Limitations), `--ws` (a workspace session) and `--stack=SIZE` or `-ZSIZE`
+(`REGINA_STACK=SIZE`): the interpreter runs on a thread with a C stack of
+SIZE bytes (`512M`, `1G`; at least `1M`), so that deeply nested methods
+reach error 11 (control stack full) later. Without it the stack is that of
+the executable (`ulimit -s` on Linux, 256 MB for `rexx.exe`, 16 MB for
+`regina.exe`).
+
 A switch on the command line wins over `REGINA_OO`. The environment
 variable also works for programs started through the API (`RexxStart`)
 and for `#!` scripts.

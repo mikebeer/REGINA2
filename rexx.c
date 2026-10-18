@@ -350,6 +350,7 @@ static struct my_getopt_option long_options[] =
    {"gc",          optional_argument, 0,  'G' },
    {"no-gc",       no_argument,       0,  'g' },
    {"ws",          optional_argument, 0,  'W' },
+   {"stack",       required_argument, 0,  'Z' },
    {0,             0,                 0,  0 }
 };
 /*
@@ -368,7 +369,7 @@ static int check_args( tsd_t *TSD, int argc, char **argv,
    {
       int option_index = 0;
 
-      c = my_getopt_long( argc, argv, "+hi::D::t::pv::yrd::acel:o:ONG::gW::", long_options, &option_index );
+      c = my_getopt_long( argc, argv, "+hi::D::t::pv::yrd::acel:o:ONG::gW::Z:", long_options, &option_index );
       if ( c == -1 )
          break;
 
@@ -536,6 +537,9 @@ static int check_args( tsd_t *TSD, int argc, char **argv,
 
          case 'g': /* garbage collection of objects off */
             oo_gc_set_mode( 0 );
+            break;
+
+         case 'Z': /* --stack=SIZE: handled before the interpreter starts */
             break;
 
          case 'W': /* a workspace session, optionally loading a workspace */
@@ -818,6 +822,124 @@ static int execute_file( tsd_t *TSD )
    return RetCode;
 }
 
+/*
+ * --stack=SIZE (-ZSIZE) or REGINA_STACK=SIZE: the interpreter runs on a new
+ * thread with a C stack of SIZE bytes, so that deeply nested methods have
+ * room. The stack size of the main thread is fixed when the executable is
+ * linked (rexx.exe 256 MB, regina.exe 16 MB on Windows) or by ulimit -s.
+ * SIZE is a number of bytes with an optional K, M or G; at least 1M, at
+ * most 2047M where a long has 32 bits (Windows), else 64G.
+ */
+static int interpreter_main( int argc, char *argv[] );
+
+long regina_stack_size = 0;     /* bytes, when set by --stack or REGINA_STACK */
+
+static long parse_stack_size( const char *s )
+{
+   double v = 0;
+   int digits = 0;
+
+   while ( *s == ' ' )
+      s++;
+   while ( *s >= '0' && *s <= '9' )
+   {
+      v = v * 10 + ( *s++ - '0' );
+      digits++;
+   }
+   if ( !digits )
+      return -1;
+   switch ( *s )
+   {
+      case 'k': case 'K': v *= 1024.0; s++; break;
+      case 'm': case 'M': v *= 1024.0 * 1024.0; s++; break;
+      case 'g': case 'G': v *= 1024.0 * 1024.0 * 1024.0; s++; break;
+   }
+   if ( *s == 'b' || *s == 'B' )
+      s++;
+   if ( *s != '\0' || v < 1024.0 * 1024.0 )
+      return -1;
+   /* the size must fit a long (32 bits on Windows) */
+   if ( v > ( sizeof( long ) > 4 ? 64.0 * 1024 * 1024 * 1024 : 2047.0 * 1024 * 1024 ) )
+      return -1;
+   return (long) v;
+}
+
+/* the size asked for on the command line (before the program name) or in
+ * REGINA_STACK; 0 if none, -1 if the size is invalid */
+static long requested_stack_size( int argc, char *argv[], const char **text )
+{
+   int i;
+
+   *text = NULL;
+   for ( i = 1; i < argc && argv[i][0] == '-'; i++ )
+   {
+      if ( strcmp( argv[i], "--" ) == 0 )
+         break;
+      if ( strncmp( argv[i], "--stack=", 8 ) == 0 )
+         *text = argv[i] + 8;
+      else if ( strcmp( argv[i], "--stack" ) == 0 && i + 1 < argc )
+         *text = argv[++i];
+      else if ( strncmp( argv[i], "-Z", 2 ) == 0 )
+         *text = argv[i][2] ? argv[i] + 2 : ( i + 1 < argc ? argv[++i] : "" );
+      else if ( ( argv[i][1] == 'l' || argv[i][1] == 'o' ) && argv[i][2] == '\0' )
+         i++;                   /* -l LOCALE, -o OPTIONS take the next word */
+   }
+   if ( *text == NULL )
+      *text = getenv( "REGINA_STACK" );
+   if ( *text == NULL || **text == '\0' )
+      return 0;
+   return parse_stack_size( *text );
+}
+
+typedef struct { int argc; char **argv; int rc; } main_args;
+
+#if defined(_WIN32) || defined(_WIN64)
+# include <process.h>
+static unsigned __stdcall stack_thread( void *p )
+{
+   main_args *a = (main_args *) p;
+   a->rc = interpreter_main( a->argc, a->argv );
+   return 0;
+}
+
+static int run_with_stack( long size, main_args *a )
+{
+   HANDLE h = (HANDLE) _beginthreadex( NULL, (unsigned) size, stack_thread, a,
+                                       STACK_SIZE_PARAM_IS_A_RESERVATION, NULL );
+   if ( h == 0 )
+      return -1;
+   WaitForSingleObject( h, INFINITE );
+   CloseHandle( h );
+   return 0;
+}
+#else
+# include <pthread.h>
+static void *stack_thread( void *p )
+{
+   main_args *a = (main_args *) p;
+   a->rc = interpreter_main( a->argc, a->argv );
+   return NULL;
+}
+
+static int run_with_stack( long size, main_args *a )
+{
+   pthread_attr_t attr;
+   pthread_t t;
+
+   if ( pthread_attr_init( &attr ) != 0 )
+      return -1;
+   if ( pthread_attr_setstacksize( &attr, (size_t) size ) != 0
+     || pthread_create( &t, &attr, stack_thread, a ) != 0 )
+   {
+      pthread_attr_destroy( &attr );
+      return -1;
+   }
+   pthread_attr_destroy( &attr );
+   pthread_join( t, NULL );
+   return 0;
+}
+#endif
+
 #ifdef RXLIB
 # if defined(__LCC__)
 int __regina_faked_main(int argc,char *argv[])
@@ -829,6 +951,32 @@ int APIENTRY __regina_faked_main(int argc,char *argv[])
 int main(int argc,char *argv[])
 # define CALL_MAIN main
 #endif
+{
+   const char *text;
+   long size = requested_stack_size( argc, argv, &text );
+   main_args a;
+
+   if ( size < 0 )
+   {
+      fprintf( stderr, "%s: invalid stack size \"%s\" (a number of bytes with K, M or G, at least 1M)\n",
+               argv[0], text );
+      return 1;
+   }
+   if ( size == 0 )
+      return interpreter_main( argc, argv );
+   regina_stack_size = size;
+   a.argc = argc;
+   a.argv = argv;
+   a.rc = 0;
+   if ( run_with_stack( size, &a ) != 0 )
+   {
+      fprintf( stderr, "%s: can't create a thread with a stack of %s\n", argv[0], text );
+      return 1;
+   }
+   return a.rc;
+}
+
+static int interpreter_main( int argc, char *argv[] )
 {
    tsd_t *TSD;
    int processed;
@@ -1243,6 +1391,8 @@ static void usage( char *argv0 )
    fprintf( stdout,"  --no-oo, -N                     object-oriented extension off (classic Regina)\n" );
    fprintf( stdout,"  --gc, -G / --no-gc, -g          garbage collection of objects on (default) / off\n" );
    fprintf( stdout,"  --ws[=wsid], -W[wsid]           interactive workspace session (APL style)\n" );
+   fprintf( stdout,"  --stack=SIZE, -ZSIZE            run with a C stack of SIZE bytes (K, M, G allowed),\n" );
+   fprintf( stdout,"                                  for deeply nested methods; also REGINA_STACK\n" );
    fprintf( stdout,"  --trace[=char], -t[char]        set TRACE to any valid TRACE character - default A\n" );
    fprintf( stdout,"  --interactive[=char], -i[char]  set TRACE to any valid TRACE character and run interactively - default A\n" );
    fprintf( stdout,"  --args, -a                      pass command line to Rexx program as separate arguments\n");

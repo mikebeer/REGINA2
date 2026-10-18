@@ -3038,8 +3038,13 @@ static long oo_stack_limit = 0;
  * How much of the C stack nested methods may use before "Control stack
  * full" is raised instead of crashing.
  */
+extern long regina_stack_size;          /* rexx.c: --stack, REGINA_STACK */
+
 static long oo_stack_budget( char *base )
 {
+   if ( regina_stack_size > 0 )          /* the thread was made with this stack */
+      return regina_stack_size - regina_stack_size / 4;
+   {
 #if defined(_WIN32) || defined(_WIN64)
    /*
     * The stack of this thread ends at the allocation base of the region
@@ -3061,6 +3066,7 @@ static long oo_stack_budget( char *base )
       lim = 64L * 1024 * 1024;
    return lim - lim / 4;         /* leave a quarter for everything else */
 #endif
+   }
 }
 
 static streng *run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,

@@ -872,12 +872,12 @@ const ch9 = [
   ...UL([
     'An error in a file loaded by `::requires` names the main program in the error message, not the required file.',
     'TRACE I shows the hidden position counter of DO OVER loops.',
-    'Deep recursion of methods ends with error 11 (control stack full), based on the measured stack use. The Windows and macOS builds have a 256 MB stack.',
+    'Deep recursion of methods ends with error 11 (control stack full) when three quarters of the C stack are used. The stack is that of the executable (on Linux `ulimit -s`, at most 64 MB counted; `rexx.exe` and the macOS build 256 MB; `regina.exe` 16 MB) unless `--stack=SIZE` or `REGINA_STACK` asks for another size: the interpreter then runs on a thread with a stack of that size, for example `rexx --stack=512M prog.rexx` (Appendix B). Deep recursion of classic internal routines is not checked, as in Regina 3.9.7.',
   ]),
   H2('Platforms'),
   ...table(['Package', 'Status'], [
     ['Linux x86-64 (`.deb`)', 'Built and tested natively: all five test suites, valgrind. Contains `regina`, which loads external function packages such as RgMqtt.'],
-    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. Under Wine, the oo and samples suites pass with `rexx.exe` and `regina.exe`, and the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`; not yet tested on Windows itself. No readline, curses or GCI. `regina.exe` has a 16 MB stack, so its limit for nested methods is lower than that of `rexx.exe`.'],
+    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. Under Wine, the oo and samples suites pass with `rexx.exe` and `regina.exe`, and the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`; not yet tested on Windows itself. No readline, curses or GCI. `regina.exe` has a 16 MB stack; `--stack=SIZE` or `REGINA_STACK` gives it more. Under Wine, programs with stacks of 32 MB and more run very slowly (a Wine limitation; plain C recursion is not affected); native Windows still has to be measured.'],
     ['macOS (tar.gz)', 'Cross-compiled with zig for Apple Silicon and Intel, macOS 11 or later. The same sources and configuration pass all test suites on Linux, but the binary has not yet been run on a Mac. It is ad-hoc signed, not notarized (see Chapter 2). No readline, curses or GCI, and no external function packages.'],
   ], W(2400, 7238), 'Platform status'),
   H2('Performance'),
@@ -905,6 +905,8 @@ const appB = [
     ['`REGINA_OO`', '`on`, `1`, `yes` or `oo` act like `--oo`; `off`, `0`, `no` or `classic` like `--no-oo`. A command-line switch wins.'],
     ['`--gc`, `-G` / `--no-gc`, `-g`', 'Garbage collection of objects on (the default) or off. `--gc=stress` collects before every clause, for testing.'],
     ['`REGINA_GC`', '`on`, `off` (also `0`, `no`) or `stress`, like the switches; a command-line switch wins.'],
+    ['`--stack=SIZE`, `-ZSIZE`', 'Runs the interpreter on a thread with a C stack of SIZE bytes; K, M and G may follow the number (`--stack=512M`). At least 1M; at most 2047M on Windows, 64G elsewhere. Deeply nested methods then end with error 11 later. Must come before the program name.'],
+    ['`REGINA_STACK`', 'The same SIZE as the switch, for programs started without it (for example `#!` scripts); the switch wins.'],
     ['`--ws[=wsid]`, `-W`', 'An interactive workspace session; with WSID the workspace WSID.rxws is loaded first.'],
     ['`REGINA_MACROS`', 'Folders searched for external routines and for `::requires` files.'],
     ['`REGINA_LANG`, `REGINA_LANG_DIR`', 'Language of the error messages and the folder of the `*.mtb` files.'],

@@ -336,7 +336,7 @@ $(srcdir)/rexx.h : $(srcdir)/extern.h $(srcdir)/strengs.h $(srcdir)/defs.h $(src
 $(srcdir)/mt.h : $(srcdir)/mt_notmt.h $(srcdir)/mt_posix.h
 
 rexx$(binarybitprefix)$(EXE) : $(OFILES) rexx.$(OBJ) nosaa.$(OBJ)
-	$(PURIFY) $(CC) $(LINKOPT) $(LDFLAGS) $(STATIC_LDFLAGS) -o $@ $(OBJECTS) rexx.$(OBJ) nosaa.$(OBJ) $(STATIC_BINARY_LIBS) $(REXX_BINARY_LIBS)
+	$(PURIFY) $(CC) $(LINKOPT) $(LDFLAGS) $(STATIC_LDFLAGS) -o $@ $(OBJECTS) rexx.$(OBJ) nosaa.$(OBJ) $(STATIC_BINARY_LIBS) $(REXX_BINARY_LIBS) $(MH_MT_LIBS)
 	$(LDEXTRA)
 
 ##regina$(binarybitprefix)$(EXE) : regina.$(OBJ) $(SHLPRE)$(SHLFILE)$(SHLPST)

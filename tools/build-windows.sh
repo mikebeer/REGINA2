@@ -72,7 +72,8 @@ done
 { echo "LIBRARY regina.dll"; echo "EXPORTS"; sed -n 's/^EXPORTS //p' "$SRC/regina_w32_mingw_dll.def"; } >regina.def
 $CC -shared -static-libgcc -o regina.dll -Wl,--out-implib,libregina.a $DOBJS ../time64.o ../pybridge.o \
     regina.def -Wl,-Bstatic -lpthread -Wl,-Bdynamic -lwsock32 -ladvapi32
-# a 16 MB stack: larger ones make Wine hang at exit with the threaded DLL
+# a 16 MB stack: larger ones are very slow under Wine; --stack=SIZE or
+# REGINA_STACK gives a program more (it then runs on a thread of that size)
 $CC -O2 -w -I"$SRC" -o regina.exe "$SRC/regina.c" -L. -lregina -Wl,--stack,16777216
 $CC -O2 -w -shared -static-libgcc -I"$SRC" -o rgmqtt.dll "$SRC/rgmqtt/rgmqtt.c" \
     -Wl,--kill-at -L. -lregina -lws2_32
@@ -108,6 +109,11 @@ included here (see README.rgmqtt.txt and demo\mqtt):
   regina.exe demo\mqtt\13_mqtt.rexx localhost 1883
 
 Keep regina.exe, regina.dll and the package DLLs in the same folder.
+
+Deeply nested methods end with error 11 (control stack full). rexx.exe has
+a 256 MB stack, regina.exe 16 MB; to use another size, start with
+--stack=SIZE (for example  regina.exe --stack=512M prog.rexx) or set
+REGINA_STACK=512M.
 
 Classic Rexx programs run unchanged. Object-oriented programs can use
 classes and methods (::class, ::method, ::attribute, ::routine,
