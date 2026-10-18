@@ -20,8 +20,10 @@
  *
  * $Header: /opt/cvs/Regina/regutil/regsemos2.c,v 1.1 2009/10/28 02:33:15 mark Exp $
  */
-#include "regutil.h"
+#define INCL_DOSSEMAPHORES
+#define INCL_DOSERRORS
 #include <os2.h>
+#include "regutil.h"
 
 /* ******************************************************************** */
 /* **************************** Semaphores **************************** */

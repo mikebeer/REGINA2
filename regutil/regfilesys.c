@@ -20,7 +20,7 @@
  *
  * $Header: /opt/cvs/Regina/regutil/regfilesys.c,v 1.22 2023/05/25 22:14:31 mark Exp $
  */
-#ifdef __EMX__
+#if (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2)))
 # define INCL_DOSFILEMGR
 # define INCL_DOSMISC
 # define INCL_DOSERRORS
@@ -28,7 +28,7 @@
 
 #include "regutil.h"
 #include <errno.h>
-#ifdef __EMX__
+#if (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2)))
 # include <sys/types.h>
 #endif
 #include <sys/stat.h>
@@ -351,7 +351,7 @@ rxfunc(sysfilesystemtype)
 
     return 0;
 }
-#elif defined(__EMX__)
+#elif (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2)))
 rxfunc(sysfilesystemtype)
 {
    unsigned long rc;
@@ -464,8 +464,8 @@ rxfunc(sysfilesystemtype)
  * if do_subdirs is true, recurse through subdirectories.
  */
 
-#ifndef _WIN32
-# ifdef __EMX__
+#if !defined(_WIN32) && !(defined(__WATCOMC__) && defined(OS2))
+# if defined(__EMX__)
 #  define ST_MODE st.st_attr
 # else
 #  define ST_MODE st.st_mode
@@ -641,10 +641,10 @@ static void get_matched_files(chararray * ca, const char * dir,
                   case S_IFBLK: ftype = 'b'; break;
 #endif
 #if !defined ( DOS )
-#ifdef S_IFLNK
+#if defined(S_IFLNK) && !defined(__WATCOMC__) /* 0 in OpenWatcom */
                   case S_IFLNK: ftype = 'l'; break;
 #endif
-#ifdef S_IFSOCK
+#if defined(S_IFSOCK) && !defined(__WATCOMC__)
                   case S_IFSOCK: ftype = 's'; break;
 #endif
 #endif
@@ -720,6 +720,135 @@ static void get_matched_files(chararray * ca, const char * dir,
     }
 
     closedir(dirp);
+}
+#elif (defined(__WATCOMC__) && defined(OS2))
+/* OpenWatcom under OS/2: DosFindFirst, with the output of IBM's RexxUtil
+ * (the same as the Win32 version below) */
+static void get_matched_files(chararray * ca, const char * dir,
+                              int criterion, const char * const pattern,
+                              const char * attrs,
+                              rxbool do_subdirs, rxbool name_only, rxbool case_insensitive,
+                              int time_format, rxbool huge_files)
+{
+   FILEFINDBUF3 fd;
+   HDIR sh = HDIR_CREATE;
+   ULONG count = 1;
+   APIRET rc;
+   char pth[MAXPATHLEN], buf[MAXPATHLEN+50], tdir[MAXPATHLEN], *slash = "";
+   rxbool really_do_subdirs = false;
+   int l = 0, dl, matchattr = 0, skipattr = 0;
+   char *fmt;
+
+   if (!strcmp(dir, ".")) {
+      _getcwd(tdir, sizeof(tdir));
+      dir = tdir;
+      dl = strlen(dir);
+      if (dir[dl-1] != '\\' && dir[dl-1] != '/')
+         slash = "\\";
+      sprintf(pth, "%s%s%s", dir, slash, pattern);
+   }
+   else {
+      dl = strlen(dir);
+
+      if (dir[dl-1] != '\\' && dir[dl-1] != '/')
+         slash = "\\";
+      sprintf(pth, "%s%s%s", dir, slash, pattern);
+   }
+
+   if (attrs) {
+      int aflags[] = {FILE_ARCHIVED,FILE_DIRECTORY,FILE_HIDDEN,FILE_READONLY,FILE_SYSTEM };
+
+      for (l = 0; l < 5 && attrs[l]; l++) {
+         if (attrs[l] == '+') matchattr |= aflags[l];
+         else if (attrs[l] == '-') skipattr |= aflags[l];
+      }
+   }
+
+   /* as in the Win32 version: a pattern other than * finds sub-directories
+    * that do not match it in a second pass */
+   if (do_subdirs && memcmp(pattern, "*", 2)) {
+      really_do_subdirs = true;
+      do_subdirs = false;
+   }
+
+   for (rc = DosFindFirst(pth, &sh, FILE_ARCHIVED|FILE_DIRECTORY|FILE_HIDDEN|FILE_READONLY|FILE_SYSTEM,
+                          &fd, sizeof(fd), &count, FIL_STANDARD);
+        rc == 0 && count;
+        count = 1, rc = DosFindNext(sh, &fd, sizeof(fd), &count)) {
+      ULONG a = fd.attrFile;
+
+      if (!strcmp(".", fd.achName) || !strcmp("..", fd.achName))
+         continue;
+
+      if (((criterion&CR_FILES) && !(a&FILE_DIRECTORY)) ||
+          (((criterion&CR_DIRS) || do_subdirs) && (a&FILE_DIRECTORY))) {
+
+         l = sprintf(pth, "%s%s%s", dir, slash, fd.achName);
+      }
+
+      if ( (((criterion&CR_FILES) && !(a&FILE_DIRECTORY)) ||
+           ((criterion&CR_DIRS) && (a&FILE_DIRECTORY))) &&
+           (!matchattr || (matchattr&a)) &&
+           (!(skipattr&a)) ) {
+
+         if (name_only) {
+             cha_addstr(ca, pth, l);
+         }
+         else {
+            int year = fd.fdateLastWrite.year + 1980, month = fd.fdateLastWrite.month,
+                day = fd.fdateLastWrite.day, hour24 = fd.ftimeLastWrite.hours,
+                minute = fd.ftimeLastWrite.minutes, second = fd.ftimeLastWrite.twosecs * 2;
+            unsigned long fsize = fd.cbFile;
+            char ad = (a&FILE_ARCHIVED) ? 'A' : '-', dd = (a&FILE_DIRECTORY) ? 'D' : '-',
+                 hd = (a&FILE_HIDDEN) ? 'H' : '-', rd = (a&FILE_READONLY) ? 'R' : '-',
+                 sd = (a&FILE_SYSTEM) ? 'S' : '-';
+
+            if (time_format == TF_SORTABLE)
+            {
+               fmt = huge_files ? "%4d/%02d/%02d/%02d/%02d  %16lu  %c%c%c%c%c %s"
+                                : "%4d/%02d/%02d/%02d/%02d  %10lu  %c%c%c%c%c %s";
+               l = sprintf(buf, fmt, year, month, day, hour24, minute, fsize,
+                           ad, dd, hd, rd, sd, pth);
+            }
+            else if (time_format == TF_SENSIBLE)
+            {
+               fmt = huge_files ? "%4d-%02d-%02d %02d:%02d:%02d  %16lu  %c%c%c%c%c %s"
+                                : "%4d-%02d-%02d %02d:%02d:%02d  %10lu  %c%c%c%c%c %s";
+               l = sprintf(buf, fmt, year, month, day, hour24, minute, second, fsize,
+                           ad, dd, hd, rd, sd, pth);
+            }
+            else
+            {
+               int hour = hour24%12;
+               if (!hour) hour = 12;
+               fmt = huge_files ? "%2d/%02d/%02d  %2d:%02d%c  %16lu  %c%c%c%c%c  %s"
+                                : "%2d/%02d/%02d  %2d:%02d%c  %10lu  %c%c%c%c%c  %s";
+               l = sprintf(buf, fmt, month, day, year%100, hour, minute,
+                           hour24 >= 12 ? 'p' : 'a', fsize, ad, dd, hd, rd, sd, pth);
+            }
+            cha_addstr(ca, buf, l);
+         }
+     }
+     if (do_subdirs && (a&FILE_DIRECTORY))
+        get_matched_files(ca, pth, criterion, pattern, attrs, do_subdirs, name_only, case_insensitive, time_format, huge_files);
+  }
+
+  if (sh != HDIR_CREATE)
+      DosFindClose(sh);
+
+  if (really_do_subdirs) {
+     chararray * dirs = new_chararray();
+     register int i;
+
+     if (!dirs)
+        return;
+
+     get_matched_files(dirs, dir, CR_DIRS, "*", "", true, true, true, true, huge_files);
+     for (i = 0; i < dirs->count; i++) {
+        get_matched_files(ca, dirs->array[i].strptr, criterion, pattern, attrs, false, name_only, case_insensitive, time_format, huge_files);
+     }
+     delete_chararray(dirs);
+  }
 }
 #else
 static void get_matched_files(chararray * ca, const char * dir,
@@ -893,7 +1022,7 @@ rxfunc(sysfiletree)
     int time_format = 0;
     chararray * files;
     int rc = 0;
-# if defined(_WIN32) || defined(__EMX__)
+# if defined(_WIN32) || (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2)))
     char * bpattern;
 # else
     char *cp1;
@@ -958,7 +1087,7 @@ rxfunc(sysfiletree)
 
         dir = pattern;
         pattern = strrchr(dir, '/');
-#if defined(_WIN32) || defined(__EMX__)  /* was BEMX win32 & OS/2 allows slashes in both directions */
+#if defined(_WIN32) || (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2)))  /* was BEMX win32 & OS/2 allows slashes in both directions */
         bpattern = strrchr(dir, '\\');
         if (pattern < bpattern) pattern = bpattern;
 #endif
@@ -968,7 +1097,7 @@ rxfunc(sysfiletree)
             if (pattern == dir)
                dir = "/";
 
-#if defined(_WIN32) || defined(__EMX__) /* was BEMX */
+#if defined(_WIN32) || (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2))) /* was BEMX */
             else if (pattern == (dir+2) && dir[1] == ':') {
                dir = alloca(4);
                memcpy(dir, pattern-2, 3);
@@ -987,7 +1116,7 @@ rxfunc(sysfiletree)
         if (!*pattern)
            pattern = "*";
 
-#if !defined( _WIN32 ) && !defined(__EMX__)
+#if !defined( _WIN32 ) && !(defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2)))
         /* Unix systems require normalisation of the directory */
         if (*dir != '/') {
            cp1 = alloca(MAXPATHLEN+1);
@@ -1334,7 +1463,7 @@ rxfunc(syscreateshadow)
    rxstrdup(from, argv[0]);
    rxstrdup(to, argv[1]);
 
-#if !defined( _WIN32 ) && !defined(__EMX__) && !defined( DOS )
+#if !defined( _WIN32 ) && !(defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2))) && !defined( DOS )
    /* hard link if possible, symlink if necessary */
    rc = link(from, to);
    if (rc == -1 && errno == EXDEV) {

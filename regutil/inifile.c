@@ -83,13 +83,13 @@ static void delete_section(sec_t st)
    free(st);
 }
 
-#if defined(DOS)
+#if defined(DOS) || (defined(__WATCOMC__) && defined(OS2))
 static int ftruncate( int fno, long size )
 {
   return _chsize( fno, size );
 }
 
-/* file locks ignored; it is DOS */
+/* file locks ignored (DOS; OpenWatcom under OS/2 has no fcntl locks) */
 static void release_lock(inif_t fit)
 {
    return;

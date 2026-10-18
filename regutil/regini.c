@@ -20,9 +20,10 @@
  *
  * $Header: /opt/cvs/Regina/regutil/regini.c,v 1.22 2023/05/25 22:14:33 mark Exp $
  */
-#ifdef __EMX__
+#if (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2)))
 # define INCL_DOSMISC
 # define INCL_DOSFILEMGR
+# define INCL_DOSPROCESS
 #endif
 
 #include "regutil.h"
@@ -31,12 +32,12 @@
 # include <windows.h>
 #else
 # include <unistd.h>
-# ifndef DOS
+# if !defined(DOS) && !(defined(__WATCOMC__) && defined(OS2))
 #  include <sys/utsname.h>
 #  include <sys/param.h>
 #  include <sys/time.h>
 # endif
-# if !defined(__QNX__) && !defined(__EMX__) && !defined(__BEOS__) && !defined(DOS)
+# if !defined(__QNX__) && !(defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2))) && !defined(__BEOS__) && !defined(DOS)
 #  include <sys/resource.h>
 #  include <poll.h>
 # endif
@@ -425,7 +426,7 @@ rxfunc(syswinver)
                                osvi.dwMajorVersion, osvi.dwMinorVersion);
    return 0;
 }
-#elif defined(__EMX__)
+#elif (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2)))
 rxfunc(sysbootdrive)
 {
    unsigned long BootDrive[1];
@@ -441,12 +442,19 @@ rxfunc(sysbootdrive)
 /* syswinver() */
 rxfunc(syswinver)
 {
+# if defined(__WATCOMC__)
+   unsigned long v[2];
+
+   DosQuerySysInfo(QSV_VERSION_MAJOR, QSV_VERSION_MINOR, v, sizeof(v));
+   result->strlength = sprintf(result->strptr, "OS/2 %lu.%02lu", v[0] / 10, v[1]);
+# else
    struct utsname un;
 
    uname(&un);
 
    result->strlength = sprintf(result->strptr, "%s %s.%s", un.sysname,
                                un.version, un.release);
+# endif
    return 0;
 }
 #elif defined(__WATCOMC__) && defined(DOS)
@@ -736,6 +744,97 @@ rxfunc(sysdrivemap)
    return 0;
 }
 
+#elif (defined(__WATCOMC__) && defined(OS2))
+/* OpenWatcom under OS/2: the file-system API. SysDriveInfo returns
+ * "drive: free total label" (in bytes, as IBM's RexxUtil) */
+rxfunc(sysdriveinfo)
+{
+    FSALLOCATE fa;
+    FSINFO fi;
+    ULONG drive;
+    APIRET rc;
+
+    checkparam(1,1);
+
+    if (argv[0].strlength == 0)
+       return BADARGS;
+    drive = toupper(argv[0].strptr[0]) - 'A' + 1;
+    if (drive < 1 || drive > 26)
+       return BADARGS;
+
+    DosError(FERR_DISABLEHARDERR);
+    rc = DosQueryFSInfo(drive, FSIL_ALLOC, &fa, sizeof(fa));
+    if (rc) {
+       result->strlength = 0;
+       return 0;
+    }
+    memset(&fi, 0, sizeof(fi));
+    DosQueryFSInfo(drive, FSIL_VOLSER, &fi, sizeof(fi));
+    result->strlength = sprintf(result->strptr, "%c: %.0f %.0f %s", (int)('A' + drive - 1),
+                                (double)fa.cUnitAvail * fa.cSectorUnit * fa.cbSector,
+                                (double)fa.cUnit * fa.cSectorUnit * fa.cbSector, fi.vol.szVolLabel);
+    return 0;
+}
+
+/* sysdrivemap([drive],[opt]): USED (default), FREE, LOCAL, REMOTE; the
+ * other types (REMOVABLE, CDROM, RAMDISK) list the local drives */
+rxfunc(sysdrivemap)
+{
+   ULONG cur, map;
+   int options = -1, c = 'C', j = 0;
+   char * opt;
+
+   checkparam(0,2);
+
+   if (argc > 0 && argv[0].strlength > 0) {
+      c = toupper(argv[0].strptr[0]);
+   }
+
+   if (argc > 1 && argv[1].strlength > 0) {
+      rxstrdup(opt, argv[1]);
+      strupr(opt);
+
+      if (!strcmp(opt, "USED"))
+         options = -1;
+      else if (!strcmp(opt, "FREE"))
+         options = -2;
+      else if (!strcmp(opt, "LOCAL") || !strcmp(opt, "REMOVABLE") ||
+               !strcmp(opt, "CDROM") || !strcmp(opt, "RAMDISK"))
+         options = -3;
+      else if (!strcmp(opt, "REMOTE"))
+         options = -4;
+      else
+         return BADARGS;
+   }
+
+   DosQueryCurrentDisk(&cur, &map);
+   for (; c <= 'Z'; c++) {
+      int used = (map >> (c - 'A')) & 1;
+
+      if (options == -2 ? used : !used)
+         continue;
+      if (options <= -3) {
+         char dev[3], buf[sizeof(FSQBUFFER2) + 3 * CCHMAXPATH];
+         ULONG bl = sizeof(buf);
+         PFSQBUFFER2 q = (PFSQBUFFER2) buf;
+         int remote;
+
+         dev[0] = (char) c, dev[1] = ':', dev[2] = 0;
+         if (DosQueryFSAttach(dev, 0, FSAIL_QUERYNAME, q, &bl))
+            continue;
+         remote = q->iType == FSAT_REMOTEDRV;
+         if ((options == -3) == remote)
+            continue;
+      }
+      result->strptr[j++] = (char) c;
+      result->strptr[j++] = ':';
+      result->strptr[j++] = ' ';
+   }
+
+   result->strlength = j - (j != 0);
+   return 0;
+}
+
 #else
 rxfunc(sysdriveinfo)
 {
@@ -868,6 +967,8 @@ rxfunc(syssetpriority)
 #elif defined(__QNX__)
 #elif defined(__BEOS__)
 #elif defined(__HAIKU__)
+#elif defined(__WATCOMC__) && defined(OS2)
+   rc = DosSetPriority(PRTYS_PROCESS, class, prio, 0);
 #elif defined(__EMX__)
 #elif defined(DOS)
 #else
@@ -905,6 +1006,15 @@ int usleep(unsigned int usecs)
    /* DOS doesn't let you usleep -- but it lets you millisleep, which is
     * still pretty good. */
    delay(usecs/1000);
+   return 0;
+}
+#endif
+
+#if defined(OS2) && defined(__WATCOMC__)
+/* sleep for a certain number of microseconds (in milliseconds: DosSleep) */
+int usleep(unsigned int usecs)
+{
+   DosSleep(usecs/1000);
    return 0;
 }
 #endif
@@ -1078,7 +1188,7 @@ rxfunc(sysvolumelabel)
 
 rxfunc(syswaitnamedpipe)
 {
-#if defined( __QNX__ ) || defined(__EMX__) || defined(__BEOS__) || defined(DOS)
+#if defined( __QNX__ ) || (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2))) || defined(__BEOS__) || defined(DOS)
    strcpy(result->strptr, notimp);
    result->strlength = sizeof(notimp)-1;
 #else
@@ -1130,7 +1240,7 @@ rxfunc(syswaitnamedpipe)
    return 0;
 }
 
-# if defined(__EMX__)
+# if (defined(__EMX__) || (defined(__WATCOMC__) && defined(OS2)))
 
 rxfunc(rxmessagebox)
 {

@@ -129,7 +129,17 @@
  */
 
 #define NO_CTYPE_REPLACEMENT
+#if defined(__WATCOMC__) && defined(OS2)
+# include <stddef.h>   /* size_t the OpenWatcom 2 way before the TCP/IP types */
+# include <os2/types.h>
+#endif
 #include "rexx.h"
+#if defined(__WATCOMC__) && defined(OS2)
+# include <nerrno.h>
+# ifndef INADDR_LOOPBACK
+#  define INADDR_LOOPBACK 0x7f000001UL
+# endif
+#endif
 #if defined(WIN32) || defined(__LCC__)
 # if defined(_MSC_VER)
 #  if _MSC_VER >= 1100
@@ -169,6 +179,13 @@
 #  include <arpa/inet.h>
 # endif
 # define closesocket(x) close(x)
+#endif
+#if defined(__WATCOMC__) && defined(OS2)
+/* OS/2 TCP/IP (OpenWatcom): sockets are not file handles; errors in sock_errno() */
+# include <sys/time.h>
+# include <nerrno.h>
+# undef closesocket
+# define closesocket(x) soclose(x)
 #endif
 #include <string.h>
 
@@ -235,6 +252,9 @@ HANDLE  hServerStopEvent = NULL;
 # define EINTR WSAEINTR
 # undef ECONNRESET
 # define ECONNRESET WSAECONNRESET
+#elif defined(__WATCOMC__) && defined(OS2)
+# define os_errno sock_errno()
+# define errno_str(code) strerror(code)
 #else
 # define os_errno errno
 # define errno_str(code) strerror(code)

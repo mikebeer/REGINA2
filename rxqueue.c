@@ -18,6 +18,10 @@
  */
 
 #define NO_CTYPE_REPLACEMENT
+#if defined(__WATCOMC__) && defined(OS2)
+# include <stddef.h>   /* size_t the OpenWatcom 2 way before the TCP/IP types */
+# include <os2/types.h>
+#endif
 #include "rexx.h"
 
 #ifdef HAVE_CONFIG_H
