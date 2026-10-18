@@ -159,6 +159,7 @@ rexx /usr/share/doc/regina-rexx-oo/examples/01_classes.rexx`, 'Installing on Deb
     'Run a sample: `rexx demo\\oo\\01_classes.rexx`.',
   ], 's2'),
   P('The zip holds two interpreters. `rexx.exe` is standalone. `regina.exe` uses `regina.dll` and can load external function packages (DLLs) such as `rgmqtt.dll`, the MQTT client (Chapter 7); keep `regina.exe`, `regina.dll` and the package DLLs in one folder. Both run the same programs: `regina demo\\mqtt\\15_public_broker.rexx` connects to the public test broker test.mosquitto.org.'),
+  P('The programs are not signed with a code-signing certificate. Some virus scanners therefore treat them as suspicious, especially the small `regina.exe` that loads `regina.dll`: the file is then emptied (0 bytes) or blocked right after unpacking, and Windows reports that the app cannot run or that access is denied. The files carry version information and a manifest, which makes this less likely; if it happens, add the folder as a scan exclusion in the virus scanner (with company-managed protection such as Kaspersky Endpoint Security, the administrator does this in the policy) and unpack the zip again.'),
   P('`rexx.exe` contains the English error messages. For another language, set `REGINA_LANG` (for example `de`) and `REGINA_LANG_DIR` to the folder with the `*.mtb` files.'),
   H2('macOS'),
   P('Unpack the archive in Terminal. Files downloaded from the internet carry a quarantine mark, and the binary is not notarized by Apple, so remove the mark before the first run:'),

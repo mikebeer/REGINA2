@@ -26,6 +26,68 @@ cat > "$OUT/version_defs.h" <<EOV
 #endif
 EOV
 
+# Windows resources: version information (file version, product, description,
+# copyright) for every binary, and the Regina icon and a manifest (normal user
+# rights, Windows 10/11) for the executables. Unsigned executables without
+# them are flagged by virus scanners far more often.
+make_rc() {   # NAME DESCRIPTION exe|dll
+  {
+    echo '#include <winver.h>'
+    if [ "$3" = exe ]; then
+      echo "1 ICON \"$SRC/reginaw32.ico\""
+      echo '1 24 "app.manifest"'
+    fi
+    cat <<EORC
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION $VER_MAJOR,$VER_MINOR,$VER_RELEASE,0
+ PRODUCTVERSION $VER_MAJOR,$VER_MINOR,$VER_RELEASE,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE $( [ "$3" = exe ] && echo VFT_APP || echo VFT_DLL )
+ FILESUBTYPE 0x0L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "CompanyName", "Regina Rexx OO (github.com/mikebeer/REGINA2)"
+      VALUE "FileDescription", "$2"
+      VALUE "FileVersion", "$VER_DOT.0"
+      VALUE "InternalName", "$1"
+      VALUE "LegalCopyright", "Regina: Anders Christensen, Mark Hessling and others. OO extension: Mike Beer. GNU LGPL."
+      VALUE "OriginalFilename", "$1"
+      VALUE "ProductName", "Regina Rexx Interpreter with OO extension"
+      VALUE "ProductVersion", "$VER_DOT"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
+EORC
+  } >"$1.rc"
+  $WINDRES -I"$SRC" -i "$1.rc" -o "$1.res.o"
+}
+write_manifest() {
+  cat >app.manifest <<'EOM'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity type="win32" name="Regina.Rexx.OO" version="1.0.0.0" processorArchitecture="amd64"/>
+  <description>Regina Rexx Interpreter with OO extension</description>
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security><requestedPrivileges>
+      <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+    </requestedPrivileges></security>
+  </trustInfo>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application><supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/></application>
+  </compatibility>
+</assembly>
+EOM
+}
+
 # __USE_MINGW_SETJMP_NON_SEH: longjmp (EXIT, errors, SIGNAL) only restores
 # the registers, as in C. Otherwise 64-bit MinGW unwinds the stack with SEH,
 # which hung the program at exit when the stack was 32 MB or more.
@@ -54,7 +116,9 @@ OBJS="$OBJS time64.o"
 $CC -c -O2 -g -DNDEBUG -D__USE_MINGW_SETJMP_NON_SEH -w -I"$SRC" -o pybridge.o "$SRC/pybridge.c"
 OBJS="$OBJS pybridge.o"
 
-$CC -static -Wl,--stack,268435456 -o rexx.exe $OBJS -lwsock32 -ladvapi32 -lpthread
+write_manifest
+make_rc rexx.exe "Regina Rexx interpreter (standalone)" exe
+$CC -static -Wl,--stack,268435456 -o rexx.exe $OBJS rexx.exe.res.o -lwsock32 -ladvapi32 -lpthread
 # unstripped copies for tools/symbolize-windows.sh (crash reports); not shipped
 mkdir -p "$OUT/debug"; cp rexx.exe "$OUT/debug/"
 x86_64-w64-mingw32-strip rexx.exe
@@ -75,12 +139,16 @@ for f in $(echo "$SOURCES" | sed 's/\<nosaa\>//; s/\<mt_notmt\>//') mt_win32 cli
   DOBJS="$DOBJS $f.o"
 done
 { echo "LIBRARY regina.dll"; echo "EXPORTS"; sed -n 's/^EXPORTS //p' "$SRC/regina_w32_mingw_dll.def"; } >regina.def
-$CC -shared -static-libgcc -o regina.dll -Wl,--out-implib,libregina.a $DOBJS ../time64.o ../pybridge.o \
+write_manifest
+make_rc regina.dll "Regina Rexx interpreter library" dll
+make_rc regina.exe "Regina Rexx interpreter (uses regina.dll)" exe
+make_rc rgmqtt.dll "RgMqtt - MQTT client functions for Regina Rexx" dll
+$CC -shared -static-libgcc -o regina.dll -Wl,--out-implib,libregina.a $DOBJS ../time64.o ../pybridge.o regina.dll.res.o \
     regina.def -Wl,-Bstatic -lpthread -Wl,-Bdynamic -lwsock32 -ladvapi32
 # 256 MB of stack like rexx.exe; --stack=SIZE or REGINA_STACK asks for
 # another size (the interpreter then runs on a thread of that size)
-$CC -O2 -g -w -I"$SRC" -o regina.exe "$SRC/regina.c" -L. -lregina -Wl,--stack,268435456
-$CC -O2 -g -w -shared -static-libgcc -I"$SRC" -o rgmqtt.dll "$SRC/rgmqtt/rgmqtt.c" \
+$CC -O2 -g -w -I"$SRC" -o regina.exe "$SRC/regina.c" regina.exe.res.o -L. -lregina -Wl,--stack,268435456
+$CC -O2 -g -w -shared -static-libgcc -I"$SRC" -o rgmqtt.dll "$SRC/rgmqtt/rgmqtt.c" rgmqtt.dll.res.o \
     -Wl,--kill-at -L. -lregina -lws2_32
 cp regina.dll regina.exe rgmqtt.dll "$OUT/debug/"
 x86_64-w64-mingw32-strip regina.dll regina.exe rgmqtt.dll
@@ -115,6 +183,11 @@ included here (see README.rgmqtt.txt and demo\mqtt):
   regina.exe demo\mqtt\13_mqtt.rexx localhost 1883
 
 Keep regina.exe, regina.dll and the package DLLs in the same folder.
+
+The programs are not signed. If a virus scanner empties (0 bytes) or blocks
+regina.exe or another file right after unpacking, add this folder as a scan
+exclusion (with company-managed protection, the administrator does this in
+the policy) and unpack the zip again.
 
 Deeply nested methods end with error 11 (control stack full). rexx.exe and
 regina.exe have a 256 MB stack; to use another size, start with
