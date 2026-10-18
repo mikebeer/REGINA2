@@ -47,6 +47,12 @@ console (typed input, an empty line, Ctrl-Z, `--stack`). Run it before
 publishing a Windows package: problems with the console don't show when
 input comes from a file or pipe.
 
+A crash on Windows prints a report ("Regina crashed: exception ...") with
+module offsets. `tools/build-windows.sh` keeps unstripped binaries in
+`OUTDIR/debug` (in the repository: `dist/regina-rexx-oo-*-win64-debug.zip`,
+matching the zip); `tools/symbolize-windows.sh DEBUGDIR < report` turns
+the report into function names and source lines.
+
 ## Switches for a test
 
 If `NAME.switches` exists next to `NAME.rexx`, its content is passed to the

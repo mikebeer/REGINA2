@@ -29,7 +29,7 @@ EOV
 # __USE_MINGW_SETJMP_NON_SEH: longjmp (EXIT, errors, SIGNAL) only restores
 # the registers, as in C. Otherwise 64-bit MinGW unwinds the stack with SEH,
 # which hung the program at exit when the stack was 32 MB or more.
-CFLAGS="-O2 -DNDEBUG -funsigned-char -DWIN32 -DWIN64 -DHAVE_PROTO -D__USE_MINGW_SETJMP_NON_SEH \
+CFLAGS="-O2 -g -DNDEBUG -funsigned-char -DWIN32 -DWIN64 -DHAVE_PROTO -D__USE_MINGW_SETJMP_NON_SEH \
  -DREGINA_SINGLE_THREADED -DREGINA_BITS=64 -include stdint.h -include $OUT/version_defs.h \
  -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS -w \
  -I$SRC -I$SRC/contrib"
@@ -51,10 +51,12 @@ done
 $CC -c $CFLAGS -o time64.o "$SRC/contrib/time64.c"
 OBJS="$OBJS time64.o"
 # the Python interpreter: its own flags (version_defs.h defines min/max)
-$CC -c -O2 -DNDEBUG -D__USE_MINGW_SETJMP_NON_SEH -w -I"$SRC" -o pybridge.o "$SRC/pybridge.c"
+$CC -c -O2 -g -DNDEBUG -D__USE_MINGW_SETJMP_NON_SEH -w -I"$SRC" -o pybridge.o "$SRC/pybridge.c"
 OBJS="$OBJS pybridge.o"
 
 $CC -static -Wl,--stack,268435456 -o rexx.exe $OBJS -lwsock32 -ladvapi32 -lpthread
+# unstripped copies for tools/symbolize-windows.sh (crash reports); not shipped
+mkdir -p "$OUT/debug"; cp rexx.exe "$OUT/debug/"
 x86_64-w64-mingw32-strip rexx.exe
 echo "built $OUT/rexx.exe"
 
@@ -77,9 +79,10 @@ $CC -shared -static-libgcc -o regina.dll -Wl,--out-implib,libregina.a $DOBJS ../
     regina.def -Wl,-Bstatic -lpthread -Wl,-Bdynamic -lwsock32 -ladvapi32
 # 256 MB of stack like rexx.exe; --stack=SIZE or REGINA_STACK asks for
 # another size (the interpreter then runs on a thread of that size)
-$CC -O2 -w -I"$SRC" -o regina.exe "$SRC/regina.c" -L. -lregina -Wl,--stack,268435456
-$CC -O2 -w -shared -static-libgcc -I"$SRC" -o rgmqtt.dll "$SRC/rgmqtt/rgmqtt.c" \
+$CC -O2 -g -w -I"$SRC" -o regina.exe "$SRC/regina.c" -L. -lregina -Wl,--stack,268435456
+$CC -O2 -g -w -shared -static-libgcc -I"$SRC" -o rgmqtt.dll "$SRC/rgmqtt/rgmqtt.c" \
     -Wl,--kill-at -L. -lregina -lws2_32
+cp regina.dll regina.exe rgmqtt.dll "$OUT/debug/"
 x86_64-w64-mingw32-strip regina.dll regina.exe rgmqtt.dll
 cd "$OUT"
 echo "built $OUT/dll/regina.exe, regina.dll, rgmqtt.dll"
@@ -139,3 +142,7 @@ EOR
 sed -i 's/$/\r/' "$DIST/README.txt"
 (command -v zip >/dev/null && zip -qr "$DIST.zip" "$DIST") || python3 -c "import shutil,sys; shutil.make_archive(sys.argv[1], 'zip', '.', sys.argv[1])" "$DIST"
 echo "built $OUT/$DIST.zip"
+# the unstripped binaries of this build, for tools/symbolize-windows.sh
+rm -f "$DIST-debug.zip"
+(command -v zip >/dev/null && zip -qr9 "$DIST-debug.zip" debug) || python3 -c "import shutil,sys; shutil.make_archive(sys.argv[1], 'zip', '.', 'debug')" "$DIST-debug"
+echo "built $OUT/$DIST-debug.zip"

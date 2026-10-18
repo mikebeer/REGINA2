@@ -967,6 +967,75 @@ static int run_with_stack( long size, main_args *a )
 }
 #endif
 
+#if ( defined(_WIN64) || defined(_M_X64) ) && defined(__MINGW32__)
+/*
+ * A crash report on Windows: the exception, where it happened (module and
+ * offset, which tools/symbolize-windows.sh turns into function names) and
+ * the chain of callers. Windows itself ends the program silently.
+ */
+static void crash_where( const char *what, DWORD64 addr )
+{
+   HMODULE mod = NULL;
+   char name[MAX_PATH] = "?";
+
+   if ( GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                            | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCSTR) (ULONG_PTR) addr, &mod ) && mod )
+   {
+      char *b;
+      GetModuleFileNameA( mod, name, sizeof( name ) );
+      b = strrchr( name, '\\' );
+      fprintf( stderr, "  %s %s+0x%llx\n", what, b ? b + 1 : name,
+               (unsigned long long) ( addr - (DWORD64) (ULONG_PTR) mod ) );
+   }
+   else
+      fprintf( stderr, "  %s 0x%llx\n", what, (unsigned long long) addr );
+}
+
+static LONG WINAPI crash_report( EXCEPTION_POINTERS *ep )
+{
+   CONTEXT ctx = *ep->ContextRecord;
+   EXCEPTION_RECORD *er = ep->ExceptionRecord;
+   int i;
+
+   fprintf( stderr, "\nRegina crashed: exception 0x%08lx",
+            (unsigned long) er->ExceptionCode );
+   if ( er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && er->NumberParameters >= 2 )
+      fprintf( stderr, " (%s address 0x%llx)",
+               er->ExceptionInformation[0] == 0 ? "reading" :
+               er->ExceptionInformation[0] == 1 ? "writing" : "executing",
+               (unsigned long long) er->ExceptionInformation[1] );
+   fprintf( stderr, "\n" );
+   crash_where( "at", (DWORD64) (ULONG_PTR) er->ExceptionAddress );
+   for ( i = 0; i < 40 && ctx.Rip; i++ )
+   {
+      DWORD64 base = 0;
+      PRUNTIME_FUNCTION fe = RtlLookupFunctionEntry( ctx.Rip, &base, NULL );
+      if ( fe )
+      {
+         PVOID hd;
+         DWORD64 ef;
+         RtlVirtualUnwind( UNW_FLAG_NHANDLER, base, ctx.Rip, fe, &ctx, &hd, &ef, NULL );
+      }
+      else
+      {
+         if ( IsBadReadPtr( (void *) (ULONG_PTR) ctx.Rsp, 8 ) )
+            break;
+         ctx.Rip = *(DWORD64 *) (ULONG_PTR) ctx.Rsp;
+         ctx.Rsp += 8;
+      }
+      if ( ctx.Rip )
+         crash_where( "called from", ctx.Rip );
+   }
+   fprintf( stderr, "Please report these lines.\n" );
+   fflush( stderr );
+   return EXCEPTION_EXECUTE_HANDLER;
+}
+# define INSTALL_CRASH_REPORT() SetUnhandledExceptionFilter( crash_report )
+#else
+# define INSTALL_CRASH_REPORT()
+#endif
+
 #ifdef RXLIB
 # if defined(__LCC__)
 int __regina_faked_main(int argc,char *argv[])
@@ -980,7 +1049,10 @@ int main(int argc,char *argv[])
 #endif
 {
    const char *text;
-   long size = requested_stack_size( argc, argv, &text );
+   long size;
+
+   INSTALL_CRASH_REPORT();
+   size = requested_stack_size( argc, argv, &text );
    main_args a;
 
    if ( size < 0 )
