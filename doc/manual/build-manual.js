@@ -130,7 +130,7 @@ exit
     ['samples', 'the sample programs of Chapter 8', `${N.samples} of ${N.samples}`],
     ['packages', 'external function packages run by `regina`: an RxSock-style test package and RgMqtt against a test broker; the classic programs give the same output with Regina 3.9.7', `${N.packages} of ${N.packages}`],
   ], W(1300, 6338, 2000), 'Test suites'),
-  P('The trip and classic suites are also identical to Regina 3.9.7 when the interpreter is run with `--no-oo`. The Linux build is checked with valgrind. The Windows build runs the oo and samples suites under Wine, with `rexx.exe` and with `regina.exe`, and the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`. The macOS build is cross-compiled; see Chapter 9.'),
+  P('The trip and classic suites are also identical to Regina 3.9.7 when the interpreter is run with `--no-oo`. The Linux build is checked with valgrind. The Windows build runs the oo and samples suites under Wine, with `rexx.exe` and with `regina.exe`, the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`, and programs with a console (`tools/test-windows.sh`). The macOS build is cross-compiled; see Chapter 9.'),
 ];
 
 // ------------------------------------------------------------------
@@ -872,12 +872,12 @@ const ch9 = [
   ...UL([
     'An error in a file loaded by `::requires` names the main program in the error message, not the required file.',
     'TRACE I shows the hidden position counter of DO OVER loops.',
-    'Deep recursion of methods ends with error 11 (control stack full) when three quarters of the C stack are used. The stack is that of the executable (on Linux `ulimit -s`, at most 64 MB counted; `rexx.exe` and the macOS build 256 MB; `regina.exe` 16 MB) unless `--stack=SIZE` or `REGINA_STACK` asks for another size: the interpreter then runs on a thread with a stack of that size, for example `rexx --stack=512M prog.rexx` (Appendix B). Deep recursion of classic internal routines is not checked, as in Regina 3.9.7.',
+    'Deep recursion of methods ends with error 11 (control stack full) when three quarters of the C stack are used. The stack is that of the executable (on Linux `ulimit -s`, at most 64 MB counted; `rexx.exe`, `regina.exe` and the macOS build 256 MB) unless `--stack=SIZE` or `REGINA_STACK` asks for another size: the interpreter then runs on a thread with a stack of that size, for example `rexx --stack=512M prog.rexx` (Appendix B). Deep recursion of classic internal routines is not checked, as in Regina 3.9.7.',
   ]),
   H2('Platforms'),
   ...table(['Package', 'Status'], [
     ['Linux x86-64 (`.deb`)', 'Built and tested natively: all five test suites, valgrind. Contains `regina`, which loads external function packages such as RgMqtt.'],
-    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. Under Wine, the oo and samples suites pass with `rexx.exe` and `regina.exe`, and the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`; not yet tested on Windows itself. No readline, curses or GCI. `regina.exe` has a 16 MB stack; `--stack=SIZE` or `REGINA_STACK` gives it more. Under Wine, programs with stacks of 32 MB and more run very slowly (a Wine limitation; plain C recursion is not affected); native Windows still has to be measured.'],
+    ['Windows 64-bit (zip)', 'Cross-compiled with MinGW-w64. Under Wine, the oo and samples suites pass with `rexx.exe` and `regina.exe`, and the MQTT tests and samples with `regina.exe` and `rgmqtt.dll`; not yet tested on Windows itself. No readline, curses or GCI. Both executables have a 256 MB stack; `--stack=SIZE` or `REGINA_STACK` sets another size. `tools/test-windows.sh` also checks programs with a console (input typed in, Ctrl-Z, programs that end).'],
     ['macOS (tar.gz)', 'Cross-compiled with zig for Apple Silicon and Intel, macOS 11 or later. The same sources and configuration pass all test suites on Linux, but the binary has not yet been run on a Mac. It is ad-hoc signed, not notarized (see Chapter 2). No readline, curses or GCI, and no external function packages.'],
   ], W(2400, 7238), 'Platform status'),
   H2('Performance'),

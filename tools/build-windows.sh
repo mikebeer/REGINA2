@@ -26,7 +26,10 @@ cat > "$OUT/version_defs.h" <<EOV
 #endif
 EOV
 
-CFLAGS="-O2 -DNDEBUG -funsigned-char -DWIN32 -DWIN64 -DHAVE_PROTO \
+# __USE_MINGW_SETJMP_NON_SEH: longjmp (EXIT, errors, SIGNAL) only restores
+# the registers, as in C. Otherwise 64-bit MinGW unwinds the stack with SEH,
+# which hung the program at exit when the stack was 32 MB or more.
+CFLAGS="-O2 -DNDEBUG -funsigned-char -DWIN32 -DWIN64 -DHAVE_PROTO -D__USE_MINGW_SETJMP_NON_SEH \
  -DREGINA_SINGLE_THREADED -DREGINA_BITS=64 -include stdint.h -include $OUT/version_defs.h \
  -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS -w \
  -I$SRC -I$SRC/contrib"
@@ -48,7 +51,7 @@ done
 $CC -c $CFLAGS -o time64.o "$SRC/contrib/time64.c"
 OBJS="$OBJS time64.o"
 # the Python interpreter: its own flags (version_defs.h defines min/max)
-$CC -c -O2 -DNDEBUG -w -I"$SRC" -o pybridge.o "$SRC/pybridge.c"
+$CC -c -O2 -DNDEBUG -D__USE_MINGW_SETJMP_NON_SEH -w -I"$SRC" -o pybridge.o "$SRC/pybridge.c"
 OBJS="$OBJS pybridge.o"
 
 $CC -static -Wl,--stack,268435456 -o rexx.exe $OBJS -lwsock32 -ladvapi32 -lpthread
@@ -72,9 +75,9 @@ done
 { echo "LIBRARY regina.dll"; echo "EXPORTS"; sed -n 's/^EXPORTS //p' "$SRC/regina_w32_mingw_dll.def"; } >regina.def
 $CC -shared -static-libgcc -o regina.dll -Wl,--out-implib,libregina.a $DOBJS ../time64.o ../pybridge.o \
     regina.def -Wl,-Bstatic -lpthread -Wl,-Bdynamic -lwsock32 -ladvapi32
-# a 16 MB stack: larger ones are very slow under Wine; --stack=SIZE or
-# REGINA_STACK gives a program more (it then runs on a thread of that size)
-$CC -O2 -w -I"$SRC" -o regina.exe "$SRC/regina.c" -L. -lregina -Wl,--stack,16777216
+# 256 MB of stack like rexx.exe; --stack=SIZE or REGINA_STACK asks for
+# another size (the interpreter then runs on a thread of that size)
+$CC -O2 -w -I"$SRC" -o regina.exe "$SRC/regina.c" -L. -lregina -Wl,--stack,268435456
 $CC -O2 -w -shared -static-libgcc -I"$SRC" -o rgmqtt.dll "$SRC/rgmqtt/rgmqtt.c" \
     -Wl,--kill-at -L. -lregina -lws2_32
 x86_64-w64-mingw32-strip regina.dll regina.exe rgmqtt.dll
@@ -110,8 +113,8 @@ included here (see README.rgmqtt.txt and demo\mqtt):
 
 Keep regina.exe, regina.dll and the package DLLs in the same folder.
 
-Deeply nested methods end with error 11 (control stack full). rexx.exe has
-a 256 MB stack, regina.exe 16 MB; to use another size, start with
+Deeply nested methods end with error 11 (control stack full). rexx.exe and
+regina.exe have a 256 MB stack; to use another size, start with
 --stack=SIZE (for example  regina.exe --stack=512M prog.rexx) or set
 REGINA_STACK=512M.
 

@@ -218,7 +218,7 @@ Limitations), `--ws` (a workspace session) and `--stack=SIZE` or `-ZSIZE`
 (`REGINA_STACK=SIZE`): the interpreter runs on a thread with a C stack of
 SIZE bytes (`512M`, `1G`; at least `1M`), so that deeply nested methods
 reach error 11 (control stack full) later. Without it the stack is that of
-the executable (`ulimit -s` on Linux, 256 MB for `rexx.exe`, 16 MB for
+the executable (`ulimit -s` on Linux, 256 MB for `rexx.exe` and
 `regina.exe`).
 
 A switch on the command line wins over `REGINA_OO`. The environment

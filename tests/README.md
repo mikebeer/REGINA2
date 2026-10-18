@@ -38,6 +38,15 @@ After editing `lexsrc.l` or `yaccsrc.y`, run `tools/regenerate-parser.sh`
 | `tools/build-deb.sh [OUTDIR]` | `regina-rexx-oo_<ver>_<arch>.deb` for Debian/Ubuntu. Runs the regression suites first and refuses to package if they fail. Replaces the distribution's `regina-rexx`/`libregina3`. |
 | `tools/build-windows.sh [OUTDIR]` | Standalone 64-bit `rexx.exe` (no DLL) and `regina-rexx-oo-<ver>-win64.zip`, cross-compiled with MinGW-w64 (`apt install mingw-w64`). |
 
+## Windows
+
+`tools/test-windows.sh [ZIP]` tests the Windows zip under Wine: the oo and
+samples suites with `rexx.exe` and `regina.exe`, the MQTT tests and samples
+with `regina.exe`, and, through `tools/wine-console.py`, programs run with a
+console (typed input, an empty line, Ctrl-Z, `--stack`). Run it before
+publishing a Windows package: problems with the console don't show when
+input comes from a file or pipe.
+
 ## Switches for a test
 
 If `NAME.switches` exists next to `NAME.rexx`, its content is passed to the
