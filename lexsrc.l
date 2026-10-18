@@ -1571,6 +1571,44 @@ key_with          [wW][iI][tT][hH]
    return LABEL ; }
 
 
+   /*
+    * OO extension: workspace functions in the style of APL quad names,
+    * []NL(2), []SAVE('ws'), call []IN 'file'. "[" can't start a term in
+    * classic Rexx. The name is used like a string function name.
+    */
+"[]"[a-zA-Z]+{comment}*\( {
+   int i, n = 0 ;
+   if ( OO_OFF )
+      REJECT ;
+   BEGIN other ;
+   for ( i = 0 ; i < yyleng && yytext[i] != '`' && yytext[i] != '(' ; i++ )
+      retvalue[n++] = (char) rx_toupper( yytext[i] ) ;
+   retvalue[n] = '\0' ;
+   oo_seen = 1 ;
+   kill_next_space = 1 ;
+   if ( insert_abuttal ) {
+      inhibit_delayed_abuttal = 1 ;
+      delayed_symbol = EXFUNCNAME ;
+      SET_NEXTSTART() ;
+      return CONCATENATE ; }
+   expression_ended = 0 ;
+   SET_NEXTSTART() ;
+   return EXFUNCNAME ; }
+
+"[]"[a-zA-Z]+ {
+   int i ;
+   if ( OO_OFF || !in_call )
+      REJECT ;
+   for ( i = 0 ; i < yyleng ; i++ )
+      retvalue[i] = (char) rx_toupper( yytext[i] ) ;
+   retvalue[yyleng] = '\0' ;
+   oo_seen = 1 ;
+   BEGIN other ;
+   in_call = 0 ;
+   kill_next_space = 1 ;
+   SET_NEXTSTART() ;
+   return STRING ; }
+
 {mintext_string}{comment}*\( {
    BEGIN other ;
 

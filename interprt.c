@@ -591,6 +591,12 @@ reinterpret:
 
    secure_this = thisptr;
 
+   /* OO garbage collection happens only here, between clauses */
+   TSD->currlevel->oo_mark = TSD->oo_nobjs;
+   if ( TSD->oo_gc_wanted )
+      oo_gc( TSD, 0 );
+   TSD->currlevel->oo_clause = ++TSD->oo_clause;
+
    TSD->currentnode = thisptr ;
    if ( TSD->trace_stat != 'O' && TSD->trace_stat != 'N' && TSD->trace_stat != 'F' )
    {
@@ -2786,6 +2792,12 @@ proclevel newlevel( tsd_t *TSD, proclevel oldlevel )
       static unsigned long serial = 0;
       level->oo_serial = ++serial;
       level->oo_blocks = NULL;
+      /* GC: objects made from now on by the callee are not in the caller's
+       * half-evaluated clause; see oo_gc() */
+      if ( oldlevel )
+         oldlevel->oo_callmark = TSD->oo_nobjs;
+      level->oo_mark = level->oo_callmark = TSD->oo_nobjs;
+      level->oo_clause = TSD->oo_clause;
    }
    TSD->trace_stat = level->tracestat;
    return level;

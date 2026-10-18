@@ -315,6 +315,8 @@
  98, 15,[Python ist in diesem Build nicht verfügbar]
  98, 16,[Der Block wird verwendet, nachdem die Routine, die ihn erzeugt hat, beendet ist; der Block muss mit PROCEDURE beginnen]
  98, 17,[Methode "%s" würde die Ordnung einer SortedCollection ändern; ADD verwenden]|<name>
+ 98, 18,[%s: die Datei "%s" kann nicht geöffnet werden]|<name>,<file>
+ 98, 19,[Der Arbeitsbereich hat keinen Namen; []SAVE(name) oder []WSID(name) verwenden]
  99,  0,[Übersetzungsfehler]
  99,  1,[Unbekannte Direktive "::%s"]|<name>
  99,  2,[Doppelte ::CLASS "%s"]|<name>

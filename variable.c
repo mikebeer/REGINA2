@@ -4467,3 +4467,83 @@ void oo_expose_except( tsd_t *TSD, int ( *keep )( const streng *, void * ), void
    expose_var( TSD, NULL );
    FreeTSD( names );
 }
+
+/*
+ * OO garbage collection: calls cb for every value in pool, including the
+ * default values and tails of its stems.
+ */
+void oo_scan_pool( const tsd_t *TSD, var_hashtable *pool,
+                   void ( *cb )( void *data, const streng *s ), void *data )
+{
+   variableptr p, r, t, rt;
+   unsigned i, k;
+
+   if ( pool == NULL )
+      return;
+   for ( i = 0; i < pool->size; i++ )
+      for ( p = pool->tbl[i]; p; p = p->next )
+      {
+         r = get_realbox( p );
+         if ( ( r->flag & VFLAG_STR ) && r->value )
+            cb( data, r->value );
+         if ( r->index == NULL )
+            continue;
+         for ( k = 0; k < r->index->size; k++ )
+            for ( t = r->index->tbl[k]; t; t = t->next )
+            {
+               rt = get_realbox( t );
+               if ( ( rt->flag & VFLAG_STR ) && rt->value )
+                  cb( data, rt->value );
+            }
+      }
+}
+
+/* the pool of the reserved variables (.RC, .RESULT, ...) */
+var_hashtable *oo_pool0( const tsd_t *TSD )
+{
+   return ( (var_tsd_t *) TSD->var_tsd )->pool0;
+}
+
+/*
+ * OO workspaces: calls cb for every variable of pool that has a value:
+ * simple variables with tail NULL, the default value of a stem with
+ * tail NULL and name "S.", and every tail of a stem.
+ */
+void oo_pool_walk( const tsd_t *TSD, var_hashtable *pool,
+                   void ( *cb )( void *data, const streng *name, const streng *tail,
+                                 const streng *value ),
+                   void *data )
+{
+   variableptr p, r, t, rt;
+   unsigned i, k;
+
+   if ( pool == NULL )
+      return;
+   for ( i = 0; i < pool->size; i++ )
+      for ( p = pool->tbl[i]; p; p = p->next )
+      {
+         r = get_realbox( p );
+         if ( ( r->flag & VFLAG_NUM ) && !( r->flag & VFLAG_STR ) )
+            expand_to_str( TSD, r );
+         if ( ( r->flag & VFLAG_STR ) && r->value )
+            cb( data, p->name, NULL, r->value );
+         if ( r->index == NULL )
+            continue;
+         for ( k = 0; k < r->index->size; k++ )
+            for ( t = r->index->tbl[k]; t; t = t->next )
+            {
+               rt = get_realbox( t );
+               if ( ( rt->flag & VFLAG_NUM ) && !( rt->flag & VFLAG_STR ) )
+                  expand_to_str( TSD, rt );
+               if ( ( rt->flag & VFLAG_STR ) && rt->value )
+                  cb( data, p->name, t->name, rt->value );
+            }
+      }
+}
+
+/* OO workspaces: the default value of the stem name ("S.") in pool */
+void oo_pool_set_stem( const tsd_t *TSD, var_hashtable *pool, const streng *name,
+                       streng *value )
+{
+   setvalue_stem( TSD, pool, name, value );
+}

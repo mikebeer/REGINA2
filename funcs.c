@@ -234,6 +234,21 @@ static const struct function_type functions[] = {
   { 0,              std_x2c,               "X2C" },
   { 0,              std_x2d,               "X2D" },
   { 0,              std_xrange,            "XRANGE" },
+  /* OO extension: workspace functions, written []NL(2) and so on; '[' sorts after 'Z' */
+  { 0,              oo_q_clear,         "[]CLEAR" },
+  { 0,              oo_q_cr,            "[]CR" },
+  { 0,              oo_q_ex,            "[]EX" },
+  { 0,              oo_q_fx,            "[]FX" },
+  { 0,              oo_q_gc,            "[]GC" },
+  { 0,              oo_q_in,            "[]IN" },
+  { 0,              oo_q_load,          "[]LOAD" },
+  { 0,              oo_q_nl,            "[]NL" },
+  { 0,              oo_q_out,           "[]OUT" },
+  { 0,              oo_q_save,          "[]SAVE" },
+  { 0,              oo_q_wsid,          "[]WSID" },
+  { 0,              oo_q_wsitem,        "[]WSITEM" },
+  { 0,              oo_q_wsobj,         "[]WSOBJ" },
+  { 0,              oo_q_wsvar,         "[]WSVAR" },
   { 0,              NULL,                  NULL }
 } ;
 
@@ -343,7 +358,9 @@ streng *buildtinfunc( tsd_t *TSD, nodeptr thisptr )
                      * deallocplink. FGC
                      */
 
-      if ( TSD->oo_active && ( BIFname == NULL || strcmp( BIFname, "VALUE" ) != 0 ) )
+      /* VALUE and the workspace functions []... take objects as they are */
+      if ( TSD->oo_active && ( BIFname == NULL
+           || ( strcmp( BIFname, "VALUE" ) != 0 && BIFname[0] != '[' ) ) )
       {
          /*
           * OO extension: built-in functions see the STRING of an object.

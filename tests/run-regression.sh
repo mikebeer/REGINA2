@@ -50,7 +50,12 @@ run_suite() {   # $1 = suite name
     # optional interpreter switches for this test in NAME.switches
     sw=""
     [ -f "${f%.rexx}.switches" ] && sw=$(cat "${f%.rexx}.switches")
-    timeout 60 "$REXX" $sw "./$f" </dev/null >"$WORK/raw" 2>&1
+    if [ -f "${f%.rexx}.session" ]; then
+      # a workspace session: NAME.session is typed in, NAME.rexx is ignored
+      timeout 60 "$REXX" $sw --ws <"${f%.rexx}.session" >"$WORK/raw" 2>&1
+    else
+      timeout 60 "$REXX" $sw "./$f" </dev/null >"$WORK/raw" 2>&1
+    fi
     echo "rc=$?" >>"$WORK/raw"
     normalize <"$WORK/raw" >"$WORK/out/$1/${f%.rexx}.out"
   done

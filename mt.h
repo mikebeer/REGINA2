@@ -75,6 +75,9 @@ typedef struct _tsd_t {
    int                     oo_active;          /* set once OO is used     */
    int                     oo_depth;           /* nested method calls     */
    char *                  oo_stack_base;      /* C stack at depth 0      */
+   unsigned long           oo_nobjs;           /* objects created so far  */
+   int                     oo_gc_wanted;       /* collect at next clause  */
+   unsigned long           oo_clause;          /* clauses started so far  */
 } tsd_t;
 
 #if (defined(POSIX) || defined(_POSIX_SOURCE) || defined(_PTHREAD_SEMANTICS)) && (defined(_REENTRANT) || defined(REENTRANT)) && defined(REGINA_REENTRANT)

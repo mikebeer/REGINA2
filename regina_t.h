@@ -351,6 +351,9 @@ typedef struct proclevelbox {
    void *oo_propagate;        /* OO: jmp_buf for SYNTAX errors to pass up */
    unsigned long oo_serial;   /* OO: tells activations apart, see blocks */
    void *oo_blocks;           /* OO: blocks created here, see oo_level_ends */
+   unsigned long oo_mark;     /* OO GC: objects when the clause began */
+   unsigned long oo_callmark; /* OO GC: objects when it called the next level */
+   unsigned long oo_clause;   /* OO GC: number of its current clause */
 } proclevbox ;
 
 typedef struct _ttree { /* bucket list of treenodes which allows ultra fast

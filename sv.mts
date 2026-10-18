@@ -338,6 +338,8 @@
  98, 15,[Python is not available in this build]
  98, 16,[The block is used after the routine that created it has ended; begin the block with PROCEDURE]
  98, 17,[Method "%s" would change the order of a SortedCollection; use ADD]|<name>
+ 98, 18,[%s: cannot open the file "%s"]|<name>,<file>
+ 98, 19,[The workspace has no name; use []SAVE(name) or []WSID(name)]
  99,  0,[Translation error]
  99,  1,[Unknown directive "::%s"]|<name>
  99,  2,[Duplicate ::CLASS "%s"]|<name>

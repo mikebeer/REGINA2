@@ -1,0 +1,22 @@
+DOUBLE
+42
+NL 2: A BG BIN IV L M NAME P S. SC SQ ST X
+NL 3: DOUBLE
+NL 9: POINT
+saved to demo.rxws
+ after clear: [POINT] CLEAR WS
+loaded: A BG BIN DOUBLE IV L M NAME P S. SC SQ ST X wsid: demo
+42 Mike's 00FF one two 2 default
+4 two v 1 x 2
+3 4 The POINT class 2 1 2 (1 to 9 by 2) 9
+(1 2 3) 49 5 3 1
+5 4 3 1
+8 ::routine double
+  return arg(1) * 2
+
+out: part.rxo
+1 1 1 0
+[A BG BIN IV L M NAME P SC SQ ST]
+in: S. X
+42 two default
+rc=0

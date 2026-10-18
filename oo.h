@@ -113,6 +113,24 @@ nodeptr oo_getlabel( const tsd_t *TSD, const streng *name );
 int oo_label_main( const tsd_t *TSD );
 streng *oo_condition_object( tsd_t *TSD, const sigtype *sig );
 void oo_level_ends( tsd_t *TSD, proclevel level );
+long oo_gc( tsd_t *TSD, int forced );
+/* workspace functions []NL ... (see oo.c) */
+streng *oo_q_clear( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_cr( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_ex( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_fx( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_gc( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_in( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_load( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_nl( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_out( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_save( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_wsid( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_wsitem( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_wsobj( tsd_t *TSD, cparamboxptr parms );
+streng *oo_q_wsvar( tsd_t *TSD, cparamboxptr parms );
+int oo_ws_echo( tsd_t *TSD, const streng *envir, const streng *cmd );
+void oo_gc_set_mode( int mode );
 streng *oo_eval_block( tsd_t *TSD, nodeptr thisptr );
 streng *oo_run_block( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
                       var_hashtable *share, void (*setup)( tsd_t *, void * ), void *data );

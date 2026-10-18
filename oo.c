@@ -15,6 +15,7 @@
  */
 
 #include "rexx.h"
+#include <time.h>
 #include "pybridge.h"
 #include <string.h>
 #include <stdio.h>
@@ -166,6 +167,9 @@ typedef struct oo_object {
    struct oo_object *cls;
    int kind;
    int snapshot;                /* internal DO OVER snapshot         */
+   unsigned char gcmark;        /* reached in this collection        */
+   unsigned char gcroot;        /* never collected (held by Python)  */
+   unsigned long condemned;     /* unreachable since this clause     */
    streng *handle;
    streng *objname;             /* set by OBJECTNAME=                */
    streng *aux;                 /* SortedCollection: its sort block  */
@@ -251,6 +255,11 @@ typedef struct oo_tsd {
    struct oo_object *cInterval, *cSet, *cBag, *cSorted;
    struct oo_object *extending;   /* class of the current ::EXTENSION */
    struct oo_object *cMessage;
+   /* garbage collection, see oo_gc() */
+#define OO_PINS 4096
+   unsigned long pins[OO_PINS];
+   int pintop;
+   unsigned long nlive, gc_next, gc_runs, gc_freed;
    oo_blockcode *blocks;
 } oo_tsd;
 
@@ -259,6 +268,7 @@ typedef struct oo_tsd {
 /* ------------------------------------------------------------------ */
 
 static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot );
+static int ws_nbuiltin = -1;    /* built-in classes, see []NL         */
 static streng *m_obj_concat( tsd_t *TSD, struct oo_call *c );
 
 static oo_tsd *get_ot( tsd_t *TSD )
@@ -333,6 +343,9 @@ static streng *cats( tsd_t *TSD, streng *base, const streng *s )
 /* ------------------------------------------------------------------ */
 
 static streng *hdup( tsd_t *TSD, oo_object *o );
+static void gc_count( tsd_t *TSD, struct oo_tsd *ot );
+static int pin_object( tsd_t *TSD, oo_object *o );
+static void unpin_object( tsd_t *TSD, int k );
 
 static oo_frame *new_frame( tsd_t *TSD )
 {
@@ -384,6 +397,7 @@ static oo_object *new_object( tsd_t *TSD, oo_object *cls, int kind )
    o->handle->value[14] = '\003';
    o->handle->value[15] = '\000';
    ot->objs[id] = o;
+   gc_count( TSD, ot );
    return o;
 }
 
@@ -895,13 +909,16 @@ static streng *invoke( tsd_t *TSD, oo_method *m, oo_object *scope,
 
    if ( m->native )
    {
+      int pin = pin_object( TSD, self );
       c.selfstr = selfstr;
       c.self = self;
       c.scope = scope;
       c.name = name;
       c.argc = argc;
       c.argv = argv;
-      return m->native( TSD, &c );
+      result = m->native( TSD, &c );
+      unpin_object( TSD, pin );
+      return result;
    }
    if ( m->flags & MF_CONSTANT )
       return Str_dupTSD( m->constval );
@@ -4845,8 +4862,12 @@ static streng *call_block( tsd_t *TSD, oo_object *b, int argc, const streng **ar
       frame->self = frame->outer->self;
       frame->scope = frame->outer->scope;
    }
-   r = oo_run_block( TSD, code->body, make_plist( TSD, argc, argv ), frame, share,
-                     code->procedure ? NULL : block_setup, code );
+   {
+      int pin = pin_object( TSD, b );
+      r = oo_run_block( TSD, code->body, make_plist( TSD, argc, argv ), frame, share,
+                        code->procedure ? NULL : block_setup, code );
+      unpin_object( TSD, pin );
+   }
    FreeTSD( frame );
    return r;
 }
@@ -5540,6 +5561,363 @@ static void init_condition_classes( tsd_t *TSD, oo_tsd *ot )
 }
 
 /* ------------------------------------------------------------------ */
+/* Garbage collection                                                 */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Objects are referenced by handle strings that are copied freely, so
+ * they can't be counted. oo_gc() marks every object whose handle is
+ * stored somewhere reachable and frees the others. It runs only between
+ * clauses (see interpret()), when the number of objects has doubled since
+ * the last collection.
+ *
+ * Roots: the variables of all active procedure levels (with stems and
+ * arguments), the reserved variables, the environment, all classes, the
+ * receivers of native methods that are running (pinned), and the objects
+ * a suspended clause may still hold: for every level that is waiting for
+ * a call it made, the objects created between the start of its clause and
+ * that call (oo_mark .. oo_callmark).
+ *
+ * Handles of freed objects are never reused: a stale handle (in the
+ * external queue, say) is just a string that names no object.
+ *
+ * Modes: 1 on (default), 0 off, 2 stress (collect before every clause,
+ * for testing). --gc, --no-gc and REGINA_GC=on/off/stress set it.
+ */
+static int gc_mode = -1;                /* -1: not yet decided */
+
+void oo_gc_set_mode( int mode )
+{
+   gc_mode = mode;
+}
+
+static int gc_get_mode( void )
+{
+   if ( gc_mode < 0 )
+   {
+      const char *e = getenv( "REGINA_GC" );
+      gc_mode = 1;
+      if ( e )
+      {
+         if ( oo_word_is( e, "0" ) || oo_word_is( e, "OFF" ) || oo_word_is( e, "NO" ) )
+            gc_mode = 0;
+         else if ( oo_word_is( e, "STRESS" ) )
+            gc_mode = 2;
+      }
+   }
+   return gc_mode;
+}
+
+#define GC_MIN_OBJECTS 10000
+
+typedef struct {
+   tsd_t *TSD;
+   oo_tsd *ot;
+   oo_object **stack;
+   long n, cap;
+} gc_state;
+
+static void gc_push( gc_state *g, oo_object *o )
+{
+   tsd_t *TSD = g->TSD;
+
+   if ( o == NULL || o->gcmark )
+      return;
+   o->gcmark = 1;
+   if ( g->n >= g->cap )
+   {
+      long nc = g->cap ? g->cap * 2 : 1024;
+      oo_object **ns = (oo_object **) MallocTSD( nc * sizeof( oo_object * ) );
+      if ( g->n )
+         memcpy( ns, g->stack, g->n * sizeof( oo_object * ) );
+      if ( g->stack )
+         FreeTSD( g->stack );
+      g->stack = ns;
+      g->cap = nc;
+   }
+   g->stack[g->n++] = o;
+}
+
+static void gc_value( void *data, const streng *s )
+{
+   gc_state *g = (gc_state *) data;
+   if ( s && OO_LOOKS_LIKE_HANDLE( s ) )
+      gc_push( g, obj_of( g->TSD, s ) );
+}
+
+static void gc_scan_pool( gc_state *g, var_hashtable *pool )
+{
+   extern void oo_scan_pool( const tsd_t *TSD, var_hashtable *pool,
+                             void ( *cb )( void *data, const streng *s ), void *data );
+   oo_scan_pool( g->TSD, pool, gc_value, g );
+}
+
+/* marks what object o refers to */
+static void gc_children( gc_state *g, oo_object *o )
+{
+   oo_scope *sc;
+   long i;
+
+   for ( sc = o->scopes; sc; sc = sc->next )
+   {
+      gc_scan_pool( g, sc->pool );
+      gc_push( g, sc->superproxy );
+   }
+   if ( o->aux )
+      gc_value( g, o->aux );
+   switch ( o->kind )
+   {
+      case OK_ARRAY:
+      case OK_QUEUE:
+         for ( i = 0; i < o->u.a.size; i++ )
+            gc_value( g, o->u.a.v[i] );
+         break;
+      case OK_DIRECTORY:
+      case OK_TABLE:
+      {
+         oo_entry *e;
+         if ( o->u.h )
+            for ( e = o->u.h->first; e; e = e->onext )
+            {
+               gc_value( g, e->key );
+               gc_value( g, e->value );
+            }
+         break;
+      }
+      case OK_STEM:
+         gc_scan_pool( g, o->u.pool );
+         break;
+      case OK_CONS:
+         gc_value( g, o->u.cons.car );
+         gc_value( g, o->u.cons.cdr );
+         break;
+      case OK_SUPPLIER:
+         gc_push( g, o->u.sp.items );
+         gc_push( g, o->u.sp.indexes );
+         break;
+      case OK_SUPER:
+         gc_push( g, o->u.sup.self );
+         gc_push( g, o->u.sup.start );
+         break;
+      case OK_BLOCK:
+         gc_scan_pool( g, o->u.blk.kept );
+         break;
+      case OK_STRING:
+      case OK_BUFFER:
+         gc_value( g, o->u.s );
+         break;
+      default:
+         break;
+   }
+}
+
+/* unlinks block b from the list of blocks of its creator */
+static void gc_unlink_block( oo_object *b )
+{
+   proclevel home = b->u.blk.home;
+   oo_object **pp;
+
+   if ( home == NULL )
+      return;
+   for ( pp = (oo_object **) &home->oo_blocks; *pp; pp = &( *pp )->u.blk.nextblock )
+      if ( *pp == b )
+      {
+         *pp = b->u.blk.nextblock;
+         return;
+      }
+}
+
+/* frees everything an object owns, then the object */
+static void gc_free( tsd_t *TSD, oo_object *o )
+{
+   oo_scope *s, *sn;
+
+   switch ( o->kind )
+   {
+      case OK_DIRECTORY:
+      case OK_TABLE:
+         if ( o->u.h )
+         {
+            while ( o->u.h->first )
+            {
+               streng *v = h_remove( TSD, o->u.h, o->u.h->first->key );
+               Free_stringTSD( v );
+            }
+            if ( o->u.h->tbl )
+               FreeTSD( o->u.h->tbl );
+            FreeTSD( o->u.h );
+         }
+         break;
+      case OK_STRING:
+      case OK_BUFFER:
+         if ( o->u.s )
+            Free_stringTSD( o->u.s );
+         break;
+      case OK_STEM:
+         if ( o->u.pool )
+            kill_variables( TSD, o->u.pool );
+         break;
+      case OK_PYOBJ:
+         pyb_release( o->u.pyref );
+         break;
+      case OK_BLOCK:
+         gc_unlink_block( o );
+         break;
+      default:
+         break;
+   }
+   for ( s = o->scopes; s; s = sn )
+   {
+      sn = s->next;
+      if ( s->pool )
+         kill_variables( TSD, s->pool );
+      FreeTSD( s );
+   }
+   if ( o->objname )
+      Free_stringTSD( o->objname );
+   if ( o->aux )
+      Free_stringTSD( o->aux );
+   free_object( TSD, o );
+}
+
+/*
+ * Collects. forced: also when the mode is off ([]GC()). Returns the number
+ * of objects freed, or -1 if a collection is not possible now.
+ */
+long oo_gc( tsd_t *TSD, int forced )
+{
+   extern var_hashtable *oo_pool0( const tsd_t *TSD );
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   gc_state g;
+   proclevel lev;
+   paramboxptr a;
+   unsigned long i, oldest = (unsigned long) -1, now = TSD->oo_clause;
+   long freed = 0;
+   int k;
+
+   TSD->oo_gc_wanted = 0;
+   if ( ot == NULL || ( !forced && gc_get_mode() == 0 ) )
+      return -1;
+   /* an external Rexx program is running: the caller's levels are hidden */
+   if ( TSD->systeminfo == NULL || TSD->systeminfo->previous )
+      return -1;
+
+   g.TSD = TSD;
+   g.ot = ot;
+   g.stack = NULL;
+   g.n = g.cap = 0;
+   for ( i = 1; i <= ot->nobjs; i++ )
+      if ( ot->objs[i] )
+         ot->objs[i]->gcmark = 0;
+
+   /* roots */
+   gc_push( &g, ot->nil );
+   gc_push( &g, ot->environment );
+   for ( k = 0; k < ot->nclasses; k++ )
+      gc_push( &g, ot->classes[k] );
+   for ( k = 0; k < OO_PINS; k++ )
+      if ( ot->pins[k] && ot->pins[k] <= ot->nobjs )
+         gc_push( &g, ot->objs[ot->pins[k]] );
+   for ( i = 1; i <= ot->nobjs; i++ )
+      if ( ot->objs[i] && ot->objs[i]->gcroot )
+         gc_push( &g, ot->objs[i] );
+   gc_scan_pool( &g, oo_pool0( TSD ) );
+   for ( lev = TSD->currlevel; lev; lev = lev->prev )
+   {
+      oo_frame *f = (oo_frame *) lev->oo_ctx;
+      gc_scan_pool( &g, lev->vars );
+      for ( a = lev->args; a; a = a->next )
+      {
+         gc_value( &g, a->value );
+         if ( a->stempool )
+            gc_scan_pool( &g, a->stempool );
+      }
+      if ( f )
+         gc_push( &g, f->self );
+      if ( lev != TSD->currlevel )
+      {
+         if ( lev->oo_clause < oldest )
+            oldest = lev->oo_clause;
+         /* what this level's unfinished clause may hold */
+         for ( i = lev->oo_mark + 1; i <= lev->oo_callmark && i <= ot->nobjs; i++ )
+            gc_push( &g, ot->objs[i] );
+      }
+   }
+
+   /* mark */
+   while ( g.n > 0 )
+      gc_children( &g, g.stack[--g.n] );
+   if ( g.stack )
+      FreeTSD( g.stack );
+
+   /*
+    * sweep. An unreachable object may still be held by a clause that is
+    * waiting for a call: in "a + f()" f may drop the last variable that
+    * refers to a. Such an object is condemned and freed only by a later
+    * collection, when every clause that was waiting has ended.
+    */
+   for ( i = 1; i <= ot->nobjs; i++ )
+   {
+      oo_object *o = ot->objs[i];
+      if ( o == NULL || o->kind == OK_CLASS )
+         continue;
+      if ( o->gcmark )
+         o->condemned = 0;
+      else if ( o->condemned && o->condemned < oldest )
+      {
+         gc_free( TSD, o );
+         freed++;
+      }
+      else if ( !o->condemned )
+         o->condemned = now ? now : 1;
+   }
+   ot->nlive -= freed;
+   ot->gc_next = ot->nlive * 2 > GC_MIN_OBJECTS ? ot->nlive * 2 : GC_MIN_OBJECTS;
+   ot->gc_runs++;
+   ot->gc_freed += freed;
+   if ( gc_get_mode() == 2 )
+      TSD->oo_gc_wanted = 1;
+   return freed;
+}
+
+/* called by new_object */
+static void gc_count( tsd_t *TSD, oo_tsd *ot )
+{
+   int mode = gc_get_mode();
+
+   ot->nlive++;
+   TSD->oo_nobjs = ot->nobjs;
+   if ( ot->gc_next == 0 )
+      ot->gc_next = GC_MIN_OBJECTS;
+   if ( ( mode == 1 && ot->nlive >= ot->gc_next ) || mode == 2 )
+      TSD->oo_gc_wanted = 1;
+}
+
+/*
+ * The receivers of native methods that are running are roots: their C
+ * code may hold the object after the last handle is gone. A ring of ids:
+ * an error that jumps out of a method leaves its pin behind, which only
+ * keeps an object a little longer.
+ */
+static int pin_object( tsd_t *TSD, oo_object *o )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   int k = ot->pintop;
+
+   ot->pins[k] = o ? o->id : 0;
+   ot->pintop = ( k + 1 ) % OO_PINS;
+   return k;
+}
+
+static void unpin_object( tsd_t *TSD, int k )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+
+   ot->pins[k] = 0;
+   ot->pintop = k;
+}
+
+/* ------------------------------------------------------------------ */
 /* Python: .Python and .PyObject on top of pybridge.c                 */
 /* ------------------------------------------------------------------ */
 
@@ -5722,7 +6100,8 @@ static pyref to_py( tsd_t *TSD, const streng *s, int depth )
       case OK_PYOBJ:
          return pyb_dup( o->u.pyref );
       case OK_BLOCK:
-         /* a Python callable that runs the block */
+         /* a Python callable that runs the block; Python may keep it */
+         o->gcroot = 1;
          return pyb_rexx_callable( (long) o->id );
       case OK_NIL:
          return pyb_none();
@@ -6425,6 +6804,7 @@ static void init_builtin_classes( tsd_t *TSD, oo_tsd *ot )
    init_more_collections( TSD, ot );
    init_condition_classes( TSD, ot );
    init_python( TSD, ot );
+   ws_nbuiltin = ot->nclasses;   /* classes after these are the program's */
 
    /* Object */
    add_methods( TSD, ot->cObject, "INIT", m_nothing, 0 );
@@ -7198,6 +7578,220 @@ static const char lisp_library[] =
    "  return .cons~read(s)\n"
    "\n";
 
+/* the workspace session, see lib/session.rexx and rexx --ws */
+static const char session_program[] =
+   "/* OOREGINA */\n"
+   "/*\n"
+   " * The workspace session of Regina OO, started with \"rexx --ws [wsid]\".\n"
+   " * Lines are Rexx clauses; an expression on its own shows its value, as in\n"
+   " * APL (and the environment WS shows commands). Lines that begin with \"::\"\n"
+   " * define routines and classes up to an empty line ([]FX). System commands\n"
+   " * begin with \")\": )SAVE )LOAD )OUT )IN )VARS )FNS )CLASSES )ERASE )WSID\n"
+   " * )CLEAR )SHOW )GC )HELP )OFF. All variables of the session are named\n"
+   " * __WS.something, which []NL and []SAVE leave out.\n"
+   " */\n"
+   "parse arg __ws.arg\n"
+   "say 'Regina OO workspace session. )HELP lists the commands, )OFF ends it.'\n"
+   "address WS\n"
+   "if __ws.arg \\= '' then do\n"
+   "   signal on syntax name __wsStartErr\n"
+   "   call __wsCommand ')LOAD' __ws.arg\n"
+   "end\n"
+   "__wsLoop:\n"
+   "__ws.eof = 0\n"
+   "call on notready name __wsEOF\n"
+   "signal on syntax name __wsErr\n"
+   "signal on halt name __wsHalt\n"
+   "do forever\n"
+   "   call charout , '      '\n"
+   "   __ws.line = linein()\n"
+   "   if __ws.eof = 1 then\n"
+   "      exit 0\n"
+   "   if strip(__ws.line) == '' then\n"
+   "      iterate\n"
+   "   if left(strip(__ws.line), 1) == ')' then do\n"
+   "      call __wsCommand strip(__ws.line)\n"
+   "      iterate\n"
+   "   end\n"
+   "   if left(strip(__ws.line), 2) == '::' then do\n"
+   "      /* a definition: up to an empty line */\n"
+   "      __ws.def = __ws.line\n"
+   "      do forever\n"
+   "         call charout , '    : '\n"
+   "         __ws.more = linein()\n"
+   "         if strip(__ws.more) == '' | __ws.eof = 1 then\n"
+   "            leave\n"
+   "         __ws.def = __ws.def || '0a'x || __ws.more\n"
+   "      end\n"
+   "      say []FX(__ws.def)\n"
+   "      iterate\n"
+   "   end\n"
+   "   if __wsIsInstruction(__ws.line) then\n"
+   "      interpret __ws.line\n"
+   "   else do\n"
+   "      /* an expression: show its value; a message without result runs */\n"
+   "      __ws.trying = 1\n"
+   "      interpret '__ws.value =' __ws.line\n"
+   "      __ws.trying = 0\n"
+   "      say __ws.value\n"
+   "      drop __ws.value\n"
+   "   end\n"
+   "end\n"
+   "\n"
+   "__wsErr:\n"
+   "   if __ws.trying = 1 & rc = 91 then do\n"
+   "      /* \"obj~method\" that returns nothing: an instruction after all */\n"
+   "      __ws.trying = 0\n"
+   "      signal on syntax name __wsErr\n"
+   "      interpret __ws.line\n"
+   "      signal __wsLoop\n"
+   "   end\n"
+   "   __ws.trying = 0\n"
+   "   if condition('D') == '' then\n"
+   "      say 'Error' rc':' errortext(rc)\n"
+   "   else\n"
+   "      say condition('D')\n"
+   "   signal __wsLoop\n"
+   "\n"
+   "__wsStartErr:\n"
+   "   say condition('D')\n"
+   "   signal __wsLoop\n"
+   "\n"
+   "__wsEOF:   /* the end of the input ends the session */\n"
+   "   __ws.eof = 1\n"
+   "   return\n"
+   "\n"
+   "__wsHalt:\n"
+   "   say 'INTERRUPT'\n"
+   "   signal __wsLoop\n"
+   "\n"
+   "__wsCommand:   /* no PROCEDURE: the commands work on the session's variables */\n"
+   "   parse arg ')' __ws.cmd __ws.rest\n"
+   "   __ws.cmd = translate(__ws.cmd)\n"
+   "   __ws.rest = strip(__ws.rest)\n"
+   "   select\n"
+   "      when abbrev('SAVE', __ws.cmd, 2) then do\n"
+   "         if __ws.rest == '' then\n"
+   "            say 'SAVED' []SAVE()\n"
+   "         else\n"
+   "            say 'SAVED' []SAVE(__ws.rest)\n"
+   "      end\n"
+   "      when abbrev('LOAD', __ws.cmd, 2) then do\n"
+   "         call []LOAD __ws.rest\n"
+   "         say 'LOADED' []WSID()\n"
+   "      end\n"
+   "      when abbrev('OUT', __ws.cmd, 2) then do\n"
+   "         parse var __ws.rest __ws.file __ws.names\n"
+   "         if __ws.names == '' then\n"
+   "            say 'WRITTEN' []OUT(__ws.file)\n"
+   "         else\n"
+   "            say 'WRITTEN' []OUT(__ws.file, __ws.names)\n"
+   "      end\n"
+   "      when abbrev('IN', __ws.cmd, 2) then do\n"
+   "         parse var __ws.rest __ws.file __ws.names\n"
+   "         if __ws.names == '' then\n"
+   "            say []IN(__ws.file)\n"
+   "         else\n"
+   "            say []IN(__ws.file, __ws.names)\n"
+   "      end\n"
+   "      when abbrev('VARS', __ws.cmd, 1) then say []NL(2)\n"
+   "      when abbrev('FNS', __ws.cmd, 1) then say []NL(3)\n"
+   "      when abbrev('CLASSES', __ws.cmd, 2) then say []NL(9)\n"
+   "      when abbrev('ERASE', __ws.cmd, 1) then call []EX __ws.rest\n"
+   "      when abbrev('WSID', __ws.cmd, 1) then do\n"
+   "         if __ws.rest == '' then\n"
+   "            say []WSID()\n"
+   "         else\n"
+   "            say 'WAS' []WSID(__ws.rest)\n"
+   "      end\n"
+   "      when abbrev('CLEAR', __ws.cmd, 2) then do\n"
+   "         call []CLEAR\n"
+   "         say 'CLEAR WS'\n"
+   "      end\n"
+   "      when abbrev('SHOW', __ws.cmd, 2) then say []CR(__ws.rest)\n"
+   "      when abbrev('GC', __ws.cmd, 1) then say []GC() 'objects freed'\n"
+   "      when abbrev('OFF', __ws.cmd, 1) | abbrev('CONTINUE', __ws.cmd, 4) then exit 0\n"
+   "      when abbrev('HELP', __ws.cmd, 1) then do\n"
+   "         say ')SAVE [wsid]          save the workspace in wsid.rxws'\n"
+   "         say ')LOAD wsid            clear, then load wsid.rxws'\n"
+   "         say ')OUT file [names]     write all or some names to file.rxo'\n"
+   "         say ')IN file [names]      read all or some names from a file'\n"
+   "         say ')VARS )FNS )CLASSES   list variables, routines, classes'\n"
+   "         say ')ERASE names          erase variables, routines, classes'\n"
+   "         say ')SHOW name            show the source of a routine or class'\n"
+   "         say ')WSID [name]          show or set the workspace name'\n"
+   "         say ')CLEAR                empty workspace'\n"
+   "         say ')GC                   collect unused objects now'\n"
+   "         say ')OFF                  end the session'\n"
+   "         say 'A line with an expression shows its value. Lines that start'\n"
+   "         say 'with :: define routines and classes, up to an empty line.'\n"
+   "      end\n"
+   "      otherwise say 'INCORRECT COMMAND'\n"
+   "   end\n"
+   "   return\n"
+   "\n"
+   "/* 1 if the line is an instruction or an assignment, 0 for an expression */\n"
+   "__wsIsInstruction:\n"
+   "   parse arg __ws.l\n"
+   "   parse upper var __ws.l __ws.w1 .\n"
+   "   if wordpos(__ws.w1, 'ADDRESS ARG CALL DO DROP EXIT IF INTERPRET ITERATE LEAVE',\n"
+   "      'NOP NUMERIC OPTIONS PARSE PROCEDURE PULL PUSH QUEUE RETURN SAY SELECT',\n"
+   "      'SIGNAL TRACE UPPER USE EXPOSE LOOP END WHEN OTHERWISE THEN ELSE') > 0 then\n"
+   "      return 1\n"
+   "   /* several clauses; a label */\n"
+   "   __ws.q = ''\n"
+   "   __ws.depth = 0\n"
+   "   do __ws.i = 1 to length(__ws.l)\n"
+   "      __ws.c = substr(__ws.l, __ws.i, 1)\n"
+   "      if __ws.q \\== '' then do\n"
+   "         if __ws.c == __ws.q then __ws.q = ''\n"
+   "         iterate\n"
+   "      end\n"
+   "      select\n"
+   "         when __ws.c == \"'\" | __ws.c == '\"' then __ws.q = __ws.c\n"
+   "         when __ws.c == '(' | __ws.c == '[' | __ws.c == '{' then __ws.depth = __ws.depth + 1\n"
+   "         when __ws.c == ')' | __ws.c == ']' | __ws.c == '}' then __ws.depth = __ws.depth - 1\n"
+   "         when __ws.depth > 0 then nop\n"
+   "         when __ws.c == ';' then return 1\n"
+   "         when __ws.c == ':' & __ws.i > 1 & substr(__ws.l, __ws.i + 1, 1) \\== ':' then\n"
+   "            if verify(strip(left(__ws.l, __ws.i - 1)), ,\n"
+   "               'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.!?') = 0 then\n"
+   "               return 1\n"
+   "         when __ws.c == '=' then do\n"
+   "            /* \"target = value\": the target has no blanks outside brackets */\n"
+   "            __ws.prev = substr(__ws.l, max(__ws.i - 1, 1), 1)\n"
+   "            if __ws.i = 1 | pos(__ws.prev, '\\<>=') > 0 then return 0\n"
+   "            if substr(__ws.l, __ws.i + 1, 1) == '=' then return 0\n"
+   "            return __wsNoBlanks(strip(left(__ws.l, __ws.i - 1)))\n"
+   "         end\n"
+   "         otherwise nop\n"
+   "      end\n"
+   "   end\n"
+   "   return 0\n"
+   "\n"
+   "__wsNoBlanks:\n"
+   "   parse arg __ws.t\n"
+   "   __ws.d = 0\n"
+   "   __ws.q = ''\n"
+   "   do __ws.k = 1 to length(__ws.t)\n"
+   "      __ws.c = substr(__ws.t, __ws.k, 1)\n"
+   "      if __ws.q \\== '' then do\n"
+   "         if __ws.c == __ws.q then __ws.q = ''\n"
+   "         iterate\n"
+   "      end\n"
+   "      if __ws.c == \"'\" | __ws.c == '\"' then __ws.q = __ws.c\n"
+   "      else if pos(__ws.c, '([{') > 0 then __ws.d = __ws.d + 1\n"
+   "      else if pos(__ws.c, ')]}') > 0 then __ws.d = __ws.d - 1\n"
+   "      else if __ws.c == ' ' & __ws.d = 0 then return 0\n"
+   "   end\n"
+   "   return __ws.t \\== ''\n"
+   "\n";
+
+const char *oo_session_source( void )
+{
+   return session_program;
+}
+
 /* the built-in libraries: lisp (LISP routines) and python (.Python is built in) */
 static const char python_library[] = "/* .Python and .PyObject are built-in classes */\n";
 static const struct { const char *name; const char *src; } builtin_libs[] = {
@@ -7325,6 +7919,1432 @@ static void load_required( tsd_t *TSD, const streng *name, oo_program *from, nod
    oo_exit_protected( TSD, run_prolog, &pd );
    ot->loading = NULL;
    FreeTSD( frame );
+}
+
+/* ------------------------------------------------------------------ */
+/* Workspaces: []NL, []FX, []SAVE, []LOAD, []OUT, []IN ...            */
+/* ------------------------------------------------------------------ */
+
+/*
+ * A workspace in the sense of APL: the variables of the current
+ * procedure level (with the objects they refer to) and the routines and
+ * classes defined with []FX. []SAVE writes it to a file, []LOAD reads it
+ * back after []CLEAR, []OUT and []IN do the same for some or all names
+ * without clearing. The file is Rexx-like text:
+ *
+ *   ::fx NAME ...          a definition, up to ::endfx
+ *   ::objects              statements that make the objects
+ *   ::var NAME             statements that set the variable NAME
+ *   ::wsid NAME
+ *
+ * Variables named __WS.* belong to the workspace machinery (the session
+ * and the loader) and are never listed or saved.
+ */
+
+typedef struct oo_wsdef {
+   struct oo_wsdef *next;
+   streng *name;                /* uppercase                          */
+   int kind;                    /* 3 routine, 9 class                 */
+   streng *src;
+} oo_wsdef;
+
+static oo_wsdef *ws_defs;       /* definitions made with []FX         */
+static streng *ws_id;           /* the workspace name                 */
+
+static const streng *q_arg( cparamboxptr p, int i )
+{
+   while ( p && i-- > 0 )
+      p = p->next;
+   return p ? p->value : NULL;
+}
+
+static int q_argc( cparamboxptr p )
+{
+   int n = 0, last = 0;
+   for ( ; p; p = p->next )
+   {
+      n++;
+      if ( p->value )
+         last = n;
+   }
+   return last;
+}
+
+static streng *q_need( tsd_t *TSD, cparamboxptr p, int i, const char *bif )
+{
+   const streng *v = q_arg( p, i );
+   streng *s;
+   if ( v == NULL )
+      exiterror( ERR_INCORRECT_CALL, 3, bif, i + 1 );
+   s = oo_stringify( TSD, v );
+   return s ? s : Str_dupTSD( v );
+}
+
+static int ws_internal_name( const streng *name )
+{
+   return name->len >= 4 && rx_toupper( name->value[0] ) == '_' && name->value[1] == '_'
+       && rx_toupper( name->value[2] ) == 'W' && rx_toupper( name->value[3] ) == 'S';
+}
+
+/* blank-separated, sorted list of names */
+typedef struct { streng **v; long n, cap; } namelist;
+
+static void nl_add( tsd_t *TSD, namelist *l, const streng *name )
+{
+   long i;
+   for ( i = 0; i < l->n; i++ )
+      if ( str_eq( l->v[i], name ) )
+         return;
+   if ( l->n >= l->cap )
+   {
+      long nc = l->cap ? l->cap * 2 : 32;
+      streng **nv = (streng **) MallocTSD( nc * sizeof( streng * ) );
+      if ( l->n )
+         memcpy( nv, l->v, l->n * sizeof( streng * ) );
+      if ( l->v )
+         FreeTSD( l->v );
+      l->v = nv;
+      l->cap = nc;
+   }
+   l->v[l->n++] = Str_dupTSD( name );
+}
+
+static streng *nl_result( tsd_t *TSD, namelist *l )
+{
+   streng *r = Str_creTSD( "" );
+   long i;
+
+   if ( l->n )
+      qsort( l->v, l->n, sizeof( streng * ), cmp_strings );
+   for ( i = 0; i < l->n; i++ )
+   {
+      if ( i )
+         r = catc( TSD, r, " " );
+      r = cats( TSD, r, l->v[i] );
+      Free_stringTSD( l->v[i] );
+   }
+   if ( l->v )
+      FreeTSD( l->v );
+   return r;
+}
+
+typedef struct { tsd_t *TSD; namelist *l; } nl_walk;
+
+static void nl_var_cb( void *data, const streng *name, const streng *tail, const streng *value )
+{
+   nl_walk *w = (nl_walk *) data;
+   (void) value;
+   (void) tail;
+   if ( ws_internal_name( name ) )
+      return;
+   if ( str_eqc( name, "RC" ) || str_eqc( name, "RESULT" ) || str_eqc( name, "SIGL" ) )
+      return;
+   nl_add( w->TSD, w->l, name );
+}
+
+static int ws_user_class( oo_tsd *ot, int i )
+{
+   return i >= ws_nbuiltin && ot->classes[i] != ot->cNilList;
+}
+
+/* []NL([classes]): 2 variables, 3 routines, 9 classes; default 2 3 9 */
+streng *oo_q_nl( tsd_t *TSD, cparamboxptr parms )
+{
+   extern void oo_pool_walk( const tsd_t *TSD, var_hashtable *pool,
+                             void ( *cb )( void *, const streng *, const streng *,
+                                           const streng * ), void *data );
+   oo_tsd *ot = get_ot( TSD );
+   const streng *c = q_arg( parms, 0 );
+   int want2 = 1, want3 = 1, want9 = 1, i;
+   namelist l;
+   nl_walk w;
+   oo_routine *r;
+
+   TSD->oo_active = 1;
+   if ( c && c->len )
+   {
+      want2 = memchr( c->value, '2', c->len ) != NULL;
+      want3 = memchr( c->value, '3', c->len ) != NULL;
+      want9 = memchr( c->value, '9', c->len ) != NULL;
+   }
+   memset( &l, 0, sizeof( l ) );
+   w.TSD = TSD;
+   w.l = &l;
+   if ( want2 )
+      oo_pool_walk( TSD, TSD->currlevel->vars, nl_var_cb, &w );
+   if ( want3 )
+      for ( r = ot->routines; r; r = r->next )
+         nl_add( TSD, &l, r->name );
+   if ( want9 )
+      for ( i = 0; i < ot->nclasses; i++ )
+         if ( ws_user_class( ot, i ) )
+            nl_add( TSD, &l, ot->classes[i]->u.c->id );
+   return nl_result( TSD, &l );
+}
+
+/* loads a program from a string: its routines and classes, its prolog */
+static void load_source( tsd_t *TSD, const streng *src, const char *pname )
+{
+   oo_tsd *ot = (oo_tsd *) TSD->oo_tsd;
+   internal_parser_type parsing;
+   streng *text;
+   oo_program *p;
+   oo_frame *frame;
+   prolog_data pd;
+
+   /* the marker: the OO keywords are on in the definition */
+   text = Str_creTSD( "/* OOREGINA */ " );
+   text = cats( TSD, text, src );
+   fetch_string( TSD, text, &parsing );
+   Free_stringTSD( text );
+   if ( parsing.result != 0 )
+      exiterror( ERR_YACC_SYNTAX, 1, parsing.tline );
+   p = (oo_program *) MallocTSD( sizeof( oo_program ) );
+   memset( p, 0, sizeof( oo_program ) );
+   p->tree = parsing;
+   p->file = Str_creTSD( pname );
+   p->next = ot->programs;
+   ot->programs = p;
+   collect_labels( TSD, parsing.root, &p->labels, NULL );
+   frame = new_frame( TSD );
+   frame->labels = &p->labels;
+   ot->loading = ( parsing.root && parsing.root->type == X_OO_INIT ) ? p : NULL;
+   pd.p = p;
+   pd.frame = frame;
+   oo_exit_protected( TSD, run_prolog, &pd );
+   ot->loading = NULL;
+   FreeTSD( frame );
+}
+
+static void ws_register( tsd_t *TSD, const streng *name, int kind, const streng *src )
+{
+   oo_wsdef *d, **pp;
+
+   for ( pp = &ws_defs; *pp; )
+      if ( str_eq( ( *pp )->name, name ) )
+      {
+         d = *pp;
+         *pp = d->next;
+         Free_stringTSD( d->name );
+         Free_stringTSD( d->src );
+         FreeTSD( d );
+      }
+      else
+         pp = &( *pp )->next;
+   d = (oo_wsdef *) MallocTSD( sizeof( oo_wsdef ) );
+   d->name = Str_dupTSD( name );
+   d->kind = kind;
+   d->src = Str_dupTSD( src );
+   d->next = NULL;
+   for ( pp = &ws_defs; *pp; pp = &( *pp )->next )
+      ;
+   *pp = d;
+}
+
+/* defines the routines and classes of src; returns their names */
+static streng *ws_define( tsd_t *TSD, const streng *src )
+{
+   oo_tsd *ot = get_ot( TSD );
+   oo_routine *oldr = ot->routines, *r;
+   int oldc = ot->nclasses, i;
+   static int serial = 0;
+   char pname[40];
+   namelist l;
+
+   TSD->oo_active = 1;
+   if ( ws_nbuiltin < 0 )
+      ws_nbuiltin = ot->nclasses;
+   sprintf( pname, "<workspace %d>", ++serial );
+   load_source( TSD, src, pname );
+   memset( &l, 0, sizeof( l ) );
+   for ( r = ot->routines; r && r != oldr; r = r->next )
+   {
+      ws_register( TSD, r->name, 3, src );
+      nl_add( TSD, &l, r->name );
+   }
+   for ( i = oldc; i < ot->nclasses; i++ )
+   {
+      ws_register( TSD, ot->classes[i]->u.c->id, 9, src );
+      nl_add( TSD, &l, ot->classes[i]->u.c->id );
+   }
+   return nl_result( TSD, &l );
+}
+
+/* []FX(source [, more lines...]): defines routines and classes */
+streng *oo_q_fx( tsd_t *TSD, cparamboxptr parms )
+{
+   streng *src = Str_creTSD( "" ), *r;
+   int i, n = q_argc( parms );
+
+   for ( i = 0; i < n; i++ )
+   {
+      const streng *v = q_arg( parms, i );
+      if ( i )
+         src = catc( TSD, src, "\n" );
+      if ( v )
+         src = cats( TSD, src, v );
+   }
+   r = ws_define( TSD, src );
+   Free_stringTSD( src );
+   return r;
+}
+
+/* []CR(name): the source of a definition made with []FX */
+streng *oo_q_cr( tsd_t *TSD, cparamboxptr parms )
+{
+   streng *name = q_need( TSD, parms, 0, "[]CR" );
+   oo_wsdef *d;
+
+   mem_upper( name->value, name->len );
+   for ( d = ws_defs; d; d = d->next )
+      if ( str_eq( d->name, name ) )
+      {
+         Free_stringTSD( name );
+         return Str_dupTSD( d->src );
+      }
+   Free_stringTSD( name );
+   return nullstringptr();
+}
+
+/* removes the routine or class name; 1 if there was one */
+static int ws_erase_def( tsd_t *TSD, const streng *name )
+{
+   oo_tsd *ot = get_ot( TSD );
+   oo_routine **rp;
+   oo_wsdef **pp, *d;
+   int found = 0, i;
+
+   for ( rp = &ot->routines; *rp; )
+      if ( str_eq( ( *rp )->name, name ) )
+      {
+         *rp = ( *rp )->next;     /* its body stays with its program */
+         found = 1;
+      }
+      else
+         rp = &( *rp )->next;
+   for ( i = 0; i < ot->nclasses; i++ )
+      if ( ws_user_class( ot, i ) && str_eq( ot->classes[i]->u.c->id, name ) )
+      {
+         streng *old = h_remove( TSD, ot->environment->u.h, name );
+         if ( old )
+            Free_stringTSD( old );
+         /* the class object stays for its instances; it is not listed */
+         memmove( ot->classes + i, ot->classes + i + 1,
+                  ( ot->nclasses - i - 1 ) * sizeof( oo_object * ) );
+         ot->nclasses--;
+         i--;
+         found = 1;
+      }
+   for ( pp = &ws_defs; *pp; )
+      if ( str_eq( ( *pp )->name, name ) )
+      {
+         d = *pp;
+         *pp = d->next;
+         Free_stringTSD( d->name );
+         Free_stringTSD( d->src );
+         FreeTSD( d );
+      }
+      else
+         pp = &( *pp )->next;
+   return found;
+}
+
+static int ws_var_exists( tsd_t *TSD, const streng *name )
+{
+   extern const streng *oo_peek_simple( tsd_t *TSD, const streng *name );
+   if ( name->len && name->value[name->len - 1] == '.' )
+      return 1;
+   return oo_peek_simple( TSD, name ) != NULL;
+}
+
+/* []EX(names): erases variables, routines and classes; 1 or 0 per name */
+streng *oo_q_ex( tsd_t *TSD, cparamboxptr parms )
+{
+   streng *names = q_need( TSD, parms, 0, "[]EX" ), *r = Str_creTSD( "" );
+   int i = 0, n = names->len, first = 1;
+
+   get_ot( TSD );
+   mem_upper( names->value, names->len );
+   while ( i < n )
+   {
+      int s, ok = 0;
+      streng *w;
+      while ( i < n && names->value[i] == ' ' )
+         i++;
+      if ( i >= n )
+         break;
+      for ( s = i; i < n && names->value[i] != ' '; i++ )
+         ;
+      w = Str_ncreTSD( names->value + s, i - s );
+      if ( ws_var_exists( TSD, w ) )
+      {
+         drop_var( TSD, w );
+         ok = 1;
+      }
+      ok |= ws_erase_def( TSD, w );
+      Free_stringTSD( w );
+      r = catc( TSD, r, first ? ( ok ? "1" : "0" ) : ( ok ? " 1" : " 0" ) );
+      first = 0;
+   }
+   Free_stringTSD( names );
+   return r;
+}
+
+/* []WSID([name]): the workspace name; sets it if given */
+streng *oo_q_wsid( tsd_t *TSD, cparamboxptr parms )
+{
+   const streng *v = q_arg( parms, 0 );
+   streng *old = ws_id ? Str_dupTSD( ws_id ) : Str_creTSD( "CLEAR WS" );
+
+   if ( v )
+   {
+      if ( ws_id )
+         Free_stringTSD( ws_id );
+      ws_id = Str_dupTSD( v );
+   }
+   return old;
+}
+
+/* []CLEAR(): no variables, no definitions, WSID "CLEAR WS" */
+streng *oo_q_clear( tsd_t *TSD, cparamboxptr parms )
+{
+   extern void oo_pool_walk( const tsd_t *TSD, var_hashtable *pool,
+                             void ( *cb )( void *, const streng *, const streng *,
+                                           const streng * ), void *data );
+   namelist l;
+   nl_walk w;
+   long i;
+
+   (void) parms;
+   get_ot( TSD );
+   memset( &l, 0, sizeof( l ) );
+   w.TSD = TSD;
+   w.l = &l;
+   oo_pool_walk( TSD, TSD->currlevel->vars, nl_var_cb, &w );
+   for ( i = 0; i < l.n; i++ )
+   {
+      drop_var( TSD, l.v[i] );
+      Free_stringTSD( l.v[i] );
+   }
+   if ( l.v )
+      FreeTSD( l.v );
+   while ( ws_defs )
+   {
+      streng *n = Str_dupTSD( ws_defs->name );
+      ws_erase_def( TSD, n );
+      Free_stringTSD( n );
+   }
+   if ( ws_id )
+      Free_stringTSD( ws_id );
+   ws_id = NULL;
+   return nullstringptr();
+}
+
+/* ------------------------------------------------------------------ */
+/* writing a workspace                                                */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+   tsd_t *TSD;
+   oo_tsd *ot;
+   long *num;                   /* object id -> number in the file    */
+   oo_object **list;            /* objects to write, in order         */
+   long n, cap;
+   streng *out;
+   namelist *only;              /* names to write, NULL for all       */
+} ws_writer;
+
+static void ws_put( ws_writer *w, const char *s )
+{
+   tsd_t *TSD = w->TSD;
+   w->out = catc( TSD, w->out, s );
+}
+
+/* a string as a Rexx literal; long ones are split over continued lines */
+static void ws_literal( ws_writer *w, const streng *s )
+{
+   int i, plain = 1, chunk = 0;
+   char buf[8];
+
+   for ( i = 0; i < s->len; i++ )
+   {
+      unsigned char c = (unsigned char) s->value[i];
+      if ( c < 0x20 || c > 0x7e )
+         plain = 0;
+   }
+   if ( s->len == 0 )
+   {
+      ws_put( w, "''" );
+      return;
+   }
+   ws_put( w, "'" );
+   for ( i = 0; i < s->len; i++ )
+   {
+      if ( chunk >= ( plain ? 200 : 100 ) )
+      {
+         ws_put( w, plain ? "' ||,\n  '" : "'x ||,\n  '" );
+         chunk = 0;
+      }
+      if ( plain )
+      {
+         buf[0] = s->value[i];
+         buf[1] = '\0';
+         ws_put( w, buf );
+         if ( s->value[i] == '\'' )
+            ws_put( w, "'" );
+      }
+      else
+      {
+         sprintf( buf, "%02X", (unsigned char) s->value[i] );
+         ws_put( w, buf );
+      }
+      chunk++;
+   }
+   ws_put( w, plain ? "'" : "'x" );
+}
+
+static long ws_objnum( ws_writer *w, oo_object *o );
+
+/* a value: a literal, .nil, .CLASS or __ws.N */
+static void ws_value( ws_writer *w, const streng *v )
+{
+   tsd_t *TSD = w->TSD;
+   oo_object *o = v ? obj_of( TSD, v ) : NULL;
+   char buf[40];
+
+   if ( v == NULL )
+   {
+      ws_put( w, ".nil" );
+      return;
+   }
+   if ( o == NULL )
+   {
+      ws_literal( w, v );
+      return;
+   }
+   if ( o->kind == OK_NIL )
+      ws_put( w, ".nil" );
+   else if ( o == w->ot->environment )
+      ws_put( w, ".environment" );
+   else if ( o->kind == OK_CLASS )
+   {
+      ws_put( w, "." );
+      w->out = cats( TSD, w->out, o->u.c->id );
+   }
+   else
+   {
+      long n = ws_objnum( w, o );
+      if ( n == 0 )
+         ws_put( w, ".nil" );          /* not saved: a Python object, say */
+      else
+      {
+         sprintf( buf, "__ws.%ld", n );
+         ws_put( w, buf );
+      }
+   }
+}
+
+static int ws_savable( oo_object *o )
+{
+   switch ( o->kind )
+   {
+      case OK_PYOBJ: case OK_SUPPLIER: case OK_SUPER: case OK_CLASS: case OK_NIL:
+         return 0;
+      default:
+         return 1;
+   }
+}
+
+/* the number of an object in the file; it is added to the list */
+static long ws_objnum( ws_writer *w, oo_object *o )
+{
+   tsd_t *TSD = w->TSD;
+
+   if ( !ws_savable( o ) )
+      return 0;
+   if ( w->num[o->id] == 0 )
+   {
+      if ( w->n >= w->cap )
+      {
+         long nc = w->cap ? w->cap * 2 : 64;
+         oo_object **nl = (oo_object **) MallocTSD( nc * sizeof( oo_object * ) );
+         if ( w->n )
+            memcpy( nl, w->list, w->n * sizeof( oo_object * ) );
+         if ( w->list )
+            FreeTSD( w->list );
+         w->list = nl;
+         w->cap = nc;
+      }
+      w->list[w->n++] = o;
+      w->num[o->id] = w->n;
+   }
+   return w->num[o->id];
+}
+
+static void ws_obj_ref( ws_writer *w, oo_object *o )
+{
+   char buf[40];
+   sprintf( buf, "__ws.%ld", ws_objnum( w, o ) );
+   ws_put( w, buf );
+}
+
+/* "call []WSITEM __ws.N, 'OP', v1, v2" */
+static void ws_item( ws_writer *w, oo_object *o, const char *op, const streng *a,
+                     const streng *b, int b_is_raw )
+{
+   ws_put( w, "call []WSITEM " );
+   ws_obj_ref( w, o );
+   ws_put( w, ", '" );
+   ws_put( w, op );
+   ws_put( w, "'" );
+   if ( a || b )
+   {
+      ws_put( w, ", " );
+      ws_value( w, a );
+   }
+   if ( b )
+   {
+      ws_put( w, ", " );
+      if ( b_is_raw )
+         ws_literal( w, b );
+      else
+         ws_value( w, b );
+   }
+   ws_put( w, "\n" );
+}
+
+typedef struct { ws_writer *w; oo_object *o; streng *cls; } ws_scope_walk;
+
+static void ws_scope_cb( void *data, const streng *name, const streng *tail, const streng *value )
+{
+   ws_scope_walk *s = (ws_scope_walk *) data;
+   ws_writer *w = s->w;
+   tsd_t *TSD = w->TSD;
+   streng *full = Str_dupTSD( name );
+
+   if ( tail )
+      full = cats( TSD, full, tail );
+   ws_put( w, "call []WSVAR " );
+   ws_obj_ref( w, s->o );
+   ws_put( w, ", " );
+   ws_literal( w, s->cls );
+   ws_put( w, ", " );
+   ws_literal( w, full );
+   ws_put( w, ", " );
+   ws_value( w, value );
+   ws_put( w, "\n" );
+   Free_stringTSD( full );
+}
+
+/* the statements that fill object o */
+static void ws_fill( ws_writer *w, oo_object *o )
+{
+   extern void oo_pool_walk( const tsd_t *TSD, var_hashtable *pool,
+                             void ( *cb )( void *, const streng *, const streng *,
+                                           const streng * ), void *data );
+   tsd_t *TSD = w->TSD;
+   oo_scope *sc;
+   long i;
+   char buf[60];
+
+   switch ( o->kind )
+   {
+      case OK_ARRAY:
+      case OK_QUEUE:
+         if ( ARR_MULTI( o ) )
+         {
+            ws_put( w, "call []WSITEM " );
+            ws_obj_ref( w, o );
+            ws_put( w, ", 'DIMS'" );
+            for ( i = 0; i < o->u.a.ndims; i++ )
+            {
+               sprintf( buf, ", %ld", o->u.a.dims[i] );
+               ws_put( w, buf );
+            }
+            ws_put( w, "\n" );
+         }
+         for ( i = 0; i < o->u.a.size; i++ )
+            if ( o->u.a.v[i] )
+            {
+               streng *pos = mkint( TSD, i + 1 );
+               ws_item( w, o, "AT", o->u.a.v[i], pos, 1 );
+               Free_stringTSD( pos );
+            }
+         break;
+      case OK_DIRECTORY:
+      case OK_TABLE:
+      {
+         oo_entry *e;
+         for ( e = o->u.h->first; e; e = e->onext )
+            ws_item( w, o, "KEY", e->value, e->key, 0 );
+         break;
+      }
+      case OK_STEM:
+      {
+         stemlist l;
+         variableptr b = stem_box( TSD, o );
+         const streng *def = oo_stem_default( TSD, b );
+         stem_sorted_tails( TSD, o, &l );
+         if ( def )
+            ws_item( w, o, "DEFAULT", def, NULL, 0 );
+         for ( i = 0; i < l.n; i++ )
+         {
+            const streng *v = oo_stem_get( TSD, b, l.t[i] );
+            if ( v )
+               ws_item( w, o, "TAIL", v, l.t[i], 1 );
+            Free_stringTSD( l.t[i] );
+         }
+         if ( l.t )
+            FreeTSD( l.t );
+         break;
+      }
+      case OK_CONS:
+         ws_item( w, o, "CONS", o->u.cons.car, o->u.cons.cdr, 0 );
+         break;
+      case OK_STRING:
+      case OK_BUFFER:
+         if ( o->u.s )
+            ws_item( w, o, "STRING", o->u.s, NULL, 0 );
+         break;
+      case OK_INTERVAL:
+         sprintf( buf, "call []WSITEM __ws.%ld, 'INTERVAL', %ld, %ld, %ld\n",
+                  ws_objnum( w, o ), o->u.iv.from, o->u.iv.to, o->u.iv.by );
+         ws_put( w, buf );
+         break;
+      case OK_BLOCK:
+         ws_put( w, "call []WSITEM " );
+         ws_obj_ref( w, o );
+         ws_put( w, ", 'BLOCK', " );
+         ws_literal( w, o->u.blk.code->node->name );
+         ws_put( w, "\n" );
+         break;
+      default:
+         break;
+   }
+   if ( o->aux )
+      ws_item( w, o, "AUX", o->aux, NULL, 0 );
+   if ( o->objname )
+      ws_item( w, o, "NAME", o->objname, NULL, 0 );
+   for ( sc = o->scopes; sc; sc = sc->next )
+   {
+      ws_scope_walk s;
+      s.w = w;
+      s.o = o;
+      s.cls = sc->cls->u.c->id;
+      oo_pool_walk( TSD, sc->pool, ws_scope_cb, &s );
+   }
+}
+
+typedef struct { ws_writer *w; streng *chunk; streng *lastname; } ws_var_walk;
+
+static int ws_wanted( ws_writer *w, const streng *name )
+{
+   long i;
+   if ( w->only == NULL )
+      return 1;
+   for ( i = 0; i < w->only->n; i++ )
+      if ( str_eq( w->only->v[i], name ) )
+         return 1;
+   return 0;
+}
+
+static int ws_symbol( const streng *s )
+{
+   int i;
+   if ( s->len == 0 || ( s->value[0] >= '0' && s->value[0] <= '9' ) || s->value[0] == '.' )
+      return 0;
+   for ( i = 0; i < s->len; i++ )
+   {
+      char c = s->value[i];
+      if ( !( ( c >= 'A' && c <= 'Z' ) || ( c >= '0' && c <= '9' ) || c == '_' || c == '!'
+           || c == '?' ) )
+         return 0;
+   }
+   return 1;
+}
+
+/* variables: collected first (their values may add objects) */
+typedef struct { streng *name, *tail, *value; } ws_varent;
+typedef struct { tsd_t *TSD; ws_varent *v; long n, cap; ws_writer *w; } ws_vars;
+
+static void ws_var_cb( void *data, const streng *name, const streng *tail, const streng *value )
+{
+   ws_vars *vs = (ws_vars *) data;
+   tsd_t *TSD = vs->TSD;
+
+   if ( ws_internal_name( name ) || str_eqc( name, "RC" ) || str_eqc( name, "RESULT" )
+     || str_eqc( name, "SIGL" ) || !ws_wanted( vs->w, name ) )
+      return;
+   if ( vs->n >= vs->cap )
+   {
+      long nc = vs->cap ? vs->cap * 2 : 64;
+      ws_varent *nv = (ws_varent *) MallocTSD( nc * sizeof( ws_varent ) );
+      if ( vs->n )
+         memcpy( nv, vs->v, vs->n * sizeof( ws_varent ) );
+      if ( vs->v )
+         FreeTSD( vs->v );
+      vs->v = nv;
+      vs->cap = nc;
+   }
+   vs->v[vs->n].name = Str_dupTSD( name );
+   vs->v[vs->n].tail = tail ? Str_dupTSD( tail ) : NULL;
+   vs->v[vs->n].value = Str_dupTSD( value );
+   vs->n++;
+}
+
+static int cmp_varent( const void *x, const void *y )
+{
+   const ws_varent *a = (const ws_varent *) x, *b = (const ws_varent *) y;
+   int r = cmp_strings( &a->name, &b->name );
+   if ( r )
+      return r;
+   if ( a->tail == NULL && b->tail == NULL )
+      return 0;
+   if ( a->tail == NULL )
+      return -1;
+   if ( b->tail == NULL )
+      return 1;
+   return cmp_tails( &a->tail, &b->tail );
+}
+
+/* the text of a workspace: definitions, objects, variables */
+static streng *ws_write( tsd_t *TSD, namelist *only )
+{
+   extern void oo_pool_walk( const tsd_t *TSD, var_hashtable *pool,
+                             void ( *cb )( void *, const streng *, const streng *,
+                                           const streng * ), void *data );
+   oo_tsd *ot = get_ot( TSD );
+   ws_writer w;
+   ws_vars vs;
+   streng *vartext, *objtext, *tmp;
+   oo_wsdef *d, *e;
+   long i, done;
+   char buf[200];
+   time_t now = time( NULL );
+
+   memset( &w, 0, sizeof( w ) );
+   w.TSD = TSD;
+   w.ot = ot;
+   w.only = only;
+   w.num = (long *) MallocTSD( ( ot->nobjs + 2 ) * sizeof( long ) );
+   memset( w.num, 0, ( ot->nobjs + 2 ) * sizeof( long ) );
+
+   /* the variables, written into their own text */
+   memset( &vs, 0, sizeof( vs ) );
+   vs.TSD = TSD;
+   vs.w = &w;
+   oo_pool_walk( TSD, TSD->currlevel->vars, ws_var_cb, &vs );
+   if ( vs.n )
+      qsort( vs.v, vs.n, sizeof( ws_varent ), cmp_varent );
+   w.out = Str_creTSD( "" );
+   for ( i = 0; i < vs.n; i++ )
+   {
+      ws_varent *v = &vs.v[i];
+      if ( i == 0 || !str_eq( v->name, vs.v[i - 1].name ) )
+      {
+         ws_put( &w, "::var " );
+         w.out = cats( TSD, w.out, v->name );
+         ws_put( &w, "\n" );
+      }
+      if ( v->tail == NULL && ws_symbol( v->name ) && v->name->value[v->name->len - 1] != '.' )
+      {
+         w.out = cats( TSD, w.out, v->name );
+         ws_put( &w, " = " );
+         ws_value( &w, v->value );
+         ws_put( &w, "\n" );
+      }
+      else
+      {
+         ws_put( &w, "call []WSITEM '', 'VAR', " );
+         ws_value( &w, v->value );
+         ws_put( &w, ", " );
+         ws_literal( &w, v->name );
+         if ( v->tail )
+         {
+            ws_put( &w, ", " );
+            ws_literal( &w, v->tail );
+         }
+         ws_put( &w, "\n" );
+      }
+   }
+   for ( i = 0; i < vs.n; i++ )
+   {
+      Free_stringTSD( vs.v[i].name );
+      if ( vs.v[i].tail )
+         Free_stringTSD( vs.v[i].tail );
+      Free_stringTSD( vs.v[i].value );
+   }
+   if ( vs.v )
+      FreeTSD( vs.v );
+   vartext = w.out;
+
+   /* the objects: made first, then filled (filling may add more) */
+   w.out = Str_creTSD( "" );
+   tmp = Str_creTSD( "" );
+   for ( done = 0; done < w.n; done++ )
+   {
+      oo_object *o = w.list[done];
+      streng *made = w.out;
+      w.out = tmp;
+      ws_fill( &w, o );
+      tmp = w.out;
+      w.out = made;
+      sprintf( buf, "__ws.%ld = []WSOBJ(", done + 1 );
+      ws_put( &w, buf );
+      ws_literal( &w, o->cls->u.c->id );
+      ws_put( &w, ")\n" );
+   }
+   objtext = cats( TSD, w.out, tmp );
+   Free_stringTSD( tmp );
+
+   /* the file */
+   w.out = Str_creTSD( "" );
+   strftime( buf, sizeof( buf ), "%Y-%m-%d %H:%M:%S", localtime( &now ) );
+   ws_put( &w, "/* Regina OO workspace " );
+   if ( ws_id )
+      w.out = cats( TSD, w.out, ws_id );
+   ws_put( &w, ", " );
+   ws_put( &w, buf );
+   ws_put( &w, " */\n" );
+   if ( ws_id )
+   {
+      ws_put( &w, "::wsid " );
+      w.out = cats( TSD, w.out, ws_id );
+      ws_put( &w, "\n" );
+   }
+   for ( d = ws_defs; d; d = d->next )
+   {
+      /* a source that defines several names is written once */
+      for ( e = ws_defs; e != d; e = e->next )
+         if ( str_eq( e->src, d->src ) && ( only == NULL || ws_wanted( &w, e->name ) ) )
+            break;
+      if ( e != d || ( only && !ws_wanted( &w, d->name ) ) )
+         continue;
+      ws_put( &w, "::fx " );
+      w.out = cats( TSD, w.out, d->name );
+      ws_put( &w, "\n" );
+      w.out = cats( TSD, w.out, d->src );
+      if ( d->src->len && d->src->value[d->src->len - 1] != '\n' )
+         ws_put( &w, "\n" );
+      ws_put( &w, "::endfx\n" );
+   }
+   if ( objtext->len )
+   {
+      ws_put( &w, "::objects\n" );
+      w.out = cats( TSD, w.out, objtext );
+   }
+   w.out = cats( TSD, w.out, vartext );
+   Free_stringTSD( objtext );
+   Free_stringTSD( vartext );
+   FreeTSD( w.num );
+   if ( w.list )
+      FreeTSD( w.list );
+   return w.out;
+}
+
+/* the file name of a workspace: NAME.rxws unless it has an extension */
+static char *ws_file( tsd_t *TSD, const streng *name, const char *ext )
+{
+   char *p = (char *) MallocTSD( name->len + 10 );
+   int i, dot = 0;
+
+   memcpy( p, name->value, name->len );
+   p[name->len] = '\0';
+   for ( i = name->len - 1; i >= 0 && p[i] != '/' && p[i] != '\\'; i-- )
+      if ( p[i] == '.' )
+         dot = 1;
+   if ( !dot )
+      strcat( p, ext );
+   return p;
+}
+
+static namelist *ws_names( tsd_t *TSD, cparamboxptr parms, int from )
+{
+   namelist *l;
+   int i, n = q_argc( parms );
+
+   if ( n <= from )
+      return NULL;
+   l = (namelist *) MallocTSD( sizeof( namelist ) );
+   memset( l, 0, sizeof( namelist ) );
+   for ( i = from; i < n; i++ )
+   {
+      const streng *v = q_arg( parms, i );
+      int k = 0, s;
+      if ( v == NULL )
+         continue;
+      while ( k < v->len )
+      {
+         streng *wd;
+         while ( k < v->len && v->value[k] == ' ' )
+            k++;
+         if ( k >= v->len )
+            break;
+         for ( s = k; k < v->len && v->value[k] != ' '; k++ )
+            ;
+         wd = Str_ncreTSD( v->value + s, k - s );
+         mem_upper( wd->value, wd->len );
+         nl_add( TSD, l, wd );
+         Free_stringTSD( wd );
+      }
+   }
+   return l;
+}
+
+static void ws_free_names( tsd_t *TSD, namelist *l )
+{
+   long i;
+   if ( l == NULL )
+      return;
+   for ( i = 0; i < l->n; i++ )
+      Free_stringTSD( l->v[i] );
+   if ( l->v )
+      FreeTSD( l->v );
+   FreeTSD( l );
+}
+
+static streng *ws_write_file( tsd_t *TSD, const char *file, namelist *only, const char *bif )
+{
+   streng *text = ws_write( TSD, only );
+   FILE *fp = fopen( file, "wb" );
+
+   if ( fp == NULL )
+   {
+      Free_stringTSD( text );
+      exiterror( ERR_EXECUTION_ERROR, 18, bif, file );
+   }
+   fwrite( text->value, 1, text->len, fp );
+   fclose( fp );
+   Free_stringTSD( text );
+   return Str_creTSD( file );
+}
+
+/* []SAVE([wsid]): writes the workspace to WSID.rxws; returns the file */
+streng *oo_q_save( tsd_t *TSD, cparamboxptr parms )
+{
+   const streng *v = q_arg( parms, 0 );
+   char *file;
+   streng *r;
+
+   get_ot( TSD );
+   if ( v )
+   {
+      if ( ws_id )
+         Free_stringTSD( ws_id );
+      ws_id = Str_dupTSD( v );
+   }
+   if ( ws_id == NULL )
+      exiterror( ERR_EXECUTION_ERROR, 19 );
+   file = ws_file( TSD, ws_id, ".rxws" );
+   r = ws_write_file( TSD, file, NULL, "[]SAVE" );
+   FreeTSD( file );
+   return r;
+}
+
+/* []OUT(file [, names]): writes all or the named objects to file (.rxo) */
+streng *oo_q_out( tsd_t *TSD, cparamboxptr parms )
+{
+   streng *name = q_need( TSD, parms, 0, "[]OUT" ), *r;
+   namelist *only = ws_names( TSD, parms, 1 );
+   char *file = ws_file( TSD, name, ".rxo" );
+
+   get_ot( TSD );
+   r = ws_write_file( TSD, file, only, "[]OUT" );
+   ws_free_names( TSD, only );
+   FreeTSD( file );
+   Free_stringTSD( name );
+   return r;
+}
+
+/* ------------------------------------------------------------------ */
+/* reading a workspace                                                */
+/* ------------------------------------------------------------------ */
+
+static void ws_run( tsd_t *TSD, const streng *code )
+{
+   if ( code->len )
+      dointerpret( TSD, Str_dupTSD( code ) );
+}
+
+/* reads the file; returns the names it set or defined */
+static streng *ws_read_file( tsd_t *TSD, const char *file, namelist *only, const char *bif )
+{
+   FILE *fp = fopen( file, "rb" );
+   streng *text, *code = Str_creTSD( "" ), *fx = NULL, *section = NULL;
+   namelist done;
+   long size, i = 0;
+   int mode = 0;   /* 0 header, 1 fx, 2 objects, 3 var (taken), 4 var (skipped) */
+   streng *newid = NULL;
+
+   if ( fp == NULL )
+      exiterror( ERR_EXECUTION_ERROR, 18, bif, file );
+   fseek( fp, 0, SEEK_END );
+   size = ftell( fp );
+   fseek( fp, 0, SEEK_SET );
+   text = Str_makeTSD( size + 1 );
+   text->len = (int) fread( text->value, 1, size, fp );
+   fclose( fp );
+   memset( &done, 0, sizeof( done ) );
+   get_ot( TSD );
+
+   while ( i < text->len )
+   {
+      long s = i;
+      streng *line;
+      while ( i < text->len && text->value[i] != '\n' )
+         i++;
+      line = Str_ncreTSD( text->value + s, (int) ( i - s ) );
+      if ( i < text->len )
+         i++;
+      if ( line->len && line->value[line->len - 1] == '\r' )
+         line->len--;
+      if ( mode == 1 )
+      {
+         if ( line->len == 7 && memcmp( line->value, "::endfx", 7 ) == 0 )
+         {
+            int take = only == NULL;
+            long k;
+            for ( k = 0; only && k < only->n; k++ )
+               if ( str_eq( only->v[k], section ) )
+                  take = 1;
+            if ( take )
+            {
+               streng *names = ws_define( TSD, fx );
+               nl_add( TSD, &done, section );
+               Free_stringTSD( names );
+            }
+            Free_stringTSD( fx );
+            fx = NULL;
+            mode = 0;
+         }
+         else
+         {
+            fx = cats( TSD, fx, line );
+            fx = catc( TSD, fx, "\n" );
+         }
+         Free_stringTSD( line );
+         continue;
+      }
+      if ( line->len > 2 && line->value[0] == ':' && line->value[1] == ':' )
+      {
+         streng *word, *arg;
+         int k = 2, a;
+         while ( k < line->len && line->value[k] != ' ' )
+            k++;
+         word = Str_ncreTSD( line->value + 2, k - 2 );
+         mem_upper( word->value, word->len );
+         while ( k < line->len && line->value[k] == ' ' )
+            k++;
+         for ( a = k; a < line->len && line->value[a] != ' '; a++ )
+            ;
+         arg = Str_ncreTSD( line->value + k, a - k );
+         mem_upper( arg->value, arg->len );
+         if ( str_eqc( word, "FX" ) )
+         {
+            if ( section )
+               Free_stringTSD( section );
+            section = arg;
+            arg = NULL;
+            fx = Str_creTSD( "" );
+            mode = 1;
+         }
+         else if ( str_eqc( word, "OBJECTS" ) )
+            mode = 2;
+         else if ( str_eqc( word, "VAR" ) )
+         {
+            long j;
+            mode = 4;
+            if ( only == NULL )
+               mode = 3;
+            for ( j = 0; only && j < only->n; j++ )
+               if ( str_eq( only->v[j], arg ) )
+                  mode = 3;
+            if ( mode == 3 )
+               nl_add( TSD, &done, arg );
+         }
+         else if ( str_eqc( word, "WSID" ) )
+         {
+            if ( newid )
+               Free_stringTSD( newid );
+            newid = Str_ncreTSD( line->value + k, line->len - k );
+         }
+         if ( arg )
+            Free_stringTSD( arg );
+         Free_stringTSD( word );
+         Free_stringTSD( line );
+         continue;
+      }
+      if ( mode == 2 || mode == 3 )
+      {
+         code = cats( TSD, code, line );
+         code = catc( TSD, code, "\n" );
+      }
+      Free_stringTSD( line );
+   }
+   if ( fx )
+      Free_stringTSD( fx );
+   if ( section )
+      Free_stringTSD( section );
+   Free_stringTSD( text );
+   /* the objects and variables, run in the caller's variables */
+   code = catc( TSD, code, "drop __ws.\n" );
+   ws_run( TSD, code );
+   Free_stringTSD( code );
+   if ( newid && only == NULL && strcmp( bif, "[]LOAD" ) == 0 )
+   {
+      if ( ws_id )
+         Free_stringTSD( ws_id );
+      ws_id = newid;
+      newid = NULL;
+   }
+   if ( newid )
+      Free_stringTSD( newid );
+   return nl_result( TSD, &done );
+}
+
+/* []LOAD(wsid): []CLEAR, then the workspace WSID.rxws */
+streng *oo_q_load( tsd_t *TSD, cparamboxptr parms )
+{
+   streng *name = q_need( TSD, parms, 0, "[]LOAD" ), *r;
+   char *file = ws_file( TSD, name, ".rxws" );
+   FILE *fp = fopen( file, "rb" );
+
+   if ( fp == NULL )
+      exiterror( ERR_EXECUTION_ERROR, 18, "[]LOAD", file );
+   fclose( fp );
+   oo_q_clear( TSD, NULL );
+   r = ws_read_file( TSD, file, NULL, "[]LOAD" );
+   if ( ws_id == NULL )
+      ws_id = Str_dupTSD( name );
+   FreeTSD( file );
+   Free_stringTSD( name );
+   return r;
+}
+
+/* []IN(file [, names]): adds the objects of a file (.rxo or .rxws) */
+streng *oo_q_in( tsd_t *TSD, cparamboxptr parms )
+{
+   streng *name = q_need( TSD, parms, 0, "[]IN" ), *r;
+   namelist *only = ws_names( TSD, parms, 1 );
+   char *file = ws_file( TSD, name, ".rxo" );
+   FILE *fp = fopen( file, "rb" );
+
+   if ( fp == NULL )
+   {
+      /* a saved workspace can be read too */
+      FreeTSD( file );
+      file = ws_file( TSD, name, ".rxws" );
+   }
+   else
+      fclose( fp );
+   r = ws_read_file( TSD, file, only, "[]IN" );
+   ws_free_names( TSD, only );
+   FreeTSD( file );
+   Free_stringTSD( name );
+   return r;
+}
+
+/* []GC(): collects now; returns the number of objects freed */
+streng *oo_q_gc( tsd_t *TSD, cparamboxptr parms )
+{
+   long n;
+   (void) parms;
+   get_ot( TSD );
+   n = oo_gc( TSD, 1 );
+   return mkint( TSD, n < 0 ? 0 : n );
+}
+
+/* ------------------------------------------------------------------ */
+/* the helpers used by workspace files                                */
+/* ------------------------------------------------------------------ */
+
+/* []WSOBJ(classid): a new object of the class, without INIT */
+streng *oo_q_wsobj( tsd_t *TSD, cparamboxptr parms )
+{
+   oo_tsd *ot = get_ot( TSD );
+   streng *id = q_need( TSD, parms, 0, "[]WSOBJ" );
+   oo_object *cls, *o;
+
+   mem_upper( id->value, id->len );
+   cls = class_by_id( ot, id );
+   if ( cls == NULL )
+      exiterror( ERR_TRANSLATION_ERROR, 10, tmpstr_of( TSD, id ) );
+   Free_stringTSD( id );
+   if ( cls->u.c->resolved != 1 )
+      resolve_class( TSD, cls );
+   o = new_object( TSD, cls, cls->u.c->ikind );
+   if ( o->kind == OK_DIRECTORY || o->kind == OK_TABLE )
+   {
+      o->u.h = (oo_hash *) MallocTSD( sizeof( oo_hash ) );
+      memset( o->u.h, 0, sizeof( oo_hash ) );
+   }
+   else if ( o->kind == OK_BUFFER || o->kind == OK_STRING )
+      o->u.s = nullstringptr();
+   return hdup( TSD, o );
+}
+
+/* []WSITEM(obj, op, ...): stores a part of an object (see ws_fill) */
+streng *oo_q_wsitem( tsd_t *TSD, cparamboxptr parms )
+{
+   oo_tsd *ot = get_ot( TSD );
+   const streng *h = q_arg( parms, 0 ), *op = q_arg( parms, 1 );
+   const streng *a = q_arg( parms, 2 ), *b = q_arg( parms, 3 );
+   oo_object *o = h ? obj_of( TSD, h ) : NULL;
+
+   if ( op == NULL )
+      exiterror( ERR_INCORRECT_CALL, 3, "[]WSITEM", 2 );
+   if ( str_eqc( op, "VAR" ) )
+   {
+      /* a variable of the caller: VAR, value, name [, tail] */
+      if ( a == NULL || b == NULL )
+         exiterror( ERR_INCORRECT_CALL, 3, "[]WSITEM", 4 );
+      if ( q_arg( parms, 4 ) )
+         oo_stem_put( TSD, TSD->currlevel->vars, b, q_arg( parms, 4 ), Str_dupTSD( a ) );
+      else if ( b->len && b->value[b->len - 1] == '.' )
+      {
+         extern void setvalue( tsd_t *TSD, const streng *name, streng *value, int pool );
+         setvalue( TSD, b, Str_dupTSD( a ), -1 );
+      }
+      else
+         setvalue( TSD, b, Str_dupTSD( a ), -1 );
+      return nullstringptr();
+   }
+   if ( o == NULL )
+      exiterror( ERR_INCORRECT_CALL, 3, "[]WSITEM", 1 );
+   if ( str_eqc( op, "AT" ) && a && b )
+   {
+      int err = 0;
+      long pos = streng_to_int( TSD, b, &err );
+      if ( err || pos < 1 )
+         exiterror( ERR_INCORRECT_CALL, 3, "[]WSITEM", 4 );
+      oo_array_put( TSD, o, pos, Str_dupTSD( a ) );
+   }
+   else if ( str_eqc( op, "DIMS" ) )
+   {
+      long dims[64];
+      int n = 0, err = 0;
+      cparamboxptr p = parms->next->next;
+      for ( ; p && n < 64; p = p->next )
+         if ( p->value )
+            dims[n++] = streng_to_int( TSD, p->value, &err );
+      if ( n > 1 )
+         arr_make_multi( TSD, o, n, dims );
+   }
+   else if ( str_eqc( op, "KEY" ) && a && b )
+   {
+      if ( is_bag( TSD, o ) )
+      {
+         int err = 0;
+         setbag_add( TSD, o, b, streng_to_int( TSD, a, &err ) );
+      }
+      else
+         h_put( TSD, o->u.h, b, Str_dupTSD( a ) );
+   }
+   else if ( str_eqc( op, "TAIL" ) && a && b && o->kind == OK_STEM )
+      oo_stem_put( TSD, o->u.pool, ot->s_stem, b, Str_dupTSD( a ) );
+   else if ( str_eqc( op, "DEFAULT" ) && a && o->kind == OK_STEM )
+   {
+      extern void oo_pool_set_stem( const tsd_t *TSD, var_hashtable *pool,
+                                    const streng *name, streng *value );
+      oo_pool_set_stem( TSD, o->u.pool, ot->s_stem, Str_dupTSD( a ) );
+   }
+   else if ( str_eqc( op, "CONS" ) && a && b && o->kind == OK_CONS )
+   {
+      Free_stringTSD( o->u.cons.car );
+      Free_stringTSD( o->u.cons.cdr );
+      o->u.cons.car = Str_dupTSD( a );
+      o->u.cons.cdr = Str_dupTSD( b );
+   }
+   else if ( str_eqc( op, "STRING" ) && a )
+   {
+      if ( o->u.s )
+         Free_stringTSD( o->u.s );
+      o->u.s = Str_dupTSD( a );
+   }
+   else if ( str_eqc( op, "INTERVAL" ) && o->kind == OK_INTERVAL && a && b && q_arg( parms, 4 ) )
+   {
+      int err = 0;
+      o->u.iv.from = streng_to_int( TSD, a, &err );
+      o->u.iv.to = streng_to_int( TSD, b, &err );
+      o->u.iv.by = streng_to_int( TSD, q_arg( parms, 4 ), &err );
+   }
+   else if ( str_eqc( op, "BLOCK" ) && a && o->kind == OK_BLOCK )
+   {
+      /* bound to the code that reads the workspace */
+      nodeptr n = (nodeptr) MallocTSD( sizeof( treenode ) );
+      proclevel home = TSD->currlevel;
+      memset( n, 0, sizeof( treenode ) );
+      n->type = X_OO_BLOCK;
+      n->name = Str_dupTSD( a );
+      o->u.blk.code = block_code( TSD, n );
+      o->u.blk.home = home;
+      o->u.blk.serial = home->oo_serial;
+      o->u.blk.homeframe = (oo_frame *) home->oo_ctx;
+      o->u.blk.nextblock = (oo_object *) home->oo_blocks;
+      home->oo_blocks = o;
+   }
+   else if ( str_eqc( op, "AUX" ) && a )
+   {
+      if ( o->aux )
+         Free_stringTSD( o->aux );
+      o->aux = Str_dupTSD( a );
+   }
+   else if ( str_eqc( op, "NAME" ) && a )
+   {
+      if ( o->objname )
+         Free_stringTSD( o->objname );
+      o->objname = Str_dupTSD( a );
+   }
+   return nullstringptr();
+}
+
+/* []WSVAR(obj, classid, name, value): an object variable of the class */
+streng *oo_q_wsvar( tsd_t *TSD, cparamboxptr parms )
+{
+   oo_tsd *ot = get_ot( TSD );
+   const streng *h = q_arg( parms, 0 ), *v = q_arg( parms, 3 );
+   streng *cid = q_need( TSD, parms, 1, "[]WSVAR" ), *name = q_need( TSD, parms, 2, "[]WSVAR" );
+   oo_object *o = h ? obj_of( TSD, h ) : NULL, *cls;
+   oo_scope *sc;
+   int i;
+
+   cls = class_by_id( ot, cid );
+   if ( o == NULL || cls == NULL || v == NULL )
+      exiterror( ERR_INCORRECT_CALL, 3, "[]WSVAR", 1 );
+   sc = get_scope( TSD, o, cls );
+   for ( i = 0; i < name->len && name->value[i] != '.'; i++ )
+      ;
+   if ( i < name->len && i + 1 < name->len )
+   {
+      streng *stem = Str_ncreTSD( name->value, i + 1 );
+      streng *tail = Str_ncreTSD( name->value + i + 1, name->len - i - 1 );
+      oo_stem_put( TSD, sc->pool, stem, tail, Str_dupTSD( v ) );
+      Free_stringTSD( stem );
+      Free_stringTSD( tail );
+   }
+   else if ( i == name->len - 1 )
+   {
+      extern void oo_pool_set_stem( const tsd_t *TSD, var_hashtable *pool,
+                                    const streng *name, streng *value );
+      oo_pool_set_stem( TSD, sc->pool, name, Str_dupTSD( v ) );
+   }
+   else
+      oo_pool_set( TSD, sc->pool, name, Str_dupTSD( v ) );
+   Free_stringTSD( cid );
+   Free_stringTSD( name );
+   return nullstringptr();
+}
+
+/* "address WS": a command is shown, as the result of an expression in APL */
+int oo_ws_echo( tsd_t *TSD, const streng *envir, const streng *cmd )
+{
+   if ( envir == NULL || envir->len != 2 || rx_toupper( envir->value[0] ) != 'W'
+     || rx_toupper( envir->value[1] ) != 'S' )
+      return 0;
+   fwrite( cmd->value, 1, cmd->len, stdout );
+   fputc( '\n', stdout );
+   fflush( stdout );
+   return 1;
 }
 
 /* ------------------------------------------------------------------ */

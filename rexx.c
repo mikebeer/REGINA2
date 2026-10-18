@@ -325,6 +325,10 @@ void setup_system( tsd_t *TSD, int isclient )
 #endif
 }
 
+/* --ws: the workspace session (see lib/session.rexx) */
+static int ws_session = 0;
+static char *ws_session_arg = NULL;
+
 static struct my_getopt_option long_options[] =
 {
    {"help",        no_argument,       0,  'h' },
@@ -343,6 +347,9 @@ static struct my_getopt_option long_options[] =
    {"options",     required_argument, 0,  'o' },
    {"oo",          no_argument,       0,  'O' },
    {"no-oo",       no_argument,       0,  'N' },
+   {"gc",          optional_argument, 0,  'G' },
+   {"no-gc",       no_argument,       0,  'g' },
+   {"ws",          optional_argument, 0,  'W' },
    {0,             0,                 0,  0 }
 };
 /*
@@ -361,7 +368,7 @@ static int check_args( tsd_t *TSD, int argc, char **argv,
    {
       int option_index = 0;
 
-      c = my_getopt_long( argc, argv, "+hi::D::t::pv::yrd::acel:o:ON", long_options, &option_index );
+      c = my_getopt_long( argc, argv, "+hi::D::t::pv::yrd::acel:o:ONG::gW::", long_options, &option_index );
       if ( c == -1 )
          break;
 
@@ -521,6 +528,19 @@ static int check_args( tsd_t *TSD, int argc, char **argv,
 
          case 'N': /* OO extension off: behave like Regina 3.9.7 */
             oo_set_mode( -1 );
+            break;
+
+         case 'G': /* garbage collection of objects on; --gc=stress for tests */
+            oo_gc_set_mode( ( optarg && ( optarg[0] == 's' || optarg[0] == 'S' ) ) ? 2 : 1 );
+            break;
+
+         case 'g': /* garbage collection of objects off */
+            oo_gc_set_mode( 0 );
+            break;
+
+         case 'W': /* a workspace session, optionally loading a workspace */
+            ws_session = 1;
+            ws_session_arg = optarg;
             break;
 
          case 'h': /* usage */
@@ -874,7 +894,28 @@ int main(int argc,char *argv[])
             set_locale_info( ptr + 1 );
       }
 
-      if ( processed < argc )
+      if ( ws_session )
+      {
+         /* the session program of oo.c; stdin stays for the user's lines */
+         extern const char *oo_session_source( void );
+         FILE *fp = tmpfile();
+         stdinput = 0;
+         if ( fp == NULL )
+            exiterror( ERR_PROG_UNREADABLE, 1, "No temporary file for the workspace session" );
+         fputs( oo_session_source(), fp );
+         rewind( fp );
+         TSD->systeminfo->input_file = Str_crestrTSD( "<workspace session>" );
+         TSD->systeminfo->input_fp = fp;
+         if ( ws_session_arg && processed >= argc )
+         {
+            static char *wsargv[2];
+            wsargv[0] = ws_session_arg;
+            argc = 1;
+            argv = wsargv;
+            processed = 0;
+         }
+      }
+      else if ( processed < argc )
       {
          stdinput = 0;
          TSD->systeminfo->input_file = get_external_routine( TSD,
@@ -1200,6 +1241,8 @@ static void usage( char *argv0 )
    fprintf( stdout,"  --restricted, -r                run Regina in \"safe\" mode\n" );
    fprintf( stdout,"  --oo, -O                        object-oriented keywords on in every program\n" );
    fprintf( stdout,"  --no-oo, -N                     object-oriented extension off (classic Regina)\n" );
+   fprintf( stdout,"  --gc, -G / --no-gc, -g          garbage collection of objects on (default) / off\n" );
+   fprintf( stdout,"  --ws[=wsid], -W[wsid]           interactive workspace session (APL style)\n" );
    fprintf( stdout,"  --trace[=char], -t[char]        set TRACE to any valid TRACE character - default A\n" );
    fprintf( stdout,"  --interactive[=char], -i[char]  set TRACE to any valid TRACE character and run interactively - default A\n" );
    fprintf( stdout,"  --args, -a                      pass command line to Rexx program as separate arguments\n");

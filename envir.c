@@ -647,6 +647,15 @@ streng *perform( tsd_t *TSD, const streng *command, const streng *envir, cnodept
    streng *saved_queue=NULL;
    char *rxq=NULL;
 
+   /* OO extension: the environment WS shows commands (workspace sessions) */
+   if ( !overwrite && oo_ws_echo( TSD, envir, cmd ) )
+   {
+      retstr = int_to_streng( TSD, 0 ) ;
+      post_process_system_call( TSD, cmd, 0, retstr, thisptr );
+      Free_stringTSD( cmd ) ;
+      return retstr ;
+   }
+
    if ( overwrite )
    {
       /*
