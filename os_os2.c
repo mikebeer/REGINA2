@@ -119,6 +119,45 @@ static int Os2_setenv( const char *name, const char *value )
  * use the "wrong" escape character. Note the difference between EMX and OS/2.
  * Maybe, I'm wrong. Drop me an email in this case. FGC
  */
+#ifdef __WATCOMC__
+/* OpenWatcom's spawn joins the arguments with blanks as they are: put the
+ * quotes back around those with blanks, so that the program's C library
+ * splits its command line into the same arguments (makeargs removed them) */
+static void ow_quote_args(char **args)
+{
+   char **run;
+
+   for (run = args; *run; run++)
+   {
+      const char *a = *run, *q;
+      char *n, *d;
+      size_t len;
+
+      if (!strpbrk(a, " \t\"") || !*a)
+         continue;
+      len = strlen(a);
+      for (q = a; *q; q++)
+         if (*q == '"')
+            len++;
+      n = malloc(len + 3);
+      if (!n)
+         continue;
+      d = n;
+      *d++ = '"';
+      for (q = a; *q; q++)
+      {
+         if (*q == '"')
+            *d++ = '\\';
+         *d++ = *q;
+      }
+      *d++ = '"';
+      *d = '\0';
+      free(*run);
+      *run = n;
+   }
+}
+#endif
+
 static int Os2_fork_exec(tsd_t *TSD, environment *env, const char *cmdline, int *rcode)
 {
    static const char *interpreter[] = { "regina.exe", /* preferable even if */
@@ -236,11 +275,17 @@ static int Os2_fork_exec(tsd_t *TSD, environment *env, const char *cmdline, int 
    {
       case SUBENVIR_PATH:
          args = makeargs(cmdline, '^');
+#ifdef __WATCOMC__
+         ow_quote_args(args);
+#endif
          rc = spawnvp(P_NOWAIT, *args, args);
          break;
 
       case SUBENVIR_COMMAND:
          args = makeargs(cmdline, '^');
+#ifdef __WATCOMC__
+         ow_quote_args(args);
+#endif
          rc = spawnv(P_NOWAIT, *args, args);
          break;
 
@@ -266,8 +311,23 @@ static int Os2_fork_exec(tsd_t *TSD, environment *env, const char *cmdline, int 
             strcat(argline," /c ");
          }
          strcat(argline, cmdline);
+#ifdef __WATCOMC__
+         /* the shell gets the command line as it is: OpenWatcom's spawn
+          * passes the arguments joined with blanks, so the command is one
+          * argument (its quotes, & and | stay for the shell) */
+         {
+            char *shargs[4];
+
+            shargs[0] = (char *) ipret;
+            shargs[1] = getenv("COMSPEC") || !getenv("SHELL") ? "/c" : "-c";
+            shargs[2] = (char *) cmdline;
+            shargs[3] = NULL;
+            rc = spawnvp(P_NOWAIT, ipret, (const char **) shargs);
+         }
+#else
          args = makeargs(argline, '^');
          rc = spawnvp(P_NOWAIT, *args, args);
+#endif
          break;
 
       case SUBENVIR_REXX:
