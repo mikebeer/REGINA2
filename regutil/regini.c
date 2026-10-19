@@ -24,6 +24,8 @@
 # define INCL_DOSMISC
 # define INCL_DOSFILEMGR
 # define INCL_DOSPROCESS
+# define INCL_WINSHELLDATA        /* SysIni: the profile API */
+# define INCL_WINWINDOWMGR        /* WinInitialize */
 #endif
 
 #include "regutil.h"
@@ -177,6 +179,118 @@ static const int get_key(const char * const inifile, const char * const app,
 
    return 0;
 }
+#elif defined(__WATCOMC__) && defined(OS2)
+/* OS/2: the profile API, as IBM's RexxUtil (binary OS/2 INI files; USER,
+ * SYSTEM and BOTH name the system profiles) */
+static HINI open_ini(const char * const inifile, int *opened)
+{
+   static HAB hab;
+
+   *opened = 0;
+   if (!inifile || !stricmp(inifile, "USER"))
+      return HINI_USERPROFILE;
+   if (!stricmp(inifile, "SYSTEM"))
+      return HINI_SYSTEMPROFILE;
+   if (!stricmp(inifile, "BOTH"))
+      return HINI_PROFILE;
+   if (!hab)
+      hab = WinInitialize(0);
+   *opened = 1;
+   return PrfOpenProfile(hab, (PSZ)inifile);
+}
+
+static void close_ini(HINI hini, int opened)
+{
+   if (opened && hini)
+      PrfCloseProfile(hini);
+}
+
+/* the names PrfQueryProfileData lists: of the applications (app NULL) or of
+ * an application's keys */
+static int list_names(const char * const inifile, const char * const app, chararray * ca)
+{
+   int opened;
+   HINI hini = open_ini(inifile, &opened);
+   ULONG size = 0;
+   char *buf, *p;
+
+   if (!hini)
+      return 1;
+   if (!PrfQueryProfileSize(hini, (PSZ)app, NULL, &size) || !size) {
+      close_ini(hini, opened);
+      return 0;
+   }
+   buf = malloc(size + 1);
+   if (buf && PrfQueryProfileData(hini, (PSZ)app, NULL, buf, &size)) {
+      buf[size] = 0;
+      for (p = buf; p < buf + size && *p; p += strlen(p) + 1)
+         cha_addstr(ca, p, strlen(p));
+   }
+   free(buf);
+   close_ini(hini, opened);
+   return 0;
+}
+
+static int list_keys(const char * const inifile, const char * const app, chararray * ca)
+{
+   return list_names(inifile, app, ca);
+}
+
+static int list_apps(const char * const inifile, chararray * ca)
+{
+   return list_names(inifile, NULL, ca);
+}
+
+static int write_data(const char * const inifile, const char * const app, const char * key,
+                      const char * const val, ULONG len)
+{
+   int opened;
+   HINI hini = open_ini(inifile, &opened);
+   BOOL ok;
+
+   if (!hini)
+      return 1;
+   ok = PrfWriteProfileData(hini, (PSZ)app, (PSZ)key, (PVOID)val, len);
+   close_ini(hini, opened);
+   return !ok;
+}
+
+static int delete_key(const char * const inifile, const char * const app, const char * key)
+{
+   return write_data(inifile, app, key, NULL, 0);
+}
+
+static int delete_app(const char * const inifile, const char * const app)
+{
+   return write_data(inifile, app, NULL, NULL, 0);
+}
+
+static int set_key(const char * const inifile, const char * const app, const char * key,
+                   const char * const val)
+{
+   return write_data(inifile, app, key, val, (ULONG)strlen(val));
+}
+
+static int get_key(const char * const inifile, const char * const app, const char * key,
+                   PRXSTRING result)
+{
+   int opened;
+   HINI hini = open_ini(inifile, &opened);
+   ULONG size = 0;
+
+   if (!hini || !PrfQueryProfileSize(hini, (PSZ)app, (PSZ)key, &size)) {
+      close_ini(hini, opened);
+      result->strlength = sizeof(error)-1;
+      memcpy(result->strptr, error, sizeof(error)-1);
+      return 0;
+   }
+   rxresize(result, size);
+   if (size && !PrfQueryProfileData(hini, (PSZ)app, (PSZ)key, result->strptr, &size))
+      size = 0;
+   result->strlength = size;
+   close_ini(hini, opened);
+   return 0;
+}
 #else
 #include "inifile.h"
 
@@ -299,7 +413,11 @@ rxfunc(sysini)
 {
    static const char all[] = "ALL:", delete[] = "DELETE:";
    char * inifile, *app, *key, *val;
+#if defined(__WATCOMC__) && defined(OS2)
+   int insensitive = 0;      /* OS/2: names as given, like IBM's RexxUtil */
+#else
    int insensitive = 1;
+#endif
    chararray * ca;
    PRXSTRING stem = NULL;
    int rc = 0, rcc = 0;
@@ -315,9 +433,14 @@ rxfunc(sysini)
       inifile = NULL;
 
    /* default to case-insensitive values for app and key(ie set to uppercase),
-    * but go sensitive if the fifth arg is given and the first character is `s' */
+    * but go sensitive if the fifth arg is given and the first character is `s'
+    * (OS/2: sensitive unless it is `i') */
    if (argc == 5 && argv[4].strptr && toupper(argv[4].strptr[0]) == 'S')
       insensitive = 0;
+#if defined(__WATCOMC__) && defined(OS2)
+   if (argc == 5 && argv[4].strptr && toupper(argv[4].strptr[0]) == 'I')
+      insensitive = 1;
+#endif
 
    rxstrdup(app, argv[1]);
    if ( insensitive == 1 ) {
