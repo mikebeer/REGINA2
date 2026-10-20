@@ -46,7 +46,10 @@ void killsystem( tsd_t *TSD, rxsysinfo systm )
       systm->input_fp = NULL;
    }
 
-   DestroyInternalParsingTree( TSD, &systm->tree ) ;
+   if ( !systm->oo_keep_tree )
+      DestroyInternalParsingTree( TSD, &systm->tree ) ;
+   else
+      oo_take_tree( TSD, &systm->tree ); /* OO: freed by oo_end_program() */
 
    if (systm->currlevel0)
      {

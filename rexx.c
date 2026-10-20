@@ -325,6 +325,10 @@ void setup_system( tsd_t *TSD, int isclient )
 #endif
 }
 
+/* --ws: the workspace session (see lib/session.rexx) */
+static int ws_session = 0;
+static char *ws_session_arg = NULL;
+
 static struct my_getopt_option long_options[] =
 {
    {"help",        no_argument,       0,  'h' },
@@ -341,6 +345,12 @@ static struct my_getopt_option long_options[] =
    {"execute",     no_argument,       0,  'e' },
    {"locale",      required_argument, 0,  'l' },
    {"options",     required_argument, 0,  'o' },
+   {"oo",          no_argument,       0,  'O' },
+   {"no-oo",       no_argument,       0,  'N' },
+   {"gc",          optional_argument, 0,  'G' },
+   {"no-gc",       no_argument,       0,  'g' },
+   {"ws",          optional_argument, 0,  'W' },
+   {"stack",       required_argument, 0,  'Z' },
    {0,             0,                 0,  0 }
 };
 /*
@@ -359,7 +369,7 @@ static int check_args( tsd_t *TSD, int argc, char **argv,
    {
       int option_index = 0;
 
-      c = my_getopt_long( argc, argv, "+hi::D::t::pv::yrd::acel:o:", long_options, &option_index );
+      c = my_getopt_long( argc, argv, "+hi::D::t::pv::yrd::acel:o:ONG::gW::Z:", long_options, &option_index );
       if ( c == -1 )
          break;
 
@@ -512,6 +522,30 @@ static int check_args( tsd_t *TSD, int argc, char **argv,
             do_options( TSD, TSD->currlevel, opts, 0 );
             break;
          }
+
+         case 'O': /* OO extension forced on */
+            oo_set_mode( 1 );
+            break;
+
+         case 'N': /* OO extension off: behave like Regina 3.9.7 */
+            oo_set_mode( -1 );
+            break;
+
+         case 'G': /* garbage collection of objects on; --gc=stress for tests */
+            oo_gc_set_mode( ( optarg && ( optarg[0] == 's' || optarg[0] == 'S' ) ) ? 2 : 1 );
+            break;
+
+         case 'g': /* garbage collection of objects off */
+            oo_gc_set_mode( 0 );
+            break;
+
+         case 'Z': /* --stack=SIZE: handled before the interpreter starts */
+            break;
+
+         case 'W': /* a workspace session, optionally loading a workspace */
+            ws_session = 1;
+            ws_session_arg = optarg;
+            break;
 
          case 'h': /* usage */
          case '?': /* usage */
@@ -788,6 +822,220 @@ static int execute_file( tsd_t *TSD )
    return RetCode;
 }
 
+/*
+ * --stack=SIZE (-ZSIZE) or REGINA_STACK=SIZE: the interpreter runs on a new
+ * thread with a C stack of SIZE bytes, so that deeply nested methods have
+ * room. The stack size of the main thread is fixed when the executable is
+ * linked (rexx.exe 256 MB, regina.exe 16 MB on Windows) or by ulimit -s.
+ * SIZE is a number of bytes with an optional K, M or G; at least 1M, at
+ * most 2047M where a long has 32 bits (Windows), else 64G.
+ */
+static int interpreter_main( int argc, char *argv[] );
+
+long regina_stack_size = 0;     /* bytes, when set by --stack or REGINA_STACK */
+
+static long parse_stack_size( const char *s )
+{
+   double v = 0;
+   int digits = 0;
+
+   while ( *s == ' ' )
+      s++;
+   while ( *s >= '0' && *s <= '9' )
+   {
+      v = v * 10 + ( *s++ - '0' );
+      digits++;
+   }
+   if ( !digits )
+      return -1;
+   switch ( *s )
+   {
+      case 'k': case 'K': v *= 1024.0; s++; break;
+      case 'm': case 'M': v *= 1024.0 * 1024.0; s++; break;
+      case 'g': case 'G': v *= 1024.0 * 1024.0 * 1024.0; s++; break;
+   }
+   if ( *s == 'b' || *s == 'B' )
+      s++;
+   if ( *s != '\0' || v < 1024.0 * 1024.0 )
+      return -1;
+   /* the size must fit a long (32 bits on Windows) */
+   if ( v > ( sizeof( long ) > 4 ? 64.0 * 1024 * 1024 * 1024 : 2047.0 * 1024 * 1024 ) )
+      return -1;
+   return (long) v;
+}
+
+/* the size asked for on the command line (before the program name) or in
+ * REGINA_STACK; 0 if none, -1 if the size is invalid */
+static long requested_stack_size( int argc, char *argv[], const char **text )
+{
+   int i;
+
+   *text = NULL;
+   for ( i = 1; i < argc && argv[i][0] == '-'; i++ )
+   {
+      if ( strcmp( argv[i], "--" ) == 0 )
+         break;
+      if ( strncmp( argv[i], "--stack=", 8 ) == 0 )
+         *text = argv[i] + 8;
+      else if ( strcmp( argv[i], "--stack" ) == 0 && i + 1 < argc )
+         *text = argv[++i];
+      else if ( strncmp( argv[i], "-Z", 2 ) == 0 )
+         *text = argv[i][2] ? argv[i] + 2 : ( i + 1 < argc ? argv[++i] : "" );
+      else if ( ( argv[i][1] == 'l' || argv[i][1] == 'o' ) && argv[i][2] == '\0' )
+         i++;                   /* -l LOCALE, -o OPTIONS take the next word */
+   }
+   if ( *text == NULL )
+      *text = getenv( "REGINA_STACK" );
+   if ( *text == NULL || **text == '\0' )
+      return 0;
+   return parse_stack_size( *text );
+}
+
+/*
+ * A temporary file for the workspace session program. On Windows the
+ * tmpfile() of msvcrt creates it in the root of the drive, where users
+ * usually may not write; use the TEMP folder and delete it when closed.
+ */
+static FILE *session_tmpfile( void )
+{
+#if defined(_WIN32) || defined(_WIN64)
+   char dir[MAX_PATH], path[MAX_PATH + 64];
+   DWORD n = GetTempPathA( sizeof( dir ), dir );
+   int i;
+
+   if ( n > 0 && n < sizeof( dir ) )
+   {
+      for ( i = 0; i < 100; i++ )
+      {
+         FILE *fp;
+         sprintf( path, "%sregina-ws-%lu-%d.rexx", dir, (unsigned long) GetCurrentProcessId(), i );
+         fp = fopen( path, "w+bTD" );   /* T: temporary, D: deleted on close */
+         if ( fp )
+            return fp;
+      }
+   }
+#endif
+   return tmpfile();
+}
+
+typedef struct { int argc; char **argv; int rc; } main_args;
+
+#if defined(_WIN32) || defined(_WIN64)
+# include <process.h>
+static unsigned __stdcall stack_thread( void *p )
+{
+   main_args *a = (main_args *) p;
+   a->rc = interpreter_main( a->argc, a->argv );
+   return 0;
+}
+
+static int run_with_stack( long size, main_args *a )
+{
+   HANDLE h = (HANDLE) _beginthreadex( NULL, (unsigned) size, stack_thread, a,
+                                       STACK_SIZE_PARAM_IS_A_RESERVATION, NULL );
+   if ( h == 0 )
+      return -1;
+   WaitForSingleObject( h, INFINITE );
+   CloseHandle( h );
+   return 0;
+}
+#else
+# include <pthread.h>
+static void *stack_thread( void *p )
+{
+   main_args *a = (main_args *) p;
+   a->rc = interpreter_main( a->argc, a->argv );
+   return NULL;
+}
+
+static int run_with_stack( long size, main_args *a )
+{
+   pthread_attr_t attr;
+   pthread_t t;
+
+   if ( pthread_attr_init( &attr ) != 0 )
+      return -1;
+   if ( pthread_attr_setstacksize( &attr, (size_t) size ) != 0
+     || pthread_create( &t, &attr, stack_thread, a ) != 0 )
+   {
+      pthread_attr_destroy( &attr );
+      return -1;
+   }
+   pthread_attr_destroy( &attr );
+   pthread_join( t, NULL );
+   return 0;
+}
+#endif
+
+#if ( defined(_WIN64) || defined(_M_X64) ) && defined(__MINGW32__)
+/*
+ * A crash report on Windows: the exception, where it happened (module and
+ * offset, which tools/symbolize-windows.sh turns into function names) and
+ * the chain of callers. Windows itself ends the program silently.
+ */
+static void crash_where( const char *what, DWORD64 addr )
+{
+   HMODULE mod = NULL;
+   char name[MAX_PATH] = "?";
+
+   if ( GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                            | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCSTR) (ULONG_PTR) addr, &mod ) && mod )
+   {
+      char *b;
+      GetModuleFileNameA( mod, name, sizeof( name ) );
+      b = strrchr( name, '\\' );
+      fprintf( stderr, "  %s %s+0x%llx\n", what, b ? b + 1 : name,
+               (unsigned long long) ( addr - (DWORD64) (ULONG_PTR) mod ) );
+   }
+   else
+      fprintf( stderr, "  %s 0x%llx\n", what, (unsigned long long) addr );
+}
+
+static LONG WINAPI crash_report( EXCEPTION_POINTERS *ep )
+{
+   CONTEXT ctx = *ep->ContextRecord;
+   EXCEPTION_RECORD *er = ep->ExceptionRecord;
+   int i;
+
+   fprintf( stderr, "\nRegina crashed: exception 0x%08lx",
+            (unsigned long) er->ExceptionCode );
+   if ( er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && er->NumberParameters >= 2 )
+      fprintf( stderr, " (%s address 0x%llx)",
+               er->ExceptionInformation[0] == 0 ? "reading" :
+               er->ExceptionInformation[0] == 1 ? "writing" : "executing",
+               (unsigned long long) er->ExceptionInformation[1] );
+   fprintf( stderr, "\n" );
+   crash_where( "at", (DWORD64) (ULONG_PTR) er->ExceptionAddress );
+   for ( i = 0; i < 40 && ctx.Rip; i++ )
+   {
+      DWORD64 base = 0;
+      PRUNTIME_FUNCTION fe = RtlLookupFunctionEntry( ctx.Rip, &base, NULL );
+      if ( fe )
+      {
+         PVOID hd;
+         DWORD64 ef;
+         RtlVirtualUnwind( UNW_FLAG_NHANDLER, base, ctx.Rip, fe, &ctx, &hd, &ef, NULL );
+      }
+      else
+      {
+         if ( IsBadReadPtr( (void *) (ULONG_PTR) ctx.Rsp, 8 ) )
+            break;
+         ctx.Rip = *(DWORD64 *) (ULONG_PTR) ctx.Rsp;
+         ctx.Rsp += 8;
+      }
+      if ( ctx.Rip )
+         crash_where( "called from", ctx.Rip );
+   }
+   fprintf( stderr, "Please report these lines.\n" );
+   fflush( stderr );
+   return EXCEPTION_EXECUTE_HANDLER;
+}
+# define INSTALL_CRASH_REPORT() SetUnhandledExceptionFilter( crash_report )
+#else
+# define INSTALL_CRASH_REPORT()
+#endif
+
 #ifdef RXLIB
 # if defined(__LCC__)
 int __regina_faked_main(int argc,char *argv[])
@@ -799,6 +1047,35 @@ int APIENTRY __regina_faked_main(int argc,char *argv[])
 int main(int argc,char *argv[])
 # define CALL_MAIN main
 #endif
+{
+   const char *text;
+   long size;
+
+   INSTALL_CRASH_REPORT();
+   size = requested_stack_size( argc, argv, &text );
+   main_args a;
+
+   if ( size < 0 )
+   {
+      fprintf( stderr, "%s: invalid stack size \"%s\" (a number of bytes with K, M or G, at least 1M)\n",
+               argv[0], text );
+      return 1;
+   }
+   if ( size == 0 )
+      return interpreter_main( argc, argv );
+   regina_stack_size = size;
+   a.argc = argc;
+   a.argv = argv;
+   a.rc = 0;
+   if ( run_with_stack( size, &a ) != 0 )
+   {
+      fprintf( stderr, "%s: can't create a thread with a stack of %s\n", argv[0], text );
+      return 1;
+   }
+   return a.rc;
+}
+
+static int interpreter_main( int argc, char *argv[] )
 {
    tsd_t *TSD;
    int processed;
@@ -864,7 +1141,28 @@ int main(int argc,char *argv[])
             set_locale_info( ptr + 1 );
       }
 
-      if ( processed < argc )
+      if ( ws_session )
+      {
+         /* the session program of oo.c; stdin stays for the user's lines */
+         extern const char *oo_session_source( void );
+         FILE *fp = session_tmpfile();
+         stdinput = 0;
+         if ( fp == NULL )
+            exiterror( ERR_PROG_UNREADABLE, 1, "No temporary file for the workspace session" );
+         fputs( oo_session_source(), fp );
+         rewind( fp );
+         TSD->systeminfo->input_file = Str_crestrTSD( "<workspace session>" );
+         TSD->systeminfo->input_fp = fp;
+         if ( ws_session_arg && processed >= argc )
+         {
+            static char *wsargv[2];
+            wsargv[0] = ws_session_arg;
+            argc = 1;
+            argv = wsargv;
+            processed = 0;
+         }
+      }
+      else if ( processed < argc )
       {
          stdinput = 0;
          TSD->systeminfo->input_file = get_external_routine( TSD,
@@ -1067,6 +1365,7 @@ sysinfobox *creat_sysinfo( const tsd_t *TSD, streng *envir )
    sinfo->cstackmax = 10;
    sinfo->trace_override = 0;
    sinfo->ctrlcounter = 0;
+   sinfo->oo_keep_tree = 0;
    memset( &sinfo->tree, 0, sizeof( sinfo->tree ) );
 
    return sinfo;
@@ -1187,6 +1486,12 @@ static void usage( char *argv0 )
    fprintf( stdout,"       p - external packages statically linked\n" );
    fprintf( stdout,"       v - version only\n" );
    fprintf( stdout,"  --restricted, -r                run Regina in \"safe\" mode\n" );
+   fprintf( stdout,"  --oo, -O                        object-oriented keywords on in every program\n" );
+   fprintf( stdout,"  --no-oo, -N                     object-oriented extension off (classic Regina)\n" );
+   fprintf( stdout,"  --gc, -G / --no-gc, -g          garbage collection of objects on (default) / off\n" );
+   fprintf( stdout,"  --ws[=wsid], -W[wsid]           interactive workspace session (APL style)\n" );
+   fprintf( stdout,"  --stack=SIZE, -ZSIZE            run with a C stack of SIZE bytes (K, M, G allowed),\n" );
+   fprintf( stdout,"                                  for deeply nested methods; also REGINA_STACK\n" );
    fprintf( stdout,"  --trace[=char], -t[char]        set TRACE to any valid TRACE character - default A\n" );
    fprintf( stdout,"  --interactive[=char], -i[char]  set TRACE to any valid TRACE character and run interactively - default A\n" );
    fprintf( stdout,"  --args, -a                      pass command line to Rexx program as separate arguments\n");

@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.7.5.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -139,38 +139,50 @@ extern int __reginadebug;
     OPTIONS = 340,                 /* OPTIONS  */
     ENVIRONMENT = 341,             /* ENVIRONMENT  */
     LOSTDIGITS = 342,              /* LOSTDIGITS  */
-    GTGT = 343,                    /* GTGT  */
-    LTLT = 344,                    /* LTLT  */
-    NOTGTGT = 345,                 /* NOTGTGT  */
-    NOTLTLT = 346,                 /* NOTLTLT  */
-    GTGTE = 347,                   /* GTGTE  */
-    LTLTE = 348,                   /* LTLTE  */
-    INPUT = 349,                   /* INPUT  */
-    OUTPUT = 350,                  /* OUTPUT  */
-    ERROR = 351,                   /* ERROR  */
-    NORMAL = 352,                  /* NORMAL  */
-    APPEND = 353,                  /* APPEND  */
-    REPLACE = 354,                 /* REPLACE  */
-    STREAM = 355,                  /* STREAM  */
-    STEM = 356,                    /* STEM  */
-    LIFO = 357,                    /* LIFO  */
-    FIFO = 358,                    /* FIFO  */
-    NOEOL = 359,                   /* NOEOL  */
-    LOWER = 360,                   /* LOWER  */
-    CASELESS = 361,                /* CASELESS  */
-    PLUSASSIGNMENTVARIABLE = 362,  /* PLUSASSIGNMENTVARIABLE  */
-    MINUSASSIGNMENTVARIABLE = 363, /* MINUSASSIGNMENTVARIABLE  */
-    MULTASSIGNMENTVARIABLE = 364,  /* MULTASSIGNMENTVARIABLE  */
-    DIVASSIGNMENTVARIABLE = 365,   /* DIVASSIGNMENTVARIABLE  */
-    MODULUSASSIGNMENTVARIABLE = 366, /* MODULUSASSIGNMENTVARIABLE  */
-    INTDIVASSIGNMENTVARIABLE = 367, /* INTDIVASSIGNMENTVARIABLE  */
-    ORASSIGNMENTVARIABLE = 368,    /* ORASSIGNMENTVARIABLE  */
-    XORASSIGNMENTVARIABLE = 369,   /* XORASSIGNMENTVARIABLE  */
-    ANDASSIGNMENTVARIABLE = 370,   /* ANDASSIGNMENTVARIABLE  */
-    CONCATASSIGNMENTVARIABLE = 371, /* CONCATASSIGNMENTVARIABLE  */
-    CCAT = 372,                    /* CCAT  */
-    UMINUS = 373,                  /* UMINUS  */
-    UPLUS = 374                    /* UPLUS  */
+    DOLABEL = 343,                 /* DOLABEL  */
+    DOCOUNTER = 344,               /* DOCOUNTER  */
+    DOWITH = 345,                  /* DOWITH  */
+    DOINDEX = 346,                 /* DOINDEX  */
+    DOITEM = 347,                  /* DOITEM  */
+    DOOVER = 348,                  /* DOOVER  */
+    GTGT = 349,                    /* GTGT  */
+    LTLT = 350,                    /* LTLT  */
+    NOTGTGT = 351,                 /* NOTGTGT  */
+    NOTLTLT = 352,                 /* NOTLTLT  */
+    GTGTE = 353,                   /* GTGTE  */
+    LTLTE = 354,                   /* LTLTE  */
+    INPUT = 355,                   /* INPUT  */
+    OUTPUT = 356,                  /* OUTPUT  */
+    ERROR = 357,                   /* ERROR  */
+    NORMAL = 358,                  /* NORMAL  */
+    APPEND = 359,                  /* APPEND  */
+    REPLACE = 360,                 /* REPLACE  */
+    STREAM = 361,                  /* STREAM  */
+    STEM = 362,                    /* STEM  */
+    LIFO = 363,                    /* LIFO  */
+    FIFO = 364,                    /* FIFO  */
+    NOEOL = 365,                   /* NOEOL  */
+    LOWER = 366,                   /* LOWER  */
+    CASELESS = 367,                /* CASELESS  */
+    MSGSEND = 368,                 /* MSGSEND  */
+    CASCADE = 369,                 /* CASCADE  */
+    DCOLON = 370,                  /* DCOLON  */
+    USEARG = 371,                  /* USEARG  */
+    MSGSUPER = 372,                /* MSGSUPER  */
+    BLOCK = 373,                   /* BLOCK  */
+    PLUSASSIGNMENTVARIABLE = 374,  /* PLUSASSIGNMENTVARIABLE  */
+    MINUSASSIGNMENTVARIABLE = 375, /* MINUSASSIGNMENTVARIABLE  */
+    MULTASSIGNMENTVARIABLE = 376,  /* MULTASSIGNMENTVARIABLE  */
+    DIVASSIGNMENTVARIABLE = 377,   /* DIVASSIGNMENTVARIABLE  */
+    MODULUSASSIGNMENTVARIABLE = 378, /* MODULUSASSIGNMENTVARIABLE  */
+    INTDIVASSIGNMENTVARIABLE = 379, /* INTDIVASSIGNMENTVARIABLE  */
+    ORASSIGNMENTVARIABLE = 380,    /* ORASSIGNMENTVARIABLE  */
+    XORASSIGNMENTVARIABLE = 381,   /* XORASSIGNMENTVARIABLE  */
+    ANDASSIGNMENTVARIABLE = 382,   /* ANDASSIGNMENTVARIABLE  */
+    CONCATASSIGNMENTVARIABLE = 383, /* CONCATASSIGNMENTVARIABLE  */
+    CCAT = 384,                    /* CCAT  */
+    UMINUS = 385,                  /* UMINUS  */
+    UPLUS = 386                    /* UPLUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -185,6 +197,8 @@ typedef int YYSTYPE;
 
 extern YYSTYPE __reginalval;
 
+
 int __reginaparse (void);
+
 
 #endif /* !YY__REGINA_YACCSRC_H_INCLUDED  */

@@ -629,6 +629,11 @@ static unsigned long FillTree(treenode *table, char *base, unsigned long start,
                table->u.trace_only = np->u.trace_only;
                break;
 
+            case X_MSGSEND:   /* OO: ~name:super */
+            case X_CASCADE:
+               table->u.nonansi = np->u.nonansi;
+               break;
+
             case X_ADDR_WITH:
                if ( !np->p[0] && !np->p[1] && !np->p[2] )
                   table->u.of = np->u.of;

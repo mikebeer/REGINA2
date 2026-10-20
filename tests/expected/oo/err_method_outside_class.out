@@ -1,0 +1,4 @@
+     4 +++ method m
+Error 99 running "@WORK@/oo/err_method_outside_class.rexx", line 4: [Translation error]
+Error 99.4: [::METHOD must follow a ::CLASS directive]
+rc=157

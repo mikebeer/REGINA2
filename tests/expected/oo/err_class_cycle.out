@@ -1,0 +1,4 @@
+     4 +++ class b subclass a
+Error 98 running "@WORK@/oo/err_class_cycle.rexx", line 4: [Execution error]
+Error 98.10: [Class "A" would inherit from itself]
+rc=158

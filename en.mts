@@ -290,11 +290,22 @@
  64,  0,[Syntax error while parsing]
  64,  1,[Syntax error at line %d]
  64,  2,[General syntax error at line %d, column %d]|<linenumber>,<columnnumber>
+ 88,  0,[Invalid argument]
+ 88,  1,[Method "%s": argument %d must be a positive whole number; found "%s"]|<name>,<argnumber>,<value>
+ 88,  2,[Method "%s": argument %d must be a class object; found "%s"]|<name>,<argnumber>,<value>
+ 88,  3,[Method "%s": argument %d is required]|<name>,<argnumber>
+ 88,  4,[Method "%s": argument %d must be an Array; found "%s"]|<name>,<argnumber>,<value>
+ 88,  5,[Method "%s": argument %d must be a non-negative whole number; found "%s"]|<name>,<argnumber>,<value>
+ 88,  6,[Array index %s exceeds the maximum of 100000000]|<value>
+ 88,  7,[Method "%s": argument %d must be a whole number; found "%s"]|<name>,<argnumber>,<value>
+ 88,  8,[Method "%s": argument %d must not be zero]|<name>,<argnumber>
  90,  0,[Non-ANSI feature used with "OPTIONS STRICT_ANSI"]
  90,  1,[%s is a Regina extension BIF]|<bif>
  90,  2,[%s is a Regina extension instruction]|<token>
  90,  3,[%s argument %d, option must start with one of "%s" with "OPTIONS STRICT_ANSI"; found "%s"; a Regina extension]|<bif>,<argnumber>,<optionslist>,<value>
  90,  4,[%s is a Regina extension operator]|<token>
+ 91,  0,[No result object]
+ 91,  1,[Message "%s" did not return a result]|<name>
  93,  0,[Incorrect call to routine]
  93,  1,[STREAM command %s must be followed by one of "%s"; found "%s"]|<token>,<value>,<value>
  93,  3,[STREAM command must be one of "%s"; found "%s"]|<value>,<value>
@@ -320,6 +331,39 @@
  95,  3,[%s argument %d: "%s", invalid in "safe" mode]|<bif>,<argnumber>,<token>
  95,  4,[STREAM argument 3: Opening files for WRITE access invalid in "safe" mode]
  95,  5,[Running external commands invalid in "safe" mode]
+ 97,  0,[Object method not found]
+ 97,  1,[Object "%s" does not understand message "%s"]|<value>,<name>
+ 98,  0,[Execution error]
+ 98,  1,[Class "%s" not found]|<name>
+ 98,  2,[Directives are not allowed in INTERPRET data]
+ 98,  3,[Could not find the required file "%s"]|<name>
+ 98,  4,[%s is only valid in a method]|<token>
+ 98,  5,[DO OVER: "%s" is not a collection]|<value>
+ 98,  6,[Method "%s" is abstract]|<name>
+ 98,  7,[Mixin class "%s" cannot create instances]|<name>
+ 98,  8,[Method "%s" needs a one-dimensional array]|<name>
+ 98,  9,[Supplier has no more items]
+ 98, 10,[Class "%s" would inherit from itself]|<name>
+ 98, 11,[The array has %s dimension(s), but %s index(es) were given]|<value>,<value>
+ 98, 12,[The list is circular]
+ 98, 13,[Invalid list: %s]|<description>
+ 98, 14,[Python: %s]|<description>
+ 98, 15,[Python is not available in this build]
+ 98, 16,[The block is used after the routine that created it has ended; begin the block with PROCEDURE]
+ 98, 17,[Method "%s" would change the order of a SortedCollection; use ADD]|<name>
+ 98, 18,[%s: cannot open the file "%s"]|<name>,<file>
+ 98, 19,[The workspace has no name; use []SAVE(name) or []WSID(name)]
+ 99,  0,[Translation error]
+ 99,  1,[Unknown directive "::%s"]|<name>
+ 99,  2,[Duplicate ::CLASS "%s"]|<name>
+ 99,  3,[Duplicate method "%s" in class "%s"]|<name>,<name>
+ 99,  4,[::%s must follow a ::CLASS directive]|<name>
+ 99,  5,[Missing name in ::%s directive]|<name>
+ 99,  6,[Invalid option "%s" in ::%s directive]|<token>,<name>
+ 99,  7,[Duplicate ::ROUTINE "%s"]|<name>
+ 99,  8,[Block not closed: "}" expected]
+ 99,  9,[Invalid block parameters: ":name ..." must be followed by a vertical bar and an expression]
+ 99, 10,[Class "%s" not found]|<name>
 100,  0,[Unknown filesystem error]
 #
 # Extra general phrases requiring translation:

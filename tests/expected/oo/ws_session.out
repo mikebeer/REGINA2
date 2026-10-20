@@ -1,0 +1,46 @@
+Regina OO workspace session. )HELP lists the commands, )OFF ends it.
+      )SAVE [wsid]          save the workspace in wsid.rxws
+)LOAD wsid            clear, then load wsid.rxws
+)OUT file [names]     write all or some names to file.rxo
+)IN file [names]      read all or some names from a file
+)VARS )FNS )CLASSES   list variables, routines, classes
+)ERASE names          erase variables, routines, classes
+)SHOW name            show the source of a routine or class
+)WSID [name]          show or set the workspace name
+)CLEAR                empty workspace
+)GC                   collect unused objects now
+)OFF                  end the session
+A line with an expression shows its value. Lines that start
+with :: define routines and classes, up to an empty line.
+            42
+            a-b
+      a literal is shown too
+          :     :     : HYP
+      25
+          :     :     :     :     :     :     :     : COUNTER
+            1 2
+      C X Y
+      HYP
+      COUNTER
+      WAS CLEAR WS
+      SAVED sessiontest.rxws
+      CLEAR WS
+      
+      LOADED sessiontest
+      42 b 169 3
+            set
+      4
+      3
+      3
+            ::routine hyp
+  use arg a, b
+  return a * a + b * b
+
+            C M Y
+      Error 42.3: Arithmetic overflow; divisor must not be zero
+      after the error
+      WRITTEN sessionpart.rxo
+      CLEAR WS
+      Y
+      Y
+      rc=0

@@ -1,0 +1,20 @@
+     4 *-* r = n * 2 + 1
+       >V>   "2"
+       >L>   "2"
+       >O>   "4"
+       >L>   "1"
+       >O>   "5"
+     5 *-* s = n || 'x'
+       >V>   "2"
+       >L>   "x"
+       >O>   "2x"
+     6 *-* t = (n+1) * n
+       >V>   "2"
+       >L>   "1"
+       >O>   "3"
+       >V>   "2"
+       >O>   "6"
+     7 *-* trace o
+5 2x 6
+NOVALUE for UNDEFINEDVAR at line 11
+rc=0

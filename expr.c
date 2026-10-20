@@ -207,6 +207,46 @@ num_descr *calcul( tsd_t *TSD, nodeptr thisptr, num_descr **kill, int side, int 
    streng *sptr;
    int strip2 = 0; /* fixes bug 1107763, second part */
 
+   if ( TSD->oo_active && thisptr->p[0] )
+   {
+      /* OO extension: operators with an object as left operand */
+      int handled;
+      streng *lv;
+
+      sptr = oo_operator( TSD, thisptr, &handled, &lv );
+      if ( handled )
+      {
+         numthr = get_a_descr( TSD, NULL, 0, sptr );
+         Free_stringTSD( sptr );
+         if ( kill )
+            *kill = numthr;
+         return numthr;
+      }
+      if ( lv )
+      {
+         treenode tl, top;
+
+         memset( &tl, 0, sizeof( tl ) );
+         tl.type = X_STRING;
+         tl.name = lv;
+         tl.charnr = OO_TEMP_NODE;   /* already traced, see tracing below */
+         top = *thisptr;
+         top.p[0] = &tl;
+         /* the left operand is no longer a (compound) variable or constant */
+         top.u.flags.lnum = top.u.flags.lsvar = top.u.flags.lcvar = 0;
+         numthr = calcul( TSD, &top, NULL, side, operator );
+         if ( tl.u.number )
+         {
+            FreeTSD( tl.u.number->num );
+            FreeTSD( tl.u.number );
+         }
+         Free_stringTSD( lv );
+         if ( kill )
+            *kill = numthr;
+         return numthr;
+      }
+   }
+
    switch ( thisptr->type )
    {
       case 0:
@@ -309,10 +349,19 @@ do_an_add:
 
       case X_STRING:
       case X_CON_SYMBOL:
+         if ( thisptr->type == X_CON_SYMBOL && ( TSD->oo_active || oo_mode() > 0 ) && OO_IS_ENVSYMBOL( thisptr ) )
+         {
+            sptr = oo_eval_envsymbol( TSD, thisptr );
+            numthr = get_a_descr( TSD, NULL, 0, sptr );
+            Free_stringTSD( sptr );
+            if ( kill )
+               *kill = numthr;
+            return numthr;
+         }
          if ( !thisptr->u.number )
             thisptr->u.number = get_a_descr( TSD, NULL, 0, thisptr->name ) ;
 
-         if (TSD->trace_stat=='I')
+         if (TSD->trace_stat=='I' && thisptr->charnr != OO_TEMP_NODE)
             tracenumber( TSD, thisptr->u.number, 'L' ) ;
 
          if (kill)
@@ -333,6 +382,14 @@ do_an_add:
          {
             /* get value of symbol for error reporting */
             sptr = evaluate( TSD, thisptr, NULL ) ;
+            if ( TSD->oo_active && OO_LOOKS_LIKE_HANDLE( sptr ) )
+            {
+               /* OO extension: an object is used by its string value */
+               nptr = get_a_descr( TSD, NULL, 0, sptr );
+               if ( kill )
+                  *kill = nptr;
+               return nptr;
+            }
             exiterror( ERR_BAD_ARITHMETIC, side, tmpstr_of( TSD, sptr ), getoperator( operator ) );
          }
 
@@ -379,6 +436,13 @@ do_an_add:
       case X_IS_EXTERNAL:
       case X_CONCAT:
       case X_SPACE:
+      case X_MSGSEND:
+      case X_CASCADE:
+      case X_INDEX:
+      case X_OO_OVERINIT:
+      case X_OO_OVERITEM:
+      case X_OO_STEMOBJ:
+      case X_OO_BLOCK:
       {
          numthr = get_a_descr( TSD, NULL, 0, evaluate( TSD, thisptr, &sptr ) );
          FREE_TMP_STRING( sptr );
@@ -559,6 +623,39 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
 
    if ( kill )
       *kill = NULL;
+   if ( TSD->oo_active && thisptr->p[0] )
+   {
+      /* OO extension: operators with an object as left operand */
+      int handled;
+      streng *lv;
+
+      stmp1 = oo_operator( TSD, thisptr, &handled, &lv );
+      if ( handled )
+      {
+         RETURN_NEW( stmp1 );
+      }
+      if ( lv )
+      {
+         treenode tl, top;
+
+         memset( &tl, 0, sizeof( tl ) );
+         tl.type = X_STRING;
+         tl.name = lv;
+         tl.charnr = OO_TEMP_NODE;   /* already traced, see tracing below */
+         top = *thisptr;
+         top.p[0] = &tl;
+         /* the left operand is no longer a (compound) variable or constant */
+         top.u.flags.lnum = top.u.flags.lsvar = top.u.flags.lcvar = 0;
+         stmp1 = evaluate( TSD, &top, NULL );
+         if ( tl.u.number )
+         {
+            FreeTSD( tl.u.number->num );
+            FreeTSD( tl.u.number );
+         }
+         Free_stringTSD( lv );
+         RETURN_NEW( stmp1 );
+      }
+   }
    switch ( thisptr->type )
    {
       case 0:
@@ -584,10 +681,18 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
       case X_NULL:
          return NULL ;
 
-      case X_STRING:
       case X_CON_SYMBOL:
+         if ( ( TSD->oo_active || oo_mode() > 0 ) && OO_IS_ENVSYMBOL( thisptr ) )
+         {
+            stmp1 = oo_eval_envsymbol( TSD, thisptr );
+            if ( TSD->trace_stat == 'I' )
+               tracevalue( TSD, stmp1, 'L' );
+            RETURN_NEW( stmp1 );
+         }
+         /* fall through */
+      case X_STRING:
          cstmp = thisptr->name;
-         if ( TSD->trace_stat == 'I' )
+         if ( TSD->trace_stat == 'I' && thisptr->charnr != OO_TEMP_NODE )
             tracevalue( TSD, cstmp, 'L' );
          if ( kill )
             return (streng *) cstmp; /* and *kill is set to NULL above */
@@ -619,7 +724,22 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
             thisptr->u.node = entry;
          }
          else
+         {
             thisptr->u.node = NULL;
+            if ( TSD->oo_active && oo_has_routine( TSD, thisptr->name ) )
+            {
+               paramboxptr args = initplist( TSD, thisptr );
+               streng *ptr;
+
+               set_reserved_value( TSD, POOL0_SIGL, NULL, TSD->currentnode->lineno, VFLAG_NUM );
+               ptr = oo_call_routine( TSD, thisptr->name, args );
+               if ( ptr == NULL )
+                  exiterror( ERR_NO_DATA_RETURNED, 1, tmpstr_of( TSD, thisptr->name ) );
+               if ( TSD->trace_stat == 'I' )
+                  tracevalue( TSD, ptr, 'F' );
+               RETURN_NEW( ptr );
+            }
+         }
       }
 
       case X_IS_INTERNAL:
@@ -771,6 +891,21 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          }
          else
             strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         if ( TSD->oo_active )
+         {
+            /* objects are concatenated with their STRING value */
+            streng *o1 = oo_stringify( TSD, strone ), *o2 = oo_stringify( TSD, strtwo );
+            if ( o1 )
+            {
+               if ( stmp1 ) FREE_TMP_STRING( stmp1 );
+               strone = stmp1 = o1;
+            }
+            if ( o2 )
+            {
+               if ( stmp2 ) FREE_TMP_STRING( stmp2 );
+               strtwo = stmp2 = o2;
+            }
+         }
          strthr = Str_makeTSD(Str_len(strone)+Str_len(strtwo)+1) ;
          cptr = strthr->value ;
          memcpy( cptr, strone->value, strone->len ) ;
@@ -825,6 +960,38 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          stmp1 = bool_to_str( TSD, isboolean( TSD, thisptr, 0, NULL )) ;
          RETURN_NEW( stmp1 );
 
+      /*
+       * OO extension, see oo.c
+       */
+      case X_MSGSEND:
+      case X_CASCADE:
+         stmp1 = oo_eval_message( TSD, thisptr, 1 );
+         if ( TSD->trace_stat == 'I' )
+            tracevalue( TSD, stmp1, 'F' );
+         RETURN_NEW( stmp1 );
+
+      case X_INDEX:
+         stmp1 = oo_eval_index( TSD, thisptr );
+         if ( TSD->trace_stat == 'I' )
+            tracevalue( TSD, stmp1, 'F' );
+         RETURN_NEW( stmp1 );
+
+      case X_OO_STEMOBJ:
+         stmp1 = oo_eval_stemobj( TSD, thisptr );
+         RETURN_NEW( stmp1 );
+
+      case X_OO_BLOCK:
+         stmp1 = oo_eval_block( TSD, thisptr );
+         RETURN_NEW( stmp1 );
+
+      case X_OO_OVERINIT:
+         stmp1 = oo_eval_over_init( TSD, thisptr );
+         RETURN_NEW( stmp1 );
+
+      case X_OO_OVERITEM:
+         stmp1 = oo_eval_over_item( TSD, thisptr );
+         RETURN_NEW( stmp1 );
+
       default:
          exiterror( ERR_INTERPRETER_FAILURE, 1, __FILE__, __LINE__, "" )  ;
          return NULL ;
@@ -838,12 +1005,67 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
  * value for true. "thisptr" is the current evaluation tree.
  * Note: This is one of the most time-consuming routines. Be careful.
  */
+/*
+ * OO extension: an object operand of a comparison whose left side is no
+ * object (that case is a message, see oo_operator) is compared by its
+ * string value. Only object handles are touched.
+ */
+#define OO_OPERAND(s,k) if ( TSD->oo_active && (s) && OO_LOOKS_LIKE_HANDLE( s ) ) \
+                           oo_operand_string( TSD, &(s), &(k) )
+static void oo_operand_string( tsd_t *TSD, streng **s, streng **k )
+{
+   streng *v = oo_stringify( TSD, *s );
+
+   if ( v )
+   {
+      if ( *k )
+         Free_stringTSD( *k );
+      *s = *k = v;
+   }
+}
+
 int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
 {
    streng *strone,*strtwo;
    streng *stmp1,*stmp2;
    int tmp,sint;
    num_descr *ntmp;
+
+   if ( TSD->oo_active && thisptr->p[0] )
+   {
+      /* OO extension: operators with an object as left operand */
+      int handled;
+      streng *lv;
+
+      stmp1 = oo_operator( TSD, thisptr, &handled, &lv );
+      if ( handled )
+      {
+         tmp = str_to_bool( stmp1 );
+         Free_stringTSD( stmp1 );
+         return tmp;
+      }
+      if ( lv )
+      {
+         treenode tl, top;
+
+         memset( &tl, 0, sizeof( tl ) );
+         tl.type = X_STRING;
+         tl.name = lv;
+         tl.charnr = OO_TEMP_NODE;   /* already traced, see tracing below */
+         top = *thisptr;
+         top.p[0] = &tl;
+         /* the left operand is no longer a (compound) variable or constant */
+         top.u.flags.lnum = top.u.flags.lsvar = top.u.flags.lcvar = 0;
+         tmp = isboolean( TSD, &top, suberror, op );
+         if ( tl.u.number )
+         {
+            FreeTSD( tl.u.number->num );
+            FreeTSD( tl.u.number );
+         }
+         Free_stringTSD( lv );
+         return tmp;
+      }
+   }
 
    switch ( thisptr->type )
    {
@@ -869,6 +1091,12 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
 
       case X_STRING:
       case X_CON_SYMBOL:
+         if ( thisptr->type == X_CON_SYMBOL && ( TSD->oo_active || oo_mode() > 0 ) && OO_IS_ENVSYMBOL( thisptr ) )
+         {
+            tmp = str_to_bool( evaluate( TSD, thisptr, &stmp1 ) );
+            FREE_TMP_STRING( stmp1 );
+            return tmp;
+         }
          if ( !thisptr->u.number )
             thisptr->u.number = get_a_descr( TSD, NULL, 0, thisptr->name ) ;
          if ( Str_len( thisptr->name ) != 1 )
@@ -943,9 +1171,16 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
       case X_IS_EXTERNAL:
       case X_CONCAT:
       case X_SPACE:
+      case X_MSGSEND:
+      case X_CASCADE:
+      case X_INDEX:
          tmp = str_to_bool( evaluate( TSD, thisptr, &stmp1 ) );
          FREE_TMP_STRING( stmp1 );
          return tmp;
+
+      case X_OO_OVERWHILE:
+         oo_over_assign( TSD, thisptr );
+         return isboolean( TSD, thisptr->p[2], suberror, op );
 
       case X_LOG_NOT:
          sint = !isboolean( TSD, thisptr->p[0], 6, "\\" ) ;
@@ -1007,7 +1242,7 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
             lnum = fix_compoundnum( TSD, thisptr->p[0], NULL, NULL );
 
          if (!lnum)
-            lval = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
+            lval = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( lval, stmp1 );
 
          if (flags.rnum)
          {
@@ -1024,7 +1259,7 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
             rnum = fix_compoundnum( TSD, thisptr->p[1], NULL, NULL );
 
          if (!rnum)
-            rval = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+            rval = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( rval, stmp2 );
 
          if (!lnum && !getdescr( TSD, lval, &TSD->ldes ))
             lnum = &TSD->ldes ;
@@ -1093,8 +1328,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          int type ;
 
          type = thisptr->type ;
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
 
          s1 = (unsigned char *) strone->value ;
          s2 = (unsigned char *) strtwo->value ;
@@ -1170,8 +1405,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
       }
 
       case X_S_DIFF:
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
          tmp = Str_cmp(strone,strtwo)!=0 ;
 
          FREE_TMP_STRING( stmp1 );
@@ -1184,8 +1419,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
 
 
       case X_S_EQUAL:
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
          tmp = Str_cmp(strone,strtwo)==0 ;
 
          FREE_TMP_STRING( stmp1 );
@@ -1203,8 +1438,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          int type ;
 
          type = thisptr->type ;
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
 
          s1 = (unsigned char *) strone->value ;
          s2 = (unsigned char *) strtwo->value ;
@@ -1247,8 +1482,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          int type ;
 
          type = thisptr->type ;
-         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ;
-         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ;
+         strone = evaluate( TSD, thisptr->p[0], &stmp1 ) ; OO_OPERAND( strone, stmp1 );
+         strtwo = evaluate( TSD, thisptr->p[1], &stmp2 ) ; OO_OPERAND( strtwo, stmp2 );
 
          s1 = (unsigned char *) strone->value ;
          s2 = (unsigned char *) strtwo->value ;

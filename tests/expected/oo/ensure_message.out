@@ -1,0 +1,15 @@
+42 work cleanup
+caught 42 Error 42.3: Arithmetic overflow; divisor must not be zero
+start cleanup
+The Directory class SYNTAX 42.3 42 Arithmetic overflow/underflow SIGNAL 8
+Error 42.3: Arithmetic overflow; divisor must not be zero
+fine 0
+caught 41 curtailed
+a Message SORTWITH SORTWITH The Array class 1
+1 2 3 The Array class
+cba zyx zyx
+The Directory class
+a Directory
+body
+cleanup before exit
+rc=3

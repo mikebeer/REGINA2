@@ -1,0 +1,72 @@
+abbrev, abs, address, arg, b2x, bitand, bitor, bitxor, c2d, c2x, center,  
+changestr, compare, copies, countstr, datatype, delstr, delword, digits,  
+d2c, d2x, errortext, form, format, 
+first= /1.0000000/
+second=/1.0000001/
+FuncTrip: error in  470:    call ch format(1.000000045,,7), '1.0000001'  /* this is an error in TRL */
+
+first= /1.00000/
+second=/9.99999E-01/
+FuncTrip: error in  487:    call ch format(.999999,,5,2,2),  '9.99999E-01'
+
+first= /1.00000/
+second=/1.00000    /
+FuncTrip: error in  488:    call ch format(.9999999,,5,2,2), '1.00000    '
+
+first= /0.999999/
+second=/9.999990E-01/
+FuncTrip: error in  489:    call ch format(.999999,,6,2,2), '9.999990E-01'
+fuzz, insert, lastpos, left, length,  
+lower, max, min, overlay, pos, reverse, right, sign, sourceline, space,  
+strip, 
+first= /foo
+	/
+second=/foo/
+FuncTrip: error in  714:    call ch strip('  foo' || '0a'x || '09'x || ' '),         'foo' /* this is not an error */
+substr, subword, symbol, 
+first= /BAD/
+second=/LIT/
+FuncTrip: error in  754:    call ch symbol('gamma.Un*x'),   'LIT'
+translate, trunc, 
+first= /10000000.05/
+second=/10000000.10/
+FuncTrip: error in  791:    call ch trunc(10000000.05,2), 10000000.10
+
+first= /10000000.55/
+second=/10000000.60/
+FuncTrip: error in  795:    call ch trunc(10000000.55,2), 10000000.60
+
+first= /10000000.05/
+second=/10000000.10/
+FuncTrip: error in  796:    call ch trunc(10000000.055,2), 10000000.10
+
+first= /10000000.04/
+second=/10000000.00/
+FuncTrip: error in  799:    call ch trunc(10000000.04,2), 10000000.00
+
+first= /10000000.04/
+second=/10000000.00/
+FuncTrip: error in  800:    call ch trunc(10000000.045,2), 10000000.00
+
+first= /10000000.45/
+second=/10000000.50/
+FuncTrip: error in  801:    call ch trunc(10000000.45,2), 10000000.50
+
+first= /10000000.05/
+second=/10000000.10/
+FuncTrip: error in  803:    call ch trunc(10000000.05,2), 10000000.10
+
+first= /10000000.05/
+second=/10000000.10/
+FuncTrip: error in  804:    call ch trunc(10000000.05,2), 10000000.10
+
+first= /10000000.05/
+second=/10000000.10/
+FuncTrip: error in  805:    call ch trunc(10000000.05,2), 10000000.10
+
+first= /99999999.99/
+second=/100000000.00/
+FuncTrip: error in  809:    call ch trunc(99999999.99,2), 100000000.00
+upper, value, verify,  
+word, wordindex, wordlength, wordpos, words, xrange, x2c, x2d, justify,  
+rc=0

@@ -298,11 +298,22 @@ static const errtext_t errtext[NUMBER_ERROR_MESSAGES] =
    {  64,  0,"[Syntax error while parsing]" },
    {  64,  1,"[Syntax error at line %d]" },
    {  64,  2,"[General syntax error at line %d, column %d]|<linenumber>,<columnnumber>" },
+   {  88,  0,"[Invalid argument]" },
+   {  88,  1,"[Method \"%s\": argument %d must be a positive whole number; found \"%s\"]|<name>,<argnumber>,<value>" },
+   {  88,  2,"[Method \"%s\": argument %d must be a class object; found \"%s\"]|<name>,<argnumber>,<value>" },
+   {  88,  3,"[Method \"%s\": argument %d is required]|<name>,<argnumber>" },
+   {  88,  4,"[Method \"%s\": argument %d must be an Array; found \"%s\"]|<name>,<argnumber>,<value>" },
+   {  88,  5,"[Method \"%s\": argument %d must be a non-negative whole number; found \"%s\"]|<name>,<argnumber>,<value>" },
+   {  88,  6,"[Array index %s exceeds the maximum of 100000000]|<value>" },
+   {  88,  7,"[Method \"%s\": argument %d must be a whole number; found \"%s\"]|<name>,<argnumber>,<value>" },
+   {  88,  8,"[Method \"%s\": argument %d must not be zero]|<name>,<argnumber>" },
    {  90,  0,"[Non-ANSI feature used with \"OPTIONS STRICT_ANSI\"]" },
    {  90,  1,"[%s is a Regina extension BIF]|<bif>" },
    {  90,  2,"[%s is a Regina extension instruction]|<token>" },
    {  90,  3,"[%s argument %d, option must start with one of \"%s\" with \"OPTIONS STRICT_ANSI\"; found \"%s\"; a Regina extension]|<bif>,<argnumber>,<optionslist>,<value>" },
    {  90,  4,"[%s is a Regina extension operator]|<token>" },
+   {  91,  0,"[No result object]" },
+   {  91,  1,"[Message \"%s\" did not return a result]|<name>" },
    {  93,  0,"[Incorrect call to routine]" },
    {  93,  1,"[STREAM command %s must be followed by one of \"%s\"; found \"%s\"]|<token>,<value>,<value>" },
    {  93,  3,"[STREAM command must be one of \"%s\"; found \"%s\"]|<value>,<value>" },
@@ -328,6 +339,39 @@ static const errtext_t errtext[NUMBER_ERROR_MESSAGES] =
    {  95,  3,"[%s argument %d: \"%s\", invalid in \"safe\" mode]|<bif>,<argnumber>,<token>" },
    {  95,  4,"[STREAM argument 3: Opening files for WRITE access invalid in \"safe\" mode]" },
    {  95,  5,"[Running external commands invalid in \"safe\" mode]" },
+   {  97,  0,"[Object method not found]" },
+   {  97,  1,"[Object \"%s\" does not understand message \"%s\"]|<value>,<name>" },
+   {  98,  0,"[Execution error]" },
+   {  98,  1,"[Class \"%s\" not found]|<name>" },
+   {  98,  2,"[Directives are not allowed in INTERPRET data]" },
+   {  98,  3,"[Could not find the required file \"%s\"]|<name>" },
+   {  98,  4,"[%s is only valid in a method]|<token>" },
+   {  98,  5,"[DO OVER: \"%s\" is not a collection]|<value>" },
+   {  98,  6,"[Method \"%s\" is abstract]|<name>" },
+   {  98,  7,"[Mixin class \"%s\" cannot create instances]|<name>" },
+   {  98,  8,"[Method \"%s\" needs a one-dimensional array]|<name>" },
+   {  98,  9,"[Supplier has no more items]" },
+   {  98, 10,"[Class \"%s\" would inherit from itself]|<name>" },
+   {  98, 11,"[The array has %s dimension(s), but %s index(es) were given]|<value>,<value>" },
+   {  98, 12,"[The list is circular]" },
+   {  98, 13,"[Invalid list: %s]|<description>" },
+   {  98, 14,"[Python: %s]|<description>" },
+   {  98, 15,"[Python is not available in this build]" },
+   {  98, 16,"[The block is used after the routine that created it has ended; begin the block with PROCEDURE]" },
+   {  98, 17,"[Method \"%s\" would change the order of a SortedCollection; use ADD]|<name>" },
+   {  98, 18,"[%s: cannot open the file \"%s\"]|<name>,<file>" },
+   {  98, 19,"[The workspace has no name; use []SAVE(name) or []WSID(name)]" },
+   {  99,  0,"[Translation error]" },
+   {  99,  1,"[Unknown directive \"::%s\"]|<name>" },
+   {  99,  2,"[Duplicate ::CLASS \"%s\"]|<name>" },
+   {  99,  3,"[Duplicate method \"%s\" in class \"%s\"]|<name>,<name>" },
+   {  99,  4,"[::%s must follow a ::CLASS directive]|<name>" },
+   {  99,  5,"[Missing name in ::%s directive]|<name>" },
+   {  99,  6,"[Invalid option \"%s\" in ::%s directive]|<token>,<name>" },
+   {  99,  7,"[Duplicate ::ROUTINE \"%s\"]|<name>" },
+   {  99,  8,"[Block not closed: \"}\" expected]" },
+   {  99,  9,"[Invalid block parameters: \":name ...\" must be followed by a vertical bar and an expression]" },
+   {  99, 10,"[Class \"%s\" not found]|<name>" },
    { 100,  0,"[Unknown filesystem error]" },
    /*
     * Do not use an error number > 100, these are treated as system errors (errno-100) and the
@@ -519,6 +563,41 @@ static const char *get_embedded_text_message( int errorno, int suberrorno )
  *             Maybe, we don't have a functional tsd_t!
  *             What shall we do?
  */
+/*
+ * OO extension: while oo_error_capture is set (a Rexx block called from
+ * Python), a fatal error is not printed but kept for the caller, see
+ * oo_try_call() in interprt.c.
+ */
+static int oo_error_capture = 0;
+static int oo_captured_no, oo_captured_sub;
+static char oo_captured_text[600];
+
+int oo_set_error_capture( int on )
+{
+   int old = oo_error_capture;
+   oo_error_capture = on;
+   return old;
+}
+
+/* the text of the next error's sub-message, see oo_reraise_error() */
+static const char *oo_forced_text = NULL;
+
+/* raises a captured error again (Block~ensure): same numbers and text */
+void oo_reraise_error( int no, int sub, const char *text )
+{
+   static char copy[600];
+   strncpy( copy, text, sizeof( copy ) - 1 );
+   oo_forced_text = sub ? copy : NULL;
+   exiterror( no, sub );
+}
+
+const char *oo_captured_error( int *no, int *sub )
+{
+   *no = oo_captured_no;
+   *sub = oo_captured_sub;
+   return oo_captured_text;
+}
+
 void exiterror( int errorno, int suberrorno, ... )
 {
    staticstreng( nofile, "<name>" );
@@ -590,7 +669,12 @@ void exiterror( int errorno, int suberrorno, ... )
     * Expanded the sub-error text and pass this to condition_hook for
     * condition('D') to return the expanded string.
     */
-   if ( ( errorno <= ERR_MAX_NUMBER ) && ( suberrorno != 0 ) )
+   if ( oo_forced_text )
+   {
+      suberror_streng = Str_creTSD( oo_forced_text );
+      oo_forced_text = NULL;
+   }
+   else if ( ( errorno <= ERR_MAX_NUMBER ) && ( suberrorno != 0 ) )
    {
       fmt = errortext( TSD, errorno, suberrorno, 0, 0 );
       len = Str_len( fmt );
@@ -694,6 +778,20 @@ void exiterror( int errorno, int suberrorno, ... )
    }
 
    et->conditions++;
+   if ( oo_error_capture && TSD->systeminfo->script_exit )
+   {
+      const streng *t = suberror_streng ? suberror_streng : etext;
+      int n = Str_len( t ) < (int) sizeof( oo_captured_text ) - 1
+            ? Str_len( t ) : (int) sizeof( oo_captured_text ) - 1;
+      oo_captured_no = errorno;
+      oo_captured_sub = suberrorno;
+      memcpy( oo_captured_text, t->value, n );
+      oo_captured_text[n] = '\0';
+      if ( suberror_streng )
+         Free_stringTSD( suberror_streng );
+      clear_errortext_buffers( TSD );
+      goto not_hookable;
+   }
    if ( ( inputfile = TSD->systeminfo->input_file ) == NULL )
       inputfile = (streng *) nofile;
    ok = HOOK_GO_ON;
@@ -1381,6 +1479,10 @@ const char *getsym( int numb )
       case X_XORASSIGN: symb="Logical XOR assignemnt operator" ; break ;
       case X_ANDASSIGN: symb="Logical AND assignemnt operator" ; break ;
       case X_CONCATASSIGN: symb="Concatenation assignemnt operator" ; break ;
+      case X_MSGSEND: symb="Message send" ; break ;
+      case X_CASCADE: symb="Message cascade" ; break ;
+      case X_INDEX: symb="Array reference" ; break ;
+      case X_DIRECTIVE: symb="Directive" ; break ;
       default: symb="Unrecognized value" ;
    }
 

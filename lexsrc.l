@@ -35,6 +35,11 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#ifndef S_ISREG
+# define S_ISREG(m) ( ( (m) & S_IFMT ) == S_IFREG )
+#endif
 
 /* Define ASCII_0_TERMINATES_STRING if you want that ASCII-0 terminates
  * an input string. Normally this should not happen. Input strings are
@@ -124,6 +129,82 @@ static int delayed_symbol=0;
  */
 static int inhibit_delayed_abuttal=0;
 
+/*
+ * bracket_depth counts open "[" of array references (OO extension). A "]"
+ * without an open "[" stays an invalid character as in classic Regina.
+ */
+static int bracket_depth=0;
+
+/*
+ * in_directives is set after the first "::" directive. Only from then on
+ * EXPOSE and USE ARG are instructions; in classic code they stay ordinary
+ * symbols (a command like "use arg x" keeps working).
+ */
+static int in_directives=0;
+
+/*
+ * oo_seen is set once the program has used a message operator or "[".
+ * Those were syntax errors in classic Rexx, so a classic program never
+ * sets it. OO_KEYWORDS tells whether the new keywords EXPOSE, USE ARG,
+ * LOOP and the DO options LABEL, COUNTER and WITH are recognized.
+ * do_over_pending is set for "DO name OVER ..." to allow FOR afterwards.
+ */
+static int oo_seen=0, do_over_pending=0;
+/* oo_mode() at the start of the parse: 1 forced on, -1 classic, 0 auto */
+static int oo_force=0;
+#define OO_KEYWORDS ( oo_force >= 0 && ( in_directives || oo_seen ) )
+#define OO_OFF      ( oo_force < 0 )
+int __regina_do_is_loop=0;   /* the last DO token was LOOP (yaccsrc.y) */
+int __regina_oo_keywords( void ) { return OO_KEYWORDS ; }
+int __regina_oo_off( void ) { return OO_OFF ; }
+static void oo_second_word( const char *text );
+static int oo_symch( char c );
+
+/*
+ * Tracking of "~name:super": oo_expect_name is set by a message operator,
+ * the prologue of yylex() moves it on so that oo_after_name is set for the
+ * token directly following the message name.
+ */
+static int oo_expect_name=0, oo_in_name=0, oo_after_name=0;
+
+/*
+ * The spelling of the last message or cascade operator ("~", "->", "~~",
+ * "->>") for error messages of the parser.
+ */
+const char *__regina_oo_operator = "~";
+
+/*
+ * Sources of blocks "{ ... }" in the order the lexer found them; the
+ * parser takes them in the same order (it may look one token ahead).
+ */
+static streng *block_fifo[8];
+static int block_line[8];
+static int block_head = 0, block_count = 0;
+
+void __regina_block_push( streng *src, int line )
+{
+   int i;
+   if ( block_count == 8 )
+      exiterror( ERR_INTERPRETER_FAILURE, 1, __FILE__, __LINE__, "block queue" );
+   i = ( block_head + block_count++ ) % 8;
+   block_fifo[i] = src;
+   block_line[i] = line;
+}
+
+/* the source of the next block; *line is the line of its "{" */
+streng *__regina_block_take( int *line )
+{
+   streng *s;
+   *line = 0;
+   if ( block_count == 0 )
+      return Str_cre_TSD( parser_data.TSD, "" );
+   s = block_fifo[block_head];
+   *line = block_line[block_head];
+   block_head = ( block_head + 1 ) % 8;
+   block_count--;
+   return s;
+}
+
 static char ch;
 static int kill_this_space=0, kill_next_space=1 ;
 static int extnextline = -1, extnextstart; /* for a delayed line increment */
@@ -133,6 +214,13 @@ static int inEOF=0 ;
 static int singlequote=0, doblequote=0 ;
 static int firstln=0 ;
 static int bufptr=0 ;
+/*
+ * A program read from a stream that can't be read twice (the keyboard, a
+ * pipe) is kept here by has_directive_line, and the lexer reads it from
+ * here instead of from the stream.
+ */
+static char *pre_buf = NULL ;
+static long pre_len = 0, pre_pos = 0 ;
 /* Previous bug. 8-bits clean combined with EOF ==> need an int */
 static int chbuffer[LOOKAHEAD] ;
 static int ipretflag=0, cch=0 ;
@@ -154,7 +242,7 @@ static int fill_buffer( char *buf, int max_size ) ;
 
 
 %start comm signal sgtype procd parse then with
-%start numeric do1 other value1 ifcont signame nmform
+%start numeric do1 other value1 ifcont signame nmform dowith
 
 %e 2500
 %p 17000
@@ -316,6 +404,10 @@ key_with          [wW][iI][tT][hH]
         return retval;
      }
 
+     oo_after_name = oo_in_name ;
+     oo_in_name = oo_expect_name ;
+     oo_expect_name = 0 ;
+
      if (next_numform)
      {
         in_numform = 1 ;
@@ -449,8 +541,45 @@ key_with          [wW][iI][tT][hH]
    assert( do_level >=0 ) ;
    do_level++ ;
    in_do = 1 ;
+   do_over_pending = 0 ;
+   __regina_do_is_loop = 0 ;
    SET_NEXTSTART() ;
    return DO ; }
+
+<comm>[lL][oO][oO][pP]{between} {
+   /*
+    * OO extension: LOOP is DO, but without a repetitor it loops forever.
+    * "loop~msg" and "loop[i] = x" stay message and index instructions.
+    */
+   if ( !OO_KEYWORDS
+     || ( yyleng == 4 && ( yy_hold_char == '~' || yy_hold_char == '[' ) ) )
+      REJECT ;
+   BEGIN do1 ;
+   assert( do_level >=0 ) ;
+   do_level++ ;
+   in_do = 1 ;
+   do_over_pending = 0 ;
+   __regina_do_is_loop = 1 ;
+   SET_NEXTSTART() ;
+   return DO ; }
+
+<comm>{key_expose}{between} {
+   /* OO extension: EXPOSE instruction in methods */
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   BEGIN other ;
+   in_parse = 1 ;
+   SET_NEXTSTART() ;
+   return EXPOSE ; }
+
+<comm>[uU][sS][eE]{blank}+{key_arg}{between} {
+   /* OO extension: USE ARG instruction in methods and routines */
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   BEGIN other ;
+   in_parse = 1 ;
+   SET_NEXTSTART() ;
+   return USEARG ; }
 
 <comm>{key_drop}{between} {
    BEGIN other ;
@@ -1223,6 +1352,8 @@ key_with          [wW][iI][tT][hH]
    return THEN ; }
 
 {between}{key_with}{between} {
+   if ( oo_in_name )
+      REJECT ;
    /*
     * Fixes bug 952380
     */
@@ -1262,6 +1393,60 @@ key_with          [wW][iI][tT][hH]
    SET_NEXTSTART() ;
    return FUZZ ; }
 
+   /*
+    * OO extension: DO LABEL name, DO COUNTER var, DO WITH INDEX i ITEM x
+    * OVER coll. In classic code these words stay ordinary symbols.
+    */
+<do1>[lL][aA][bB][eE][lL]{blank}+{var_symbol}{between} {
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   oo_second_word( yytext ) ;
+   SET_NEXTSTART() ;
+   return DOLABEL ; }
+
+<do1>[cC][oO][uU][nN][tT][eE][rR]{blank}+{var_symbol}{between} {
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   oo_second_word( yytext ) ;
+   SET_NEXTSTART() ;
+   return DOCOUNTER ; }
+
+<do1>[wW][iI][tT][hH]{blank}+/[iI][nN][dD][eE][xX] {
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   BEGIN dowith ;
+   SET_NEXTSTART() ;
+   return DOWITH ; }
+
+<do1>[wW][iI][tT][hH]{blank}+/[iI][tT][eE][mM] {
+   if ( !OO_KEYWORDS )
+      REJECT ;
+   BEGIN dowith ;
+   SET_NEXTSTART() ;
+   return DOWITH ; }
+
+<dowith>[iI][nN][dD][eE][xX]{blank}+{var_symbol}{between} {
+   oo_second_word( yytext ) ;
+   SET_NEXTSTART() ;
+   return DOINDEX ; }
+
+<dowith>[iI][tT][eE][mM]{blank}+{var_symbol}{between} {
+   oo_second_word( yytext ) ;
+   SET_NEXTSTART() ;
+   return DOITEM ; }
+
+<dowith>[oO][vV][eE][rR]{between} {
+   BEGIN other ;
+   in_do = 4 ;     /* only FOR, WHILE and UNTIL may follow */
+   SET_NEXTSTART() ;
+   return DOOVER ; }
+
+<do1>{var_symbol}{blank}+[oO][vV][eE][rR]{blank} {
+   /* "DO name OVER ...": remember it, then lex it as an expression */
+   if ( OO_KEYWORDS )
+      do_over_pending = 1 ;
+   REJECT ; }
+
 <do1>{key_forever}{between} {
    BEGIN other ;
    assert(in_do) ;
@@ -1270,13 +1455,15 @@ key_with          [wW][iI][tT][hH]
    return FOREVER ; }
 
 {key_to}{between} {
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
    if ( in_do == 2 )
    {
       BEGIN other ;
       SET_NEXTSTART() ;
       return TO ;
    }
-   else if ( in_do == 1 )
+   else if ( in_do == 1 || in_do == 4 )
    {
       parser_data.tline = linenr - 1 ; /* set tline for exiterror */
       exiterror( ERR_INVALID_DO_SYNTAX, 1, "TO" )  ;
@@ -1284,13 +1471,15 @@ key_with          [wW][iI][tT][hH]
    REJECT ; }
 
 {key_by}{between} {
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
    if ( in_do == 2 )
    {
       BEGIN other ;
       SET_NEXTSTART() ;
       return BY ;
    }
-   else if ( in_do == 1 )
+   else if ( in_do == 1 || in_do == 4 )
    {
       parser_data.tline = linenr - 1 ; /* set tline for exiterror */
       exiterror( ERR_INVALID_DO_SYNTAX, 1, "BY" ) ;
@@ -1298,8 +1487,12 @@ key_with          [wW][iI][tT][hH]
    REJECT ; }
 
 {key_for}{between} {
-   if ( in_do == 2 )
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
+   if ( in_do == 2 || in_do == 4 || ( in_do == 1 && do_over_pending ) )
    {
+      /* OO extension: in_do 4 is "DO ... OVER coll", FOR limits it */
+      in_do = ( in_do == 2 ) ? 2 : 4 ;
       BEGIN other ;
       SET_NEXTSTART() ;
       return FOR ;
@@ -1312,6 +1505,8 @@ key_with          [wW][iI][tT][hH]
    REJECT ; }
 
 {key_while}{between} {
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
    if (in_do)
    {
       if ( in_do == 3 )
@@ -1327,6 +1522,8 @@ key_with          [wW][iI][tT][hH]
    REJECT ; }
 
 {key_until}{between} {
+   if ( oo_in_name )          /* OO: a message name, as in 1~to(5) */
+      REJECT ;
    if (in_do) {
       if ( in_do == 3 )
       {
@@ -1385,6 +1582,44 @@ key_with          [wW][iI][tT][hH]
    SET_NEXTSTART() ;
    return LABEL ; }
 
+
+   /*
+    * OO extension: workspace functions in the style of APL quad names,
+    * []NL(2), []SAVE('ws'), call []IN 'file'. "[" can't start a term in
+    * classic Rexx. The name is used like a string function name.
+    */
+"[]"[a-zA-Z]+{comment}*\( {
+   int i, n = 0 ;
+   if ( OO_OFF )
+      REJECT ;
+   BEGIN other ;
+   for ( i = 0 ; i < yyleng && yytext[i] != '`' && yytext[i] != '(' ; i++ )
+      retvalue[n++] = (char) rx_toupper( yytext[i] ) ;
+   retvalue[n] = '\0' ;
+   oo_seen = 1 ;
+   kill_next_space = 1 ;
+   if ( insert_abuttal ) {
+      inhibit_delayed_abuttal = 1 ;
+      delayed_symbol = EXFUNCNAME ;
+      SET_NEXTSTART() ;
+      return CONCATENATE ; }
+   expression_ended = 0 ;
+   SET_NEXTSTART() ;
+   return EXFUNCNAME ; }
+
+"[]"[a-zA-Z]+ {
+   int i ;
+   if ( OO_OFF || !in_call )
+      REJECT ;
+   for ( i = 0 ; i < yyleng ; i++ )
+      retvalue[i] = (char) rx_toupper( yytext[i] ) ;
+   retvalue[yyleng] = '\0' ;
+   oo_seen = 1 ;
+   BEGIN other ;
+   in_call = 0 ;
+   kill_next_space = 1 ;
+   SET_NEXTSTART() ;
+   return STRING ; }
 
 {mintext_string}{comment}*\( {
    BEGIN other ;
@@ -1765,6 +2000,171 @@ key_with          [wW][iI][tT][hH]
    SET_NEXTSTART() ;
    return '=' ; }
 
+   /*
+    * OO extension: message send and cascade operators.
+    *
+    * "->" and "->>" are syntax errors in classic Rexx in every position, so
+    * they may be surrounded by blanks.
+    *
+    * "~" is a NOT character in classic Regina. It is only a message operator
+    * ("~") or cascade operator ("~~") when it directly follows a term with no
+    * blank in between (insert_abuttal is set), because a NOT can never
+    * follow a term. Comparisons like "a~=b" or "a~ <b" are longer matches of
+    * the comparison rules below and keep their classic meaning. In every
+    * other case REJECT falls back to the classic NOT rule.
+    */
+{between}\-\>\>{between} {
+   if ( OO_OFF )
+      REJECT ;
+   __regina_oo_operator = "->>" ;
+   oo_seen = 1 ;
+   oo_expect_name = 1 ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return CASCADE ; }
+
+{between}\-\>{between} {
+   if ( OO_OFF )
+      REJECT ;
+   __regina_oo_operator = "->" ;
+   oo_seen = 1 ;
+   oo_expect_name = 1 ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return MSGSEND ; }
+
+~~{between} {
+   if ( !insert_abuttal || OO_OFF )
+      REJECT ;
+   __regina_oo_operator = "~~" ;
+   oo_seen = 1 ;
+   oo_expect_name = 1 ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return CASCADE ; }
+
+~{between} {
+   if ( !insert_abuttal || OO_OFF )
+      REJECT ;
+   __regina_oo_operator = "~" ;
+   oo_seen = 1 ;
+   oo_expect_name = 1 ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return MSGSEND ; }
+
+   /*
+    * OO extension: a block "{ clauses }". "{" is an invalid character in
+    * classic Rexx. The text up to the matching "}" (outside strings and
+    * comments) is kept as the source of the block, see __regina_block_take.
+    */
+\{ {
+   int depth = 1, c, quote = 0, newlines = 0, col = 0;
+   int startline = nextline;
+   streng *src;
+
+   if ( OO_OFF )
+      REJECT ;
+   src = Str_make_TSD( parser_data.TSD, 256 ) ;
+   src->len = 0 ;
+   for ( ; ; )
+   {
+#ifdef __cplusplus
+      c = yyinput() ;
+#else
+      c = input() ;
+#endif
+      if ( c == EOF || c == 0 )
+      {
+         parser_data.tline = linenr - 1 ;
+         Free_string_TSD( parser_data.TSD, src ) ;
+         /* without the OO keywords an open "{" stays an invalid character */
+         if ( !OO_KEYWORDS )
+            exiterror( ERR_INVALID_CHAR, 1, '{', '{' ) ;
+         exiterror( ERR_TRANSLATION_ERROR, 8 ) ;
+      }
+      if ( quote )
+      {
+         if ( c == quote )
+            quote = 0 ;
+      }
+      else if ( c == '\'' || c == '"' )
+         quote = c ;
+      else if ( c == '{' )
+         depth++ ;
+      else if ( c == '}' && --depth == 0 )
+         break ;
+      if ( c == '`' && !quote )
+         c = ' ' ;                       /* what is left of a comment */
+      if ( c == '\n' )
+      {
+         newlines++ ;
+         col = 0 ;
+         nextline++ ;
+         if ( extnextline != -1 )
+            extnextline++ ;
+      }
+      else
+         col++ ;
+      if ( src->len >= src->max )
+      {
+         streng *n = Str_make_TSD( parser_data.TSD, src->max * 2 ) ;
+         memcpy( n->value, src->value, src->len ) ;
+         n->len = src->len ;
+         Free_string_TSD( parser_data.TSD, src ) ;
+         src = n ;
+      }
+      src->value[src->len++] = (char) c ;
+   }
+   /* input() has destroyed the yytext-terminator re-set it */
+   yytext[yyleng] = '\0';
+   __regina_block_push( src, startline ) ;
+   oo_seen = 1 ;
+   BEGIN other ;
+   if ( newlines )
+      nextstart = col + 2 ;
+   else
+      nextstart += col + 2 ;
+   if ( insert_abuttal && !in_parse && !in_signal && !in_call ) {
+      delayed_symbol = BLOCK ;
+      expression_ended = 1 ;
+      return CONCATENATE ; }
+   expression_ended = 1 ;
+   return BLOCK ; }
+
+   /*
+    * OO extension: array references "term[index, ...]". The "[" must
+    * directly follow a term; anything else stays an invalid character.
+    */
+\[{between} {
+   if ( !insert_abuttal || OO_OFF )
+      REJECT ;
+   oo_seen = 1 ;
+   bracket_depth++ ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return '[' ; }
+
+{between}\] {
+   if ( bracket_depth == 0 )
+      REJECT ;
+   bracket_depth-- ;
+   expression_ended = 1 ;
+   SET_NEXTSTART() ;
+   return ']' ; }
+
+   /*
+    * OO extension: directives "::CLASS", "::METHOD", ... at the start of a
+    * clause. "::" is always a syntax error in classic Rexx.
+    */
+<comm>::{between} {
+   if ( OO_OFF )
+      REJECT ;
+   BEGIN other ;
+   in_directives = 1 ;
+   SET_NEXTSTART() ;
+   return DCOLON ; }
+
 {not}{between} {
    /* why don't I have a {between} in the beginning of this re? bug? */
    BEGIN other ;
@@ -1859,6 +2259,18 @@ key_with          [wW][iI][tT][hH]
    exiterror( ERR_UNMATCHED_QUOTE, 0 )  ; }
 
 
+:[sS][uU][pP][eE][rR] {
+   /* OO extension: "~name:super" calls the superclass's method */
+   if ( !oo_after_name )
+   {
+      SET_NEXTSTART() ;
+      parser_data.tline = linenr - 1 ; /* set tline for exiterror */
+      exiterror( ERR_SYMBOL_EXPECTED, 1, ":" ) ;
+   }
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return MSGSUPER ; }
+
 : {
    SET_NEXTSTART() ;
    parser_data.tline = linenr - 1 ; /* set tline for exiterror */
@@ -1903,6 +2315,24 @@ static void set_assignment( char delim )
 /* rmspc uppercases all characters and removes blanks from a string.
  * Returns the input string.
  */
+/*
+ * OO extension: copies the second word of "LABEL name", "COUNTER name",
+ * "INDEX name" or "ITEM name" uppercased into retvalue.
+ */
+static void oo_second_word( const char *text )
+{
+   int i = 0;
+
+   while ( *text && !MY_ISBLANK( *text ) )
+      text++;
+   while ( *text && MY_ISBLANK( *text ) )
+      text++;
+   while ( *text && !MY_ISBLANK( *text ) && *text != '\n' && *text != '/'
+        && i < BUFFERSIZE - 1 )
+      retvalue[i++] = (char) rx_toupper( *text++ );
+   retvalue[i] = '\0';
+}
+
 static YY_CHAR_TYPE *rmspc( YY_CHAR_TYPE *instr )
 {
    YY_CHAR_TYPE *retval=instr ,
@@ -2209,6 +2639,10 @@ static int get_next_line( char *line, int max, FILE *stream )
             c = *interptr++ ;
 #endif
       }
+      else if (pre_buf)
+      {
+         c = ( pre_pos < pre_len ) ? (unsigned char) pre_buf[pre_pos++] : EOF ;
+      }
       else
       {
          c = getc(stream) ;
@@ -2257,6 +2691,11 @@ static int get_next_line( char *line, int max, FILE *stream )
       {
          if ((interptr < interptrmax) && (*interptr == pairChar))
             interptr++;
+      }
+      else if (pre_buf)
+      {
+         if ((pre_pos < pre_len) && (pre_buf[pre_pos] == (char) pairChar))
+            pre_pos++;
       }
       else
       {
@@ -2733,6 +3172,12 @@ static void init_it_all( tsd_t *TSD )
    in_do = 0 ;
    in_then = 0 ;
    inhibit_delayed_abuttal = 0 ;
+   bracket_depth = 0 ;
+   in_directives = 0 ;
+   oo_seen = do_over_pending = 0 ;
+   block_head = block_count = 0 ;
+   __regina_do_is_loop = 0 ;
+   oo_expect_name = oo_in_name = oo_after_name = 0 ;
    firstln = 0 ;
    in_parse = 0 ;
    in_trace = 0 ;
@@ -2774,13 +3219,269 @@ static void init_it_all( tsd_t *TSD )
  * tree isn't executed here.
  * Exactly fptr xor str must be non-null.
  */
+/*
+ * OO extension: returns 1 if a line of the program starts with "::" (a
+ * directive). Then EXPOSE and USE ARG are instructions in the whole
+ * program, not only after the first directive. The file position is
+ * restored; for a stream that can't be positioned 0 is returned.
+ */
+/*
+ * OO extension: the pre-scan of a program. It understands strings, nested
+ * comments, clause boundaries and continuation commas. It returns 1 if
+ * the program switches the OO keywords on:
+ *    - a directive: "::" at the start of a clause
+ *    - OPTIONS OOREGINA, OPTIONS 'OOREGINA' or a quoted option string
+ *      containing the word OOREGINA, at the start of a clause
+ *    - a comment that contains only the word OOREGINA: / * OOREGINA * /
+ */
+#define OO_MARK     "OOREGINA"
+#define OO_MARK_LEN 8
+
+static int oo_symch( char c )
+{
+   return rx_isalnum( c ) || c == '_' || c == '.' || c == '!' || c == '?'
+       || c == '@' || c == '#' || c == '$';
+}
+
+/* is s[i..] the word w (caseless), not followed by a symbol character? */
+static int oo_word_at( const char *s, long len, long i, const char *w, int wl )
+{
+   int k;
+
+   if ( i + wl > len )
+      return 0;
+   for ( k = 0; k < wl; k++ )
+      if ( rx_toupper( s[i + k] ) != w[k] )
+         return 0;
+   return i + wl == len || !oo_symch( s[i + wl] );
+}
+
+static int oo_blank( char c )
+{
+   return c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v';
+}
+
+/* OPTIONS clause starting at s[i] (after the keyword): does it name OOREGINA? */
+static int oo_options_mark( const char *s, long len, long i )
+{
+   char q;
+   long j;
+
+   while ( i < len && oo_blank( s[i] ) )
+      i++;
+   if ( oo_word_at( s, len, i, OO_MARK, OO_MARK_LEN ) )
+      return 1;
+   if ( i >= len || ( s[i] != '\'' && s[i] != '"' ) )
+      return 0;
+   q = s[i++];
+   /* the words of the quoted option string */
+   while ( i < len && s[i] != q && s[i] != '\n' )
+   {
+      while ( i < len && oo_blank( s[i] ) )
+         i++;
+      for ( j = i; j < len && s[j] != q && s[j] != '\n' && !oo_blank( s[j] ); j++ )
+         ;
+      if ( j - i == OO_MARK_LEN && oo_word_at( s, j, i, OO_MARK, OO_MARK_LEN ) )
+         return 1;
+      i = ( j > i ) ? j : i + 1;
+   }
+   return 0;
+}
+
+static int oo_prescan( const char *s, long len )
+{
+   long i = 0, j;
+   int depth = 0, at_clause = 1, cont = 0;
+   char c, q;
+
+   while ( i < len )
+   {
+      c = s[i];
+      if ( depth )                       /* inside a comment */
+      {
+         if ( c == '*' && i + 1 < len && s[i + 1] == '/' )
+         {
+            depth--;
+            i += 2;
+         }
+         else if ( c == '/' && i + 1 < len && s[i + 1] == '*' )
+         {
+            depth++;
+            i += 2;
+         }
+         else
+            i++;
+         continue;
+      }
+      if ( c == '/' && i + 1 < len && s[i + 1] == '*' )
+      {
+         for ( j = i + 2; j < len && oo_blank( s[j] ); j++ )
+            ;
+         if ( oo_word_at( s, len, j, OO_MARK, OO_MARK_LEN ) )
+         {
+            for ( j += OO_MARK_LEN; j < len && oo_blank( s[j] ); j++ )
+               ;
+            if ( j + 1 < len && s[j] == '*' && s[j + 1] == '/' )
+               return 1;
+         }
+         depth = 1;
+         i += 2;
+         continue;
+      }
+      if ( c == '\n' )
+      {
+         at_clause = !cont;
+         cont = 0;
+         i++;
+         continue;
+      }
+      if ( oo_blank( c ) )
+      {
+         i++;
+         continue;
+      }
+      if ( c == ';' )
+      {
+         at_clause = 1;
+         cont = 0;
+         i++;
+         continue;
+      }
+      cont = ( c == ',' );
+      if ( at_clause )
+      {
+         at_clause = 0;
+         if ( c == ':' && i + 1 < len && s[i + 1] == ':' )
+            return 1;
+         if ( oo_word_at( s, len, i, "OPTIONS", 7 )
+           && oo_options_mark( s, len, i + 7 ) )
+            return 1;
+      }
+      if ( c == '\'' || c == '"' )
+      {
+         /* strings end at the matching quote or the end of the line */
+         for ( q = c, i++; i < len && s[i] != q && s[i] != '\n'; i++ )
+            ;
+         if ( i < len && s[i] == q )
+            i++;
+         continue;
+      }
+      i++;
+   }
+   return 0;
+}
+
+static int has_directive_line( FILE *fptr, const streng *str )
+{
+   char *buf;
+   long pos, len = 0, cap = 0;
+   size_t n;
+   int found;
+
+   if ( str != NULL )
+      return oo_prescan( str->value, str->len );
+   if ( fptr == NULL )
+      return 0;
+   {
+      /*
+       * Only a regular file can be read and then read again from pos. The
+       * keyboard or a pipe is read once into pre_buf, which the lexer then
+       * reads (on Windows ftell works on the console, too, so it can't
+       * tell).
+       */
+      struct stat st;
+      int regular = fstat( fileno( fptr ), &st ) == 0 && S_ISREG( st.st_mode );
+      pos = regular ? ftell( fptr ) : -1;
+      if ( pos < 0 )
+         regular = 0;
+      if ( !regular )
+      {
+         buf = NULL;
+         for ( ;; )
+         {
+            if ( len + 4096 > cap )
+            {
+               char *nb;
+               cap = cap ? cap * 2 : 65536;
+               nb = (char *) realloc( buf, cap );
+               if ( nb == NULL )
+                  break;
+               buf = nb;
+            }
+            n = fread( buf + len, 1, (size_t) ( cap - len ), fptr );
+            len += (long) n;
+            /*
+             * A short read means end of input (Ctrl-D or Ctrl-Z on the
+             * keyboard); reading again would wait for another one.
+             */
+            if ( n < (size_t) ( cap - len + n ) || feof( fptr ) || ferror( fptr ) )
+               break;
+         }
+         pre_buf = buf ? buf : (char *) malloc( 1 );
+         pre_len = buf ? len : 0;
+         pre_pos = 0;
+         return buf ? oo_prescan( buf, len ) : 0;
+      }
+   }
+   buf = NULL;
+   for ( ;; )
+   {
+      if ( len + 4096 > cap )
+      {
+         char *nb;
+         cap = cap ? cap * 2 : 65536;
+         nb = (char *) realloc( buf, cap );
+         if ( nb == NULL )
+            break;
+         buf = nb;
+      }
+      n = fread( buf + len, 1, (size_t) ( cap - len ), fptr );
+      if ( n == 0 )
+         break;
+      len += (long) n;
+   }
+   found = buf ? oo_prescan( buf, len ) : 0;
+   free( buf );
+   clearerr( fptr );
+   fseek( fptr, pos, SEEK_SET );
+   return found;
+}
+
 static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
                   internal_parser_type *result)
 {
    init_it_all( TSD ) ;
+   if ( pre_buf )               /* left by a parse that ended in an error */
+   {
+      free( pre_buf );
+      pre_buf = NULL;
+   }
+   pre_len = pre_pos = 0;
+
+   /*
+    * OO extension: the OO keywords are on in programs with directives or an
+    * OOREGINA marker (see oo_prescan), and in INTERPRET data of a program
+    * using objects. The --oo and --no-oo switches (or REGINA_OO) force
+    * them on or switch the whole extension off.
+    */
+   oo_force = oo_mode() ;
+   if ( oo_force )
+      in_directives = ( oo_force > 0 ) ;
+   else
+      in_directives = has_directive_line( fptr, str )
+                   || ( str != NULL && TSD->oo_active );
 
 #ifdef FLEX_SCANNER
+   /*
+    * Force the scanner to (re)initialize itself on the next call.
+    * flex up to 2.5.4 used yy_init != 0 for "initialization needed";
+    * flex 2.5.33 and later inverted this to yy_init == 0.
+    */
+# if YY_FLEX_MAJOR_VERSION > 2 || ( YY_FLEX_MAJOR_VERSION == 2 && ( YY_FLEX_MINOR_VERSION > 5 || ( YY_FLEX_MINOR_VERSION == 5 && defined( YY_FLEX_SUBMINOR_VERSION ) && YY_FLEX_SUBMINOR_VERSION >= 33 ) ) )
+   yy_init = 0 ;
+# else
    yy_init = 1 ;
+# endif
    yy_delete_buffer(YY_CURRENT_BUFFER) ;
    yyrestart(fptr) ;
 #else
@@ -2802,6 +3503,12 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
    BEGIN comm ;
    NewProg();
    parser_data.result = __reginaparse();
+   if ( pre_buf )
+   {
+      free( pre_buf );
+      pre_buf = NULL;
+      pre_len = pre_pos = 0;
+   }
 
 #ifdef FLEX_SCANNER
    yy_delete_buffer(YY_CURRENT_BUFFER) ;

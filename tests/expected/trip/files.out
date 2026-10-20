@@ -1,0 +1,5 @@
+simple, read, eof, zero_line, truncate, charin, faking, nofake, halfline,  
+crp/cwp, notready, holes, linecnt, flush, repos, persist/eof, stdio,  
+longlines, many, stick, close, empty_out(default), empty_out(STRICT_ANSI), line_pos,  
+@SECONDS@ seconds used
+rc=0

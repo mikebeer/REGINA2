@@ -89,14 +89,26 @@ static void checkdosyntax( cnodeptr thisptr ) ;
 void newlabel( const tsd_t *TSD, internal_parser_type *ipt, nodeptr thisptr ) ;
 static nodeptr optgluelast( nodeptr p1, nodeptr p2 );
 static void move_labels( nodeptr front, nodeptr end, int level );
+static nodeptr do_over_var( nodeptr rep );
+static void finish_do( nodeptr dostat, nodeptr opts );
+static nodeptr split_requires( nodeptr *dirs );
+extern int __regina_do_is_loop; /* lexsrc.l: the DO token was LOOP */
+extern int __regina_oo_keywords( void ); /* lexsrc.l: OO keywords are on */
+extern int __regina_oo_off( void );      /* lexsrc.l: --no-oo, classic only */
+extern streng *__regina_block_take( int *line );  /* lexsrc.l: source of a { block } */
+extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 
 #define IS_EXPRLIST(x) ( ( (x) != NULL )                   \
                       && ( ( (x)->type == X_CEXPRLIST )    \
                         || ( (x)->type == X_EXPRLIST ) ) )
 
+/* OO: message terms and array references carry argument lists in p[1] */
 #define IS_FUNCTION(x) ( ( (x) != NULL )                  \
                       && ( ( (x)->type == X_EX_FUNC )     \
-                        || ( (x)->type == X_IN_FUNC ) ) )
+                        || ( (x)->type == X_IN_FUNC )     \
+                        || ( (x)->type == X_MSGSEND )     \
+                        || ( (x)->type == X_CASCADE )     \
+                        || ( (x)->type == X_INDEX ) ) )
 
 #define AUTO_REDUCE(x,y) { if ( parendepth == 1 )                             \
                            {                                                  \
@@ -126,9 +138,11 @@ static void move_labels( nodeptr front, nodeptr end, int level );
 %token PLACEHOLDER NOTREADY CONSYMBOL SIMSYMBOL EXFUNCNAME INFUNCNAME
 %token LABEL DOVARIABLE HEXSTRING STRING VERSION LINEIN WHATEVER NAME
 %token FAILURE BINSTRING OPTIONS ENVIRONMENT LOSTDIGITS
+%token DOLABEL DOCOUNTER DOWITH DOINDEX DOITEM DOOVER
 %token GTGT LTLT NOTGTGT NOTLTLT GTGTE LTLTE
 %token INPUT OUTPUT ERROR NORMAL APPEND REPLACE STREAM STEM LIFO FIFO NOEOL
 %token LOWER CASELESS
+%token MSGSEND CASCADE DCOLON USEARG MSGSUPER BLOCK /* OO extension */
 %token PLUSASSIGNMENTVARIABLE MINUSASSIGNMENTVARIABLE MULTASSIGNMENTVARIABLE DIVASSIGNMENTVARIABLE MODULUSASSIGNMENTVARIABLE INTDIVASSIGNMENTVARIABLE ORASSIGNMENTVARIABLE XORASSIGNMENTVARIABLE ANDASSIGNMENTVARIABLE CONCATASSIGNMENTVARIABLE
 
 %start start
@@ -141,6 +155,7 @@ static void move_labels( nodeptr front, nodeptr end, int level );
 %left '*' '/' '%' MODULUS
 %left EXP
 %left UMINUS UPLUS NOT /*UPLUS and UMINUS are locally used to assign precedence*/
+%left MSGSEND CASCADE '[' /* OO extension: message terms bind tightest */
 
 %nonassoc THEN
 %nonassoc ELSE
@@ -174,6 +189,64 @@ prog         : nlncl stats             { $$ = optgluelast( $1, $2 );
                                          if ( $$ != NULL )
                                             $$->o.last = NULL;
                                          EndProg( $$ ); }
+             | nlncl stats dirsect     { nodeptr more = split_requires( &$3 );
+                                         $$ = optgluelast( makenode( X_OO_INIT, 0 ), $1 );
+                                         $$ = optgluelast( $$, $2 );
+                                         $$ = optgluelast( $$, more );
+                                         $$ = optgluelast( $$, $3 );
+                                         $$->o.last = NULL;
+                                         EndProg( $$ ) ; }
+             | nlncl dirsect           { nodeptr more = split_requires( &$2 );
+                                         $$ = optgluelast( makenode( X_OO_INIT, 0 ), $1 );
+                                         $$ = optgluelast( $$, more );
+                                         $$ = optgluelast( $$, $2 );
+                                         $$->o.last = NULL;
+                                         EndProg( $$ ) ; }
+             ;
+
+/*
+ * OO extension: directives. The main program ends at the first directive;
+ * every directive owns the statements up to the next directive in p[1].
+ * The directive's words are a chain of X_STRING nodes in p[0].
+ */
+dirsect      : dirsect dirblock        { $$ = optgluelast( $1, $2 ); }
+             | dirblock                { $$ = $1; }
+             ;
+
+dirblock     : directive stats         { $$ = $1;
+                                         $$->p[1] = optgluelast( $$->p[1], $2 );
+                                         if ( $$->p[1] != NULL )
+                                            $$->p[1]->o.last = NULL; }
+             | directive               { $$ = $1;
+                                         if ( $$->p[1] != NULL )
+                                            $$->p[1]->o.last = NULL; }
+             ;
+
+directive    : DCOLON                  { $$ = makenode( X_DIRECTIVE, 0 );
+                                         $$->lineno = parser_data.tline;
+                                         $$->charnr = parser_data.tstart; }
+                      dirwords ncl     { $$ = $2;
+                                         /* take over the keyword; the
+                                          * node must not own it twice */
+                                         $$->name = $3->name;
+                                         $3->name = NULL;
+                                         $$->p[0] = $3->next;
+                                         if ( $$->p[0] != NULL )
+                                            $$->p[0]->o.last = NULL;
+                                         $$->p[1] = $4; /* labels */ }
+             | DCOLON error            { exiterror( ERR_YACC_SYNTAX, 1, parser_data.tline ); }
+             ;
+
+dirwords     : dirwords SPACE dirword  { $$ = optgluelast( $1, $3 ); }
+             | dirword                 { $$ = $1; }
+             ;
+
+dirword      : SIMSYMBOL               { $$ = makenode( X_STRING, 0 );
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
+             | CONSYMBOL               { $$ = makenode( X_STRING, 0 );
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
+             | STRING                  { $$ = makenode( X_STRING, 0 );
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue ); }
              ;
 
 stats        : stats ystatement        { /* fixes bug 579711 */
@@ -263,6 +336,35 @@ nclstatement : address_stat
              | andassignment
              | concatassignment
              | assignment
+             | oo_expose_stat
+             | oo_usearg_stat
+             ;
+
+/*
+ * OO extension: EXPOSE and USE ARG. The lexer returns these tokens only in
+ * the code after the first directive.
+ */
+oo_expose_stat : EXPOSE anyvars        { $$ = makenode( X_OO_EXPOSE, 1, $2 );
+                                         $$->lineno = tmplno;
+                                         $$->charnr = tmpchr; }
+               | EXPOSE error          { exiterror( ERR_SYMBOL_EXPECTED, 1, __reginatext ); }
+               ;
+
+oo_usearg_stat : USEARG usevars        { $$ = makenode( X_OO_USEARG, 1, $2 );
+                                         $$->lineno = tmplno;
+                                         $$->charnr = tmpchr; }
+               | USEARG usevars error  { exiterror( ERR_SYMBOL_EXPECTED, 1, __reginatext ); }
+               ;
+
+usevars      : usevar ',' usevars      { $$ = $1;
+                                         $$->p[0] = $3; }
+             | usevar                  { $$ = $1; }
+             ;
+
+usevar       : xsimsymb                { $$ = makenode( X_SIM_SYMBOL, 0 );
+                                         $$->name = (streng *) $1; }
+             |                         { $$ = makenode( X_SIM_SYMBOL, 0 );
+                                         $$->name = NULL; }
              ;
 
 call         : CALL                    { $$ = makenode(X_CALL,0) ;
@@ -272,6 +374,8 @@ call         : CALL                    { $$ = makenode(X_CALL,0) ;
 do           : DO                      { $$ = makenode(X_DO,0) ;
                                          $$->lineno = parser_data.tline ;
                                          $$->charnr = parser_data.tstart ;
+                                         /* OO: LOOP, see finish_do() */
+                                         $$->u.nonansi = __regina_do_is_loop ;
                                          level++; }
              ;
 exit         : EXIT                    { $$ = makenode(X_EXIT,0) ;
@@ -451,10 +555,26 @@ call_args    : exprs                   {
              | exprs ')'               { exiterror(ERR_UNEXPECTED_PARAN, 2); }
              ;
 
-expr_stat    : expr                    { $$ = makenode(X_COMMAND,0) ;
+expr_stat    : expr                    { nodeptr t = $1->p[0];
+                                         if ( $1->type == X_MSGSEND
+                                           || $1->type == X_CASCADE )
+                                            /* OO: message instruction */
+                                            $$ = makenode( X_OO_MSGSTAT, 1, $1 );
+                                         else if ( ( $1->type == X_EQUAL
+                                                  || $1->type == X_SEQUAL
+                                                  || $1->type == X_NEQUAL )
+                                                && t != NULL
+                                                && ( t->type == X_MSGSEND
+                                                  || t->type == X_INDEX ) )
+                                            /* OO: obj~attr = v, a[i] = v */
+                                            $$ = makenode( X_OO_ASSIGN, 2, t, $1->p[1] );
+                                         else
+                                         {
+                                            $$ = makenode(X_COMMAND,0) ;
+                                            $$->p[0] = $1 ;
+                                         }
                                          $$->charnr = tmpchr ;
-                                         $$->lineno = tmplno;
-                                         $$->p[0] = $1 ; }
+                                         $$->lineno = tmplno; }
              ;
 
 end_stat     : END                     { $$ = makenode(X_END,0) ;
@@ -469,25 +589,43 @@ end          : end_stat simsymb        { $$ = $1 ;
              | end_stat simsymb error  {  exiterror( ERR_EXTRA_DATA, 1, __reginatext ) ;}
              ;
 
-do_stat      : do repetitor conditional ncl nxstats end
+do_stat      : do do_opts repetitor conditional ncl nxstats end
                                        { $$ = $1;
-                                         $$->p[0] = $2;
-                                         $$->p[1] = $3;
-                                         $$->p[2] = optgluelast( $4, $5 );
+                                         $$->p[0] = $3;
+                                         $$->p[1] = $4;
+                                         $$->p[2] = optgluelast( $5, $6 );
                                          if ( $$->p[2] )
                                             $$->p[2]->o.last = NULL;
-                                         $$->p[3] = $6;
-                          if (($$->p[0]==NULL || $$->p[0]->name==NULL)
-                              && $$->p[3]->name)
-                                            exiterror( ERR_UNMATCHED_END, 0 );
-                          if (($$->p[0])&&($$->p[0]->name)&&
-                              ($$->p[3]->name)&&
-                              (($$->p[3]->name->len != $$->p[0]->name->len)||
-                               (strncmp($$->p[3]->name->value,
-                                        $$->p[0]->name->value,
-                                        $$->p[0]->name->len))))
-                                            exiterror( ERR_UNMATCHED_END, 0 );
-                                       }
+                                         $$->p[3] = $7;
+                                         finish_do( $$, $2 ); }
+             ;
+
+   /* OO extension: DO LABEL name COUNTER var ... */
+do_opts      :                         { $$ = NULL ; }
+             | do_opts dolabel         { $$ = $1 ? $1 : makenode(X_OO_DOOPTS,0) ;
+                                         if ( $$->name )
+                                            exiterror( ERR_INVALID_DO_SYNTAX, 1, "LABEL" ) ;
+                                         $$->name = (streng *) $2 ; }
+             | do_opts docounter       { $$ = $1 ? $1 : makenode(X_OO_DOOPTS,0) ;
+                                         if ( $$->p[0] )
+                                            exiterror( ERR_INVALID_DO_SYNTAX, 1, "COUNTER" ) ;
+                                         $$->p[0] = $2 ; }
+             ;
+
+dolabel      : DOLABEL                 { $$ = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
+             ;
+docounter    : DOCOUNTER               { $$ = create_head( retvalue ) ; }
+             ;
+doindex      : DOINDEX                 { $$ = create_head( retvalue ) ; }
+             ;
+doitem       : DOITEM                  { $$ = create_head( retvalue ) ; }
+             ;
+
+   /* OO extension: DO WITH INDEX i ITEM x OVER coll */
+withvars     : doindex                 { $$ = makenode(X_OO_DOOPTS,2,$1,NULL) ; }
+             | doitem                  { $$ = makenode(X_OO_DOOPTS,2,NULL,$1) ; }
+             | doindex doitem          { $$ = makenode(X_OO_DOOPTS,2,$1,$2) ; }
+             | doitem doindex          { $$ = makenode(X_OO_DOOPTS,2,$2,$1) ; }
              ;
 
 repetitor    : dovar '=' expr nspace tobyfor tobyfor tobyfor
@@ -509,6 +647,18 @@ repetitor    : dovar '=' expr nspace tobyfor tobyfor tobyfor
              | FOREVER error { exiterror( ERR_INV_SUBKEYWORD, 16, "WHILE UNTIL", __reginatext ) ; }
              | expr nspace             { $1 = makenode(X_DO_EXPR,1,$1) ;
                                          $$ = makenode(X_REP,2,NULL,$1) ; }
+               /* OO: DO name OVER coll FOR n (the lexer allows FOR) */
+             | expr nspace FOR expr nspace
+                                       { $1 = makenode(X_DO_EXPR,1,$1) ;
+                                         $$ = makenode(X_REP,3,NULL,$1,
+                                                       makenode(X_DO_FOR,1,$4)) ;
+                                         if ( do_over_var( $$ ) == NULL )
+                                            exiterror( ERR_INVALID_DO_SYNTAX, 1, "FOR" ) ; }
+             | DOWITH withvars DOOVER expr nspace
+                                       { $$ = makenode(X_OO_DOWITH,4,$4,$2->p[0],$2->p[1],NULL) ; }
+             | DOWITH withvars DOOVER expr nspace FOR expr nspace
+                                       { $$ = makenode(X_OO_DOWITH,4,$4,$2->p[0],$2->p[1],
+                                                       makenode(X_DO_FOR,1,$7)) ; }
              |                         { $$ = NULL ; }
              ;
 
@@ -862,6 +1012,10 @@ say_stat     : say nexpr               { $$ = $1 ;
              ;
 
 return_stat  : return nexpr            { $$ = $1 ;
+                                         /* OO: "RETURN x." returns a Stem object */
+                                         if ( $2 && $2->type == X_STEM_SYMBOL
+                                           && __regina_oo_keywords() )
+                                            $2 = makenode( X_OO_STEMOBJ, 1, $2 ) ;
                                          $$->p[0] = $2 ; }
              ;
 
@@ -1289,8 +1443,25 @@ expr        : '('                      { /* We have to accept exprs here even
                          expr          { parendepth++; AUTO_REDUCE( $1, "<<=" );
                                          $$ = makenode( X_S_LTE, 2, $1, $4 ); }
             |      LTLTE               { exiterror( ERR_INVALID_EXPRESSION, 1, "<<=" ); }
+            | expr MSGSEND msgtarget   { AUTO_REDUCE( $1, __regina_oo_operator );
+                                         $$ = $3;
+                                         $$->type = X_MSGSEND;
+                                         $$->p[0] = $1; }
+            | expr CASCADE msgtarget   { AUTO_REDUCE( $1, __regina_oo_operator );
+                                         $$ = $3;
+                                         $$->type = X_CASCADE;
+                                         $$->p[0] = $1; }
+            |      MSGSEND             { exiterror( ERR_INVALID_EXPRESSION, 1, __regina_oo_operator ); }
+            |      CASCADE             { exiterror( ERR_INVALID_EXPRESSION, 1, __regina_oo_operator ); }
+            | expr '[' bracket_args    { AUTO_REDUCE( $1, "[" );
+                                         $$ = makenode( X_INDEX, 2, $1, $3 ); }
             | symbtree                 { $$ = $1 ; }
-            | CONSYMBOL                { $$ = makenode( X_STRING, 0 );
+            | CONSYMBOL                { /* OO: .NAME may be an environment
+                                          * symbol, see OO_IS_ENVSYMBOL */
+                                         $$ = makenode( ( retvalue[0] == '.'
+                                                          && rx_isalpha( retvalue[1] )
+                                                          && !__regina_oo_off() )
+                                                        ? X_CON_SYMBOL : X_STRING, 0 );
                                          $$->name = Str_cre_TSD(parser_data.TSD,retvalue) ; }
             | HEXSTRING                { $$ = makenode( X_STRING, 0 );
                                          $$->name = Str_make_TSD(parser_data.TSD,retlength) ;
@@ -1302,6 +1473,11 @@ expr        : '('                      { /* We have to accept exprs here even
                                                     $$->name->len=retlength); }
             | STRING                   { $$ = makenode( X_STRING, 0 );
                                          $$->name = Str_cre_TSD(parser_data.TSD,retvalue) ; }
+            | BLOCK                    { /* OO: { clauses }, see oo.c */
+                                         int line;
+                                         $$ = makenode( X_OO_BLOCK, 0 );
+                                         $$->name = __regina_block_take( &line );
+                                         $$->lineno = line; }
             | function                 { $$ = $1 ; }
             | '+' expr %prec UPLUS     { AUTO_REDUCE( $2, rxnullptr );
                                          $$ = makenode( X_U_PLUSS, 1, $2 ); }
@@ -1332,6 +1508,42 @@ func_args   :                          { /* ugly fake preservs parendepth */
               exprs_sub                { parendepth = (int) $$;
                                          $$ = $2; }
             ;
+
+/*
+ * OO extension: the method part of a message term. The node returned has
+ * name = method name and p[1] = argument list (NULL without parentheses);
+ * the caller sets the type and the receiver in p[0].
+ */
+msgtarget   : msgname                  { $$ = makenode( X_MSGSEND, 0 );
+                                         $$->name = (streng *) $1; }
+            | msgname MSGSUPER         { /* ~name:super, see oo.c */
+                                         $$ = makenode( X_MSGSEND, 0 );
+                                         $$->name = (streng *) $1;
+                                         $$->u.nonansi = 1; }
+            | msgname MSGSUPER '(' func_args
+                                       { $$ = makenode( X_MSGSEND, 2, NULL, $4 );
+                                         $$->name = (streng *) $1;
+                                         $$->u.nonansi = 1; }
+            | STRING                   { $$ = makenode( X_MSGSEND, 0 );
+                                         $$->name = Str_cre_TSD( parser_data.TSD, retvalue );
+                                         mem_upper( $$->name->value, $$->name->len ); }
+            | intfunc func_args        { $$ = makenode( X_MSGSEND, 2, NULL, $2 );
+                                         $$->name = (streng *) $1;
+                                         mem_upper( $$->name->value, $$->name->len ); }
+            | extfunc func_args        { $$ = makenode( X_MSGSEND, 2, NULL, $2 );
+                                         $$->name = (streng *) $1;
+                                         mem_upper( $$->name->value, $$->name->len ); }
+            ;
+
+msgname     : SIMSYMBOL                { $$ = (nodeptr) Str_cre_TSD( parser_data.TSD, retvalue ); }
+            ;
+
+bracket_args :                         { /* like func_args, with "]" */
+                                         $$ = (YYSTYPE) parendepth;
+                                         parendepth = 0; }
+               exprs ']'               { parendepth = (int) $$;
+                                         $$ = $2; }
+             ;
 
 intfunc     : INFUNCNAME               { $$ = (nodeptr)Str_cre_TSD(parser_data.TSD,retvalue) ; }
             ;
@@ -1848,8 +2060,13 @@ static int is_const( cnodeptr thisptr )
 
    switch (thisptr->type)
    {
-      case X_STRING:
       case X_CON_SYMBOL:
+         /* OO: .NAME is resolved at run time */
+         if ( thisptr->name && thisptr->name->len > 1
+           && thisptr->name->value[0] == '.' && rx_isalpha( thisptr->name->value[1] ) )
+            return 0 ;
+         return 1 ;
+      case X_STRING:
          return 1 ;
 
 #if 0
@@ -2084,3 +2301,281 @@ static void move_labels( nodeptr front, nodeptr end, int level )
       labels = labels->next;
    }
 }
+
+/* sets the o.last field of the head of a statement chain, see optgluelast */
+static nodeptr fix_last( nodeptr chain )
+{
+   nodeptr t;
+
+   if ( chain == NULL )
+      return NULL;
+   for ( t = chain; t->next; t = t->next )
+      t->o.last = NULL;
+   t->o.last = NULL;
+   chain->o.last = ( t != chain ) ? t : NULL;
+   return chain;
+}
+
+static int is_transparent_directive( cnodeptr d )
+{
+   return d->name != NULL
+       && ( ( d->name->len == 8 && memcmp( d->name->value, "REQUIRES", 8 ) == 0 )
+         || ( d->name->len == 7 && memcmp( d->name->value, "OPTIONS", 7 ) == 0 ) );
+}
+
+/*
+ * OO extension: ::REQUIRES and ::OPTIONS may stand anywhere, like an
+ * #include in C. They never own statements: the statements after them
+ * belong to what came before, the main program as long as no other
+ * directive has appeared, otherwise the body of the last directive.
+ * *dirs is the chain of directives; it is rebuilt with empty bodies for
+ * these two. Returns the statements that continue the main program.
+ */
+static nodeptr split_requires( nodeptr *dirs )
+{
+   nodeptr d, next, main_more = NULL, owner = NULL, chain = NULL, body;
+
+   for ( d = *dirs; d; d = next )
+   {
+      next = d->next;
+      d->next = NULL;
+      d->o.last = NULL;
+      if ( is_transparent_directive( d ) && d->p[1] != NULL )
+      {
+         body = fix_last( d->p[1] );
+         d->p[1] = NULL;
+         if ( owner == NULL )
+            main_more = optgluelast( main_more, body );
+         else
+         {
+            owner->p[1] = optgluelast( fix_last( owner->p[1] ), body );
+            fix_last( owner->p[1] );
+            owner->p[1]->o.last = NULL;
+         }
+      }
+      else if ( !is_transparent_directive( d ) )
+         owner = d;
+      chain = optgluelast( chain, d );
+   }
+   *dirs = chain;
+   return main_more;
+}
+
+/*
+ * OO extension: "DO name OVER collection" is parsed as "DO expr" with the
+ * expression "name OVER collection". do_over_var returns the variable node
+ * if rep has this form, else NULL.
+ */
+static nodeptr do_over_var( nodeptr rep )
+{
+   nodeptr e, l;
+
+   if ( rep == NULL || rep->type != X_REP || rep->p[0] != NULL
+     || rep->p[1] == NULL || rep->p[1]->type != X_DO_EXPR )
+      return NULL;
+   e = rep->p[1]->p[0];
+   if ( e == NULL || e->type != X_SPACE || ( l = e->p[0] ) == NULL
+     || l->type != X_SPACE || l->p[0] == NULL || l->p[1] == NULL
+     || l->p[1]->type != X_SIM_SYMBOL
+     || l->p[1]->name->len != 4 || memcmp( l->p[1]->name->value, "OVER", 4 ) != 0 )
+      return NULL;
+   if ( l->p[0]->type != X_SIM_SYMBOL && l->p[0]->type != X_HEAD_SYMBOL )
+      return NULL;
+   return l->p[0];
+}
+
+/* one "var = item" step of an OVER loop; mode is NULL, "INDEX" or "ITEM" */
+static nodeptr over_item( const char *abuf, const char *ibuf, const char *mode )
+{
+   nodeptr m = NULL;
+
+   if ( mode )
+   {
+      m = makenode( X_STRING, 0 );
+      m->name = Str_cre_TSD( parser_data.TSD, mode );
+   }
+   return makenode( X_OO_OVERITEM, 3, create_head( abuf ), create_head( ibuf ), m );
+}
+
+static nodeptr over_step( nodeptr dostat, nodeptr var, nodeptr item )
+{
+   nodeptr asg = makenode( X_OO_OVERSTEP, 2, var, item );
+
+   asg->lineno = dostat->lineno;
+   asg->charnr = dostat->charnr;
+   return asg;
+}
+
+/*
+ * Rewrites the loop into
+ *    DO <idx> = 1 TO <snapshot of the collection, its item count> [FOR n]
+ *       name = <item idx of the snapshot>
+ *       ...
+ * with two hidden variables that a program cannot name.
+ *
+ * "DO name OVER coll": var is name, oversym the symbol OVER (for the
+ * classic meaning). "DO WITH INDEX i ITEM x OVER coll": var is NULL and
+ * idxvar/itemvar are set (one may be NULL); the snapshot holds pairs.
+ */
+static void transform_over( nodeptr dostat, nodeptr var, nodeptr coll, nodeptr oversym,
+                            nodeptr idxvar, nodeptr itemvar, nodeptr fornode )
+{
+   static unsigned long counter = 0;
+   char abuf[32], ibuf[32];
+   nodeptr rep, init, over, to, asg, item, iitem = NULL, xitem = NULL, marker = NULL;
+   streng *arrname, *idxname;
+
+   counter++;
+   sprintf( abuf, "\001OVERA%lu", counter );
+   arrname = Str_cre_TSD( parser_data.TSD, abuf );
+   sprintf( ibuf, "\001OVERI%lu", counter );
+   idxname = Str_cre_TSD( parser_data.TSD, ibuf );
+
+   init = makenode( X_STRING, 0 );
+   init->name = Str_cre_TSD( parser_data.TSD, "1" );
+   if ( var == NULL )
+   {
+      marker = makenode( X_STRING, 0 );
+      marker->name = Str_cre_TSD( parser_data.TSD, "WITH" );
+   }
+   /*
+    * p[1] and p[2] let the run time recognize the classic meaning
+    * "DO expr" of "DO x OVER y" (x and OVER empty, y a whole number).
+    * p[3] marks DO WITH.
+    */
+   over = makenode( X_OO_OVERINIT, 4, coll, var, oversym, marker );
+   over->name = Str_dup_TSD( parser_data.TSD, arrname );
+   Free_string_TSD( parser_data.TSD, arrname );
+   to = makenode( X_DO_TO, 1, over );
+   if ( fornode )
+      rep = makenode( X_REP, 3, init, to, fornode );
+   else
+      rep = makenode( X_REP, 2, init, to );
+   rep->name = idxname;
+
+   if ( var )
+   {
+      item = over_item( abuf, ibuf, NULL );
+      asg = over_step( dostat, var, item );
+   }
+   else
+   {
+      asg = NULL;
+      if ( idxvar )
+      {
+         iitem = over_item( abuf, ibuf, "INDEX" );
+         asg = over_step( dostat, idxvar, iitem );
+      }
+      if ( itemvar )
+      {
+         xitem = over_item( abuf, ibuf, "ITEM" );
+         asg = optgluelast( asg, over_step( dostat, itemvar, xitem ) );
+      }
+      item = NULL;
+   }
+
+   /*
+    * WHILE is tested after the control variables are set: the condition
+    * assigns them itself before it is evaluated. OVERSTEP and OVERWHILE
+    * share the item nodes.
+    */
+   if ( dostat->p[1] && dostat->p[1]->type == X_WHILE )
+   {
+      if ( var )
+         dostat->p[1]->p[0] = makenode( X_OO_OVERWHILE, 3, var, item,
+                                        dostat->p[1]->p[0] );
+      else
+      {
+         if ( itemvar )
+            dostat->p[1]->p[0] = makenode( X_OO_OVERWHILE, 3, itemvar, xitem,
+                                           dostat->p[1]->p[0] );
+         if ( idxvar )
+            dostat->p[1]->p[0] = makenode( X_OO_OVERWHILE, 3, idxvar, iitem,
+                                           dostat->p[1]->p[0] );
+      }
+   }
+
+   dostat->p[0] = rep;
+   dostat->p[2] = optgluelast( asg, dostat->p[2] );
+   dostat->p[2]->o.last = NULL;
+   /* LEAVE name and ITERATE name use the visible name */
+   if ( var == NULL )
+      var = itemvar ? itemvar : idxvar;
+   dostat->name = Str_dup_TSD( parser_data.TSD, var->name );
+}
+
+static int same_name( const streng *a, const streng *b )
+{
+   return a && b && Str_cmp( a, b ) == 0;
+}
+
+/*
+ * Checks the END name of a DO loop and applies the OO forms: DO name OVER,
+ * DO WITH, LABEL, COUNTER and LOOP. Classic loops are checked as before.
+ */
+static void finish_do( nodeptr dostat, nodeptr opts )
+{
+   nodeptr rep = dostat->p[0], overvar;
+   streng *endname = dostat->p[3]->name;
+   streng *label = opts ? opts->name : NULL;
+   nodeptr counter = opts ? opts->p[0] : NULL;
+   int isloop = dostat->u.nonansi;
+
+   dostat->u.nonansi = 0;
+   if ( rep && rep->type == X_OO_DOWITH )
+   {
+      if ( endname && !same_name( endname, label )
+        && !( rep->p[1] && same_name( endname, rep->p[1]->name ) )
+        && !( rep->p[2] && same_name( endname, rep->p[2]->name ) ) )
+         exiterror( ERR_UNMATCHED_END, 0 );
+      transform_over( dostat, NULL, rep->p[0], NULL, rep->p[1], rep->p[2], rep->p[3] );
+   }
+   else if ( !__regina_oo_off() && ( overvar = do_over_var( rep ) ) != NULL )
+   {
+      /* OO: DO name OVER collection [FOR n] */
+      if ( endname && !same_name( endname, label )
+        && !same_name( endname, overvar->name ) )
+         exiterror( ERR_UNMATCHED_END, 0 );
+      transform_over( dostat, overvar, rep->p[1]->p[0]->p[1],
+                      rep->p[1]->p[0]->p[0]->p[1], NULL, NULL, rep->p[2] );
+   }
+   else
+   {
+      if ( endname && !same_name( endname, label ) )
+      {
+         if ( rep == NULL || rep->name == NULL )
+            exiterror( ERR_UNMATCHED_END, 0 );
+         if ( ( endname->len != rep->name->len )
+           || strncmp( endname->value, rep->name->value, rep->name->len ) )
+            exiterror( ERR_UNMATCHED_END, 0 );
+      }
+      /*
+       * LOOP without a repetitor loops forever. A plain DO group with
+       * LABEL or COUNTER becomes a loop running once, so LEAVE works.
+       */
+      if ( rep == NULL && dostat->p[1] == NULL && isloop )
+         dostat->p[0] = makenode( X_REP_FOREVER, 0 );
+      else if ( rep == NULL && dostat->p[1] == NULL && ( label || counter ) )
+      {
+         nodeptr one = makenode( X_STRING, 0 );
+         one->name = Str_cre_TSD( parser_data.TSD, "1" );
+         dostat->p[0] = makenode( X_REP, 2, NULL, makenode( X_DO_EXPR, 1, one ) );
+      }
+   }
+   if ( label )
+   {
+      /* the DO node owns the label now, the tree frees every name once */
+      opts->name = NULL;
+      if ( dostat->name )
+      {
+         /* OVER loop: its variable stays usable, see LEAVE in interprt.c */
+         nodeptr alias = makenode( X_SIM_SYMBOL, 0 );
+         alias->name = dostat->name;
+         dostat->p[3]->p[1] = alias;
+      }
+      dostat->name = label;
+   }
+   if ( counter )
+      dostat->p[3]->p[0] = counter;
+}
+

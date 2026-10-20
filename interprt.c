@@ -18,6 +18,11 @@
  */
 
 #include "rexx.h"
+#if !defined(_WIN32) && !defined(_WIN64)
+# include <sys/resource.h>
+#else
+# include <windows.h>                  /* VirtualQuery */
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
@@ -67,6 +72,7 @@ typedef struct _stackelem {
 #endif
    nodeptr            thisptr ;
    cnodeptr           incr_node;
+   long               counter ; /* OO: DO COUNTER c, iterations started */
    struct _stackelem *prev ; /* needed for a look back */
 } stackelem;
 
@@ -587,10 +593,17 @@ reinterpret:
 
    secure_this = thisptr;
 
+   /* OO garbage collection happens only here, between clauses */
+   TSD->currlevel->oo_mark = TSD->oo_nobjs;
+   if ( TSD->oo_gc_wanted )
+      oo_gc( TSD, 0 );
+   TSD->currlevel->oo_clause = ++TSD->oo_clause;
+
    TSD->currentnode = thisptr ;
    if ( TSD->trace_stat != 'O' && TSD->trace_stat != 'N' && TSD->trace_stat != 'F' )
    {
-      if (thisptr->type != X_DO)  /* let do-stats trace themselves */
+      /* let do-stats trace themselves; DO OVER steps are part of them */
+      if (thisptr->type != X_DO && thisptr->type != X_OO_OVERSTEP)
          traceline( TSD, thisptr, TSD->trace_stat, 0 );
    }
 
@@ -660,6 +673,10 @@ reinterpret:
          s.number = -1;
 #endif
          s.incrdir = 1 ;
+         s.counter = 0 ;
+         /* OO: DO COUNTER c, the END node carries the counter variable */
+         if ( thisptr->p[3] && thisptr->p[3]->p[0] )
+            oo_do_counter( TSD, thisptr->p[3]->p[0], 0 );
          tmpstr = NULL ;
          /*
           * If we have a named variable as the iterator, get itl its in tmpstr
@@ -690,7 +707,7 @@ reinterpret:
 #ifdef OPT_DO
                      chptr = evaluate(TSD, tmpptr, &chkill );
                      if ( !myiswnumber( TSD, chptr, &s.stopval, 1 ) )
-                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, chptr->value );
+                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, tmpstr_of( TSD, chptr ) ); /* NUL-terminated (fix of a 3.9.7 read past the end) */
                      s.stopval_num = streng_to_rx64(TSD, chptr, &error);
                      if ( error )
                         s.strmath = 1; /* have to use string math for this loop */
@@ -736,7 +753,7 @@ s.increment->exp
 #ifdef OPT_DO
                      if ( !myiswnumber( TSD, chptr, &tmpnum, 1 )
                      ||  tmpnum->negative )
-                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, chptr->value );
+                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, tmpstr_of( TSD, chptr ) ); /* NUL-terminated (fix of a 3.9.7 read past the end) */
 
                      s.do_for_val = calcul(TSD,tmpptr,NULL) ;
                      iptr = streng_to_rx64(TSD, chptr, &error);
@@ -748,7 +765,7 @@ s.increment->exp
                         s.strmath = 1; /* have to use string math for this loop */
                      s.do_for_val_num = iptr ;
 #else
-                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, chptr->value );
+                        exiterror( ERR_INVALID_INTEGER, (thisptr->p[0]->p[i]->type==X_DO_EXPR) ? 2 : 3, tmpstr_of( TSD, chptr ) ); /* NUL-terminated (fix of a 3.9.7 read past the end) */
                      if ( iptr < 0 )
                         exiterror( ERR_INVALID_RESULT, 0 );
                      s.number = iptr;
@@ -847,6 +864,8 @@ fprintf(stderr,"%s %d\n",__FILE__,__LINE__);
             if (!isboolean(TSD,thisptr->p[1]->p[0],3, NULL))
                goto endloop ;
          }
+         if ( thisptr->p[3] && thisptr->p[3]->p[0] )
+            oo_do_counter( TSD, thisptr->p[3]->p[0], ++s.counter );
          /*
           * Execute the code in the DO block
           */
@@ -993,6 +1012,8 @@ endloop: if (s.increment)
          goto fakerecurse ;
       }
       case X_NASSIGN:
+         if ( TSD->oo_active )
+            goto oo_plain_assign;   /* an operator method may return an object */
       {
          num_descr *ntmp;
          streng *preferred_str;
@@ -1026,6 +1047,7 @@ endloop: if (s.increment)
       }
 
       case X_ASSIGN:
+oo_plain_assign:
       {
 /* This is a CMS-ism; CMS allows the expression in an assignment to
  * be omitted, while TRL does _not_. If a CMS mode is implemented, the
@@ -1319,6 +1341,11 @@ endloop: if (s.increment)
       case X_IPRET:
       {
          streng *retval, *tptr = evaluate(TSD,thisptr->p[0],NULL) ;
+         if ( TSD->oo_active )
+         {
+            int owned = 1;
+            oo_stringify_inplace( TSD, &tptr, &owned );
+         }
          retval = dointerpret( TSD, tptr ) ;
          if (retval != NULL) /* we interpreted a RETURN WITH a value */
          {
@@ -1383,6 +1410,14 @@ endloop: if (s.increment)
             stringen = evaluate( TSD, thisptr->p[0], &kill );
          else
             stringen = NULL ;
+
+         if ( TSD->oo_active && stringen )
+         {
+            int owned = ( kill != NULL );
+            oo_stringify_inplace( TSD, &stringen, &owned );
+            if ( owned )
+               kill = stringen;
+         }
 
          if (TSD->systeminfo->hooks & HOOK_MASK(HOOK_STDOUT))
             ok = hookup_output( TSD, HOOK_STDOUT, stringen ) ;
@@ -1482,6 +1517,13 @@ endloop: if (s.increment)
          {
             /* bja - added Free_stringTSD() around perform() */
             stmp = evaluate( TSD, thisptr->p[0], &kill );
+            if ( TSD->oo_active )
+            {
+               int owned = ( kill != NULL );
+               oo_stringify_inplace( TSD, &stmp, &owned );
+               if ( owned )
+                  kill = stmp;
+            }
             Free_stringTSD(perform(TSD, stmp, TSD->currlevel->environment, thisptr, NULL)) ;
             if ( kill )
                Free_stringTSD( kill );
@@ -1771,6 +1813,19 @@ endloop: if (s.increment)
                exiterror( ERR_UNEXISTENT_LABEL, 3, tmpstr_of( TSD, n->name ) );
             thisptr->type = X_IS_INTERNAL;
          }
+         else if ( TSD->oo_active && oo_has_routine( TSD, thisptr->name ) )
+         {
+            /* OO extension: CALL of a ::ROUTINE */
+            paramboxptr args;
+            streng *result;
+
+            no_next_interactive = 1;
+            args = initplist( TSD, thisptr );
+            set_reserved_value( TSD, POOL0_SIGL, NULL, thisptr->lineno, VFLAG_NUM );
+            result = oo_call_routine( TSD, thisptr->name, args );
+            set_reserved_value( TSD, POOL0_RESULT, result, 0, ( result ) ? VFLAG_STR : VFLAG_NONE );
+            break;
+         }
          else
             thisptr->type = X_IS_BUILTIN;
          thisptr->u.node = n;
@@ -2040,17 +2095,62 @@ endloop: if (s.increment)
       }
 
       case X_PUSH:
-         stack_lifo( TSD, (thisptr->p[0]) ? evaluate(TSD,thisptr->p[0],NULL) : nullstringptr(), NULL ) ;
+      case X_QUEUE:
+      {
+         streng *v = (thisptr->p[0]) ? evaluate(TSD,thisptr->p[0],NULL) : nullstringptr();
+         if ( TSD->oo_active )
+         {
+            int owned = 1;
+            oo_stringify_inplace( TSD, &v, &owned );
+         }
+         if ( thisptr->type == X_PUSH )
+            stack_lifo( TSD, v, NULL ) ;
+         else
+            stack_fifo( TSD, v, NULL ) ;
+         break ;
+      }
+
+      /*
+       * OO extension, see oo.c
+       */
+      case X_OO_INIT:
+         oo_exec_init( TSD, thisptr );
          break ;
 
-      case X_QUEUE:
-         stack_fifo( TSD, (thisptr->p[0]) ? evaluate(TSD,thisptr->p[0],NULL) : nullstringptr(), NULL ) ;
+      case X_OO_MSGSTAT:
+         if ( TSD->trace_stat != 'O' && TSD->trace_stat != 'N' && TSD->trace_stat != 'F' )
+            traceline( TSD, thisptr, TSD->trace_stat, 0 );
+         oo_exec_message( TSD, thisptr );
+         break ;
+
+      case X_OO_ASSIGN:
+         if ( TSD->trace_stat != 'O' && TSD->trace_stat != 'N' && TSD->trace_stat != 'F' )
+            traceline( TSD, thisptr, TSD->trace_stat, 0 );
+         oo_exec_assign( TSD, thisptr );
+         break ;
+
+      case X_OO_EXPOSE:
+         oo_exec_expose( TSD, thisptr );
+         break ;
+
+      case X_OO_USEARG:
+         oo_exec_usearg( TSD, thisptr );
+         break ;
+
+      case X_OO_OVERSTEP:
+         oo_over_assign( TSD, thisptr );
          break ;
 
       case X_OPTIONS: /* fixes 1116894 */
          do_options(TSD, TSD->currlevel, (thisptr->p[0]) ? evaluate(TSD,thisptr->p[0],NULL) : nullstringptr(), 0) ;
          break ;
 
+      case X_DIRECTIVE:
+         /*
+          * OO extension: running into a directive ends the main program
+          * (or a subroutine) like RETURN without a value. The directive's
+          * own statements are kept in p[1] and are never reached here.
+          */
       case X_RETURN:
       {
          stackelem *top;
@@ -2058,7 +2158,7 @@ endloop: if (s.increment)
          streng *retval;
 
          /* buggy, need to deallocate procbox and vars ... */
-         if (thisptr->p[0])
+         if (thisptr->type == X_RETURN && thisptr->p[0])
             retval = evaluate(TSD,thisptr->p[0],NULL) ;
          else
             retval = NULL ;
@@ -2124,9 +2224,13 @@ endloop: if (s.increment)
              * one exists. We have to keep care for unnamed loops like
              * "do 5 ; say fred ; end".
              */
-            if ( ( iptr->p[0] != NULL ) &&
-                 ( iptr->p[0]->name != NULL ) &&
-                 ( Str_cmp( thisptr->name, iptr->p[0]->name ) == 0 ) )
+            if ( ( ( iptr->p[0] != NULL ) &&
+                   ( iptr->p[0]->name != NULL ) &&
+                   ( Str_cmp( thisptr->name, iptr->p[0]->name ) == 0 ) )
+              || ( iptr->name != NULL && Str_cmp( thisptr->name, iptr->name ) == 0 )
+              /* OO: the variable of a DO LABEL x v OVER c loop */
+              || ( iptr->p[3] != NULL && iptr->p[3]->p[1] != NULL
+                && Str_cmp( thisptr->name, iptr->p[3]->p[1]->name ) == 0 ) )
             {
                /*
                 * Iterator name equals our argument. Automatically pop one
@@ -2462,6 +2566,17 @@ nodeptr getlabel( const tsd_t *TSD, const streng *name )
    internal_parser_type *ipt = &TSD->systeminfo->tree;
    unsigned i, hash;
 
+   /*
+    * OO extension: inside a method or routine only its own labels count.
+    */
+   if ( TSD->currlevel && TSD->currlevel->oo_ctx )
+   {
+      nodeptr n = oo_getlabel( TSD, name );
+      /* a block made in the main program also sees the program's labels */
+      if ( n || !oo_label_main( TSD ) )
+         return n;
+   }
+
    if (ipt->sort_labels == NULL)
    {
       if (ipt->first_label == NULL)
@@ -2484,6 +2599,9 @@ nodeptr getlabel( const tsd_t *TSD, const streng *name )
    {
       if (hash != ipt->sort_labels[i].hash)
          continue;
+      /* OO extension: labels inside directives are marked in p[3] */
+      if (ipt->sort_labels[i].entry->p[3] != NULL)
+         continue;
       if (Str_ccmp(ipt->sort_labels[i].entry->name, name) == 0)
          return(ipt->sort_labels[i].entry);
    }
@@ -2500,6 +2618,9 @@ void removelevel( tsd_t *TSD, proclevel level )
       removelevel( TSD, level->next ) ;
 /*      level->next = NULL; */
    }
+
+   if ( level->oo_blocks )
+      oo_level_ends( TSD, level ) ;   /* blocks keep its variables */
 
    if (level->varflag==1) /* does not belong *here* !!! */
       kill_variables( TSD, level->vars ) ;
@@ -2580,6 +2701,8 @@ proclevel newlevel( tsd_t *TSD, proclevel oldlevel )
       level->next = NULL;
       level->args = NULL;
       level->options = 0;
+      level->oo_ctx = NULL;
+      level->oo_propagate = NULL;
 
       if ( it->opts_set )
          level->options = it->options;
@@ -2667,6 +2790,17 @@ proclevel newlevel( tsd_t *TSD, proclevel oldlevel )
       level->pool++;
    }
 
+   {
+      static unsigned long serial = 0;
+      level->oo_serial = ++serial;
+      level->oo_blocks = NULL;
+      /* GC: objects made from now on by the callee are not in the caller's
+       * half-evaluated clause; see oo_gc() */
+      if ( oldlevel )
+         oldlevel->oo_callmark = TSD->oo_nobjs;
+      level->oo_mark = level->oo_callmark = TSD->oo_nobjs;
+      level->oo_clause = TSD->oo_clause;
+   }
    TSD->trace_stat = level->tracestat;
    return level;
 }
@@ -2706,6 +2840,18 @@ static void expose_indir( tsd_t *TSD, const streng *list )
  */
 void jump_rexx_signal( tsd_t *TSD )
 {
+   /*
+    * OO extension: a SYNTAX error inside a method or routine whose caller
+    * traps SYNTAX leaves the method and is raised again in the caller.
+    * The marker is a SYNTAX trap without a label name, see oo_run_level().
+    */
+   if ( TSD->currlevel->oo_propagate && TSD->nextsig
+     && TSD->nextsig->type == SIGNAL_SYNTAX && !TSD->in_protected )
+   {
+      trap *traps = gettraps( TSD, TSD->currlevel );
+      if ( traps[SIGNAL_SYNTAX].name == NULL )
+         longjmp( *(jmp_buf *) TSD->currlevel->oo_propagate, 1 );
+   }
    if ( TSD->in_protected )
    {
       /*
@@ -2779,4 +2925,283 @@ void jump_script_exit( tsd_t *TSD, streng *result )
                  "script EXIT not registered" );
 
    longjmp( *TSD->systeminfo->script_exit, 1 );
+}
+
+/*
+ * OO extension: runs fn(TSD, data) so that an EXIT inside only ends that
+ * code (the prolog of a ::REQUIRES file). Errors still end the program.
+ * Returns 1 if the code ended with EXIT.
+ */
+/*
+ * Calls fn for a Rexx block called from Python: an error or EXIT in it
+ * must not jump over the Python interpreter. Returns 0, 1 for EXIT (the
+ * value is in TSD->systeminfo->result) or 2 for an error, see
+ * oo_captured_error(). A SYNTAX trap of the caller is off meanwhile, so
+ * that the error ends here.
+ */
+int oo_try_call( tsd_t *TSD, void (*fn)( tsd_t *, void * ), void *data )
+{
+   extern int oo_set_error_capture( int on );
+   jmp_buf jb;
+   jmp_buf * volatile save = TSD->systeminfo->script_exit;
+   proclevel volatile oldlevel = TSD->currlevel;
+   nodeptr volatile savenode = TSD->currentnode;
+   volatile int cstack = TSD->systeminfo->cstackcnt;
+   volatile unsigned nst = nstacktrigger( TSD );
+   volatile unsigned st = stacktrigger( TSD );
+   volatile int errfree = TSD->instore_is_errorfree;
+   volatile int status = 0, capture;
+   trap *ct = gettraps( TSD, oldlevel );
+   volatile int syntax_on = ct[SIGNAL_SYNTAX].on_off;
+
+   ct[SIGNAL_SYNTAX].on_off = 0;
+   capture = oo_set_error_capture( 1 );
+   TSD->instore_is_errorfree = 1;
+   TSD->systeminfo->script_exit = &jb;
+   if ( setjmp( jb ) == 0 )
+      fn( TSD, data );
+   else
+   {
+      status = TSD->instore_is_errorfree ? 1 : 2;
+      nstackcleanup( TSD, nst, NULL );
+      stackcleanup( TSD, st );
+      if ( oldlevel->next )
+         removelevel( TSD, oldlevel->next );
+      TSD->currlevel = oldlevel;
+      oldlevel->next = NULL;
+      TSD->trace_stat = oldlevel->tracestat;
+      TSD->currentnode = savenode;
+      TSD->systeminfo->cstackcnt = cstack;
+   }
+   oo_set_error_capture( capture );
+   gettraps( TSD, oldlevel )[SIGNAL_SYNTAX].on_off = syntax_on;
+   TSD->systeminfo->script_exit = save;
+   TSD->instore_is_errorfree = errfree;
+   return status;
+}
+
+int oo_exit_protected( tsd_t *TSD, void (*fn)( tsd_t *, void * ), void *data )
+{
+   jmp_buf jb;
+   jmp_buf * volatile save = TSD->systeminfo->script_exit;
+   proclevel volatile oldlevel = TSD->currlevel;
+   nodeptr volatile savenode = TSD->currentnode;
+   volatile int cstack = TSD->systeminfo->cstackcnt;
+   volatile unsigned nst = nstacktrigger( TSD );
+   volatile unsigned st = stacktrigger( TSD );
+   volatile int errfree = TSD->instore_is_errorfree;
+   volatile int exited = 0;
+
+   TSD->instore_is_errorfree = 1;
+   TSD->systeminfo->script_exit = &jb;
+   if ( setjmp( jb ) == 0 )
+      fn( TSD, data );
+   else
+   {
+      exited = 1;
+      TSD->systeminfo->script_exit = save;
+      nstackcleanup( TSD, nst, NULL );
+      stackcleanup( TSD, st );
+      if ( oldlevel->next )
+         removelevel( TSD, oldlevel->next );
+      TSD->currlevel = oldlevel;
+      oldlevel->next = NULL;
+      TSD->trace_stat = oldlevel->tracestat;
+      TSD->currentnode = savenode;
+      TSD->systeminfo->cstackcnt = cstack;
+      if ( !TSD->instore_is_errorfree )
+         jump_script_exit( TSD, TSD->systeminfo->result );   /* an error */
+      if ( TSD->systeminfo->result )
+      {
+         Free_stringTSD( TSD->systeminfo->result );
+         TSD->systeminfo->result = NULL;
+      }
+   }
+   TSD->systeminfo->script_exit = save;
+   TSD->instore_is_errorfree = errfree;
+   return exited;
+}
+
+/*
+ * OO extension: runs the body of a method or routine as a new activation.
+ * Like an internal function call with PROCEDURE, plus the ooRexx rules:
+ * - the activation has its own variable pool, condition traps and
+ *   NUMERIC settings (defaults, not the caller's);
+ * - a SYNTAX error that isn't trapped inside is raised again in the caller
+ *   when the caller traps SYNTAX;
+ * - ctx is stored in the level for EXPOSE, SELF and label lookups.
+ * setup(TSD, data) is called once the new level is current.
+ */
+static long oo_stack_limit = 0;
+
+/*
+ * How much of the C stack nested methods may use before "Control stack
+ * full" is raised instead of crashing.
+ */
+extern long regina_stack_size;          /* rexx.c: --stack, REGINA_STACK */
+
+static long oo_stack_budget( char *base )
+{
+   if ( regina_stack_size > 0 )          /* the thread was made with this stack */
+      return regina_stack_size - regina_stack_size / 4;
+   {
+#if defined(_WIN32) || defined(_WIN64)
+   /*
+    * The stack of this thread ends at the allocation base of the region
+    * that holds base (rexx.exe has 256 MB, regina.exe 16 MB).
+    */
+   MEMORY_BASIC_INFORMATION mbi;
+   long lim = 1024L * 1024;
+
+   if ( VirtualQuery( base, &mbi, sizeof( mbi ) ) )
+      lim = (long) ( base - (char *) mbi.AllocationBase );
+   return lim - lim / 4;         /* leave a quarter for everything else */
+#else
+   struct rlimit rl;
+   long lim = 8L * 1024 * 1024;
+
+   if ( getrlimit( RLIMIT_STACK, &rl ) == 0 && rl.rlim_cur != RLIM_INFINITY )
+      lim = (long) rl.rlim_cur;
+   if ( lim > 64L * 1024 * 1024 )
+      lim = 64L * 1024 * 1024;
+   return lim - lim / 4;         /* leave a quarter for everything else */
+#endif
+   }
+}
+
+static streng *run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                          void (*setup)( tsd_t *, void * ), void *data,
+                          var_hashtable *share );
+
+streng *oo_run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                      void (*setup)( tsd_t *, void * ), void *data )
+{
+   return run_level( TSD, body, args, ctx, setup, data, NULL );
+}
+
+/*
+ * Runs the body of a block. share is the variable pool of the activation
+ * that created the block: the block sees its variables like an internal
+ * routine without PROCEDURE, and may begin with PROCEDURE [EXPOSE ...].
+ * NUMERIC settings are those of the caller.
+ */
+streng *oo_run_block( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                      var_hashtable *share, void (*setup)( tsd_t *, void * ), void *data )
+{
+   return run_level( TSD, body, args, ctx, setup, data, share );
+}
+
+static streng *run_level( tsd_t *TSD, nodeptr body, paramboxptr args, void *ctx,
+                          void (*setup)( tsd_t *, void * ), void *data,
+                          var_hashtable *share )
+{
+   jmp_buf jb;
+   proclevel volatile oldlevel = TSD->currlevel;
+   nodeptr volatile savenode = TSD->currentnode;
+   volatile int cstack = TSD->systeminfo->cstackcnt;
+   volatile unsigned nst = nstacktrigger( TSD );
+   volatile unsigned st = stacktrigger( TSD );
+   streng *result;
+   sigtype *sig;
+   trap *ct, *nt;
+   int stackmark, i, propagate;
+
+   {
+      char probe;
+      long used;
+
+      if ( TSD->oo_stack_base == NULL || TSD->oo_depth == 0 )
+      {
+         TSD->oo_stack_base = &probe;
+         oo_stack_limit = oo_stack_budget( &probe );
+      }
+      used = (long) ( TSD->oo_stack_base - &probe );
+      if ( used < 0 )
+         used = -used;
+      if ( used > oo_stack_limit )
+         exiterror( ERR_FULL_CTRL_STACK, 0 );
+   }
+
+   ct = gettraps( TSD, oldlevel );
+   propagate = ct[SIGNAL_SYNTAX].on_off && ct[SIGNAL_SYNTAX].invoked;
+
+   TSD->currlevel = newlevel( TSD, oldlevel );
+   TSD->currlevel->args = args;
+   if ( share )
+   {
+      /* a block: the variables of its creator; PROCEDURE is allowed */
+      TSD->currlevel->vars = share;
+      TSD->currlevel->varflag = 0;
+   }
+   else
+   {
+      TSD->currlevel->vars = create_new_varpool( TSD, 0 );
+      TSD->currlevel->varflag = 1;
+      TSD->currlevel->numfuzz = DEFAULT_NUMERIC_FUZZ;
+      TSD->currlevel->currnumsize = DEFAULT_NUMERIC_SIZE;
+      TSD->currlevel->numform = DEFAULT_NUMFORM;
+   }
+   TSD->currlevel->oo_ctx = ctx;
+   TSD->currlevel->oo_propagate = propagate ? (void *) &jb : NULL;
+   nt = (trap *) MallocTSD( sizeof( trap ) * SIGNALS );
+   for ( i = 0; i < SIGNALS; i++ )
+   {
+      nt[i].name = NULL;
+      nt[i].on_off = 0;
+      nt[i].delayed = 0;
+      nt[i].def_act = default_action[i];
+      nt[i].ignored = default_ignore[i];
+      nt[i].invoked = 0;
+   }
+   if ( propagate )
+   {
+      nt[SIGNAL_SYNTAX].on_off = 1;
+      nt[SIGNAL_SYNTAX].invoked = 1;   /* name NULL: the marker */
+   }
+   TSD->currlevel->traps = nt;
+   stackmark = pushcallstack( TSD, TSD->currentnode );
+   TSD->oo_depth++;
+
+   if ( setjmp( jb ) == 0 )
+   {
+      if ( setup )
+         setup( TSD, data );
+      result = interpret( TSD, body );
+      TSD->oo_depth--;
+      TSD->currentnode = savenode;
+      popcallstack( TSD, stackmark );
+      removelevel( TSD, TSD->currlevel );
+      TSD->currlevel = oldlevel;
+      TSD->currlevel->next = NULL;
+      TSD->trace_stat = TSD->currlevel->tracestat;
+      return result;
+   }
+
+   /* a SYNTAX error to pass to the caller */
+   TSD->oo_depth--;
+   sig = TSD->nextsig;
+   TSD->nextsig = NULL;
+   nstackcleanup( TSD, nst, NULL );
+   stackcleanup( TSD, st );
+   if ( oldlevel->next )
+      removelevel( TSD, oldlevel->next );
+   TSD->currlevel = oldlevel;
+   oldlevel->next = NULL;
+   TSD->trace_stat = oldlevel->tracestat;
+   TSD->currentnode = savenode;
+   TSD->systeminfo->cstackcnt = cstack;
+   if ( sig )
+   {
+      int rc = sig->rc, subrc = sig->subrc;
+      streng *descr = sig->descr ? Str_dupTSD( sig->descr ) : NULL;
+      FREE_IF_DEFINED( TSD, sig->info );
+      FREE_IF_DEFINED( TSD, sig->descr );
+      FreeTSD( sig );
+      condition_hook( TSD, SIGNAL_SYNTAX, rc, subrc,
+                      savenode ? savenode->lineno : -1, descr, NULL );
+      /* not trapped after all */
+      exiterror( rc, 0 );
+   }
+   exiterror( ERR_INTERPRETER_FAILURE, 1, __FILE__, __LINE__, "OO SYNTAX propagation" );
+   return NULL;
 }

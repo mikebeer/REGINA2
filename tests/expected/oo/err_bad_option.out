@@ -1,0 +1,4 @@
+     4 +++ class A frobnicate
+Error 99 running "@WORK@/oo/err_bad_option.rexx", line 4: [Translation error]
+Error 99.6: [Invalid option "FROBNICATE" in ::CLASS directive]
+rc=157

@@ -1,0 +1,48 @@
+)HELP
+x = 6 * 7
+x
+y = .array~of('a', 'b')
+y~makestring('line', '-')
+'a literal is shown too'
+::routine hyp
+  use arg a, b
+  return a * a + b * b
+
+hyp(3, 4)
+::class counter
+::method init
+  expose n
+  n = 0
+::method next
+  expose n
+  n = n + 1
+  return n
+
+c = .counter~new
+c~next c~next
+)VARS
+)FNS
+)CLASSES
+)WSID sessiontest
+)SAVE
+)CLEAR
+)VARS
+)LOAD sessiontest
+x y[2] hyp(5, 12) c~next
+m = .array~new(2, 2); m[1, 2] = 'set'
+m[1, 2]
+c~next
+y~append('c')
+y~items
+
+)SHOW hyp
+)ERASE x
+)VARS
+x = 1 / 0
+'after the error'
+)OUT sessionpart y
+)CLEAR
+)IN sessionpart
+)VARS
+)OFF
+'not shown'

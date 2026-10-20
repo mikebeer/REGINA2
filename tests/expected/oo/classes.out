@@ -1,0 +1,22 @@
+loading shapes.cls
+shapes prolog label works
+main starts
+circle with area 12.56636
+3.14159 3.14159
+counter: 1 2 3
+1 2 | 10 2
+1 6
+1 0
+1 1 0
+helper called via call
+helper called as function
+helper result
+GREET
+caught 97 Error 97.1: [Object "a POINT" does not understand message "NOSUCHMETHOD"]
+caught 97 Error 97.1: [Object "a POINT" does not understand message "PRIVATE1"]
+via self: secret
+caught 91 Error 91.1: [Message "NORESULT" did not return a result]
+hello flying
+unknown ANYTHING with 2 args
+unknown OTHER with 0 args
+rc=0

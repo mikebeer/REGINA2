@@ -759,7 +759,9 @@ streng *std_condition( tsd_t *TSD, cparamboxptr parms )
    checkparam(  parms,  0,  1 , "CONDITION" ) ;
 
    if (parms&&parms->value)
-      opt = getoptionchar( TSD, parms->value, "CONDITION", 1, "CEIDS", "" ) ;
+      /* OO extension: 'O' returns the condition as a Directory object */
+      opt = getoptionchar( TSD, parms->value, "CONDITION", 1,
+                           oo_mode() < 0 ? "CEIDS" : "CEIDSO", "" ) ;
 
    result = NULL ;
    sig = getsigs(TSD->currlevel) ;
@@ -787,6 +789,10 @@ streng *std_condition( tsd_t *TSD, cparamboxptr parms )
             result = Str_creTSD( buf ) ;
             break ;
 
+         case 'O':
+            result = oo_condition_object( TSD, sig ) ;
+            break ;
+
          case 'S':
             traps = gettraps( TSD, TSD->currlevel ) ;
             if (traps[sig->type].delayed)
@@ -800,6 +806,8 @@ streng *std_condition( tsd_t *TSD, cparamboxptr parms )
             break;
       }
 
+   if (!result && opt == 'O')
+       result = oo_condition_object( TSD, NULL ) ;   /* .nil */
    if (!result)
        result = nullstringptr() ;
 

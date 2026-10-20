@@ -1,0 +1,6 @@
+Alice        120.00
+Bob           50.00
+accounts opened: 2
+refused: Bob has only 50
+owner is read-only, balance is 120
+rc=0

@@ -1,0 +1,39 @@
+5 3 1 5 x z 0 1
+3 1,2,5 2
+x 2 1
+apple fig pear
+apple
+fig
+pear
+2 2
+3 first first a 1
+one-two-three 3
+by object by string 2
+Mike Mike Zurich 1 0
+key NAME = Mike
+key city = Zurich
+sup NAME Mike
+sup city Zurich
+tail 1 a
+tail 2 b
+tail 10 c
+tail X d
+sum 6
+v 1
+v 3
+w 1
+abcdefgh! 9 bcd 4
+aXYbefgh!
+HELLO hello 3 3
+ell 3 4 a+b+c
+abcdef 7 1 1 0 -5
+1 1 0 1
+4 0
+2 line2
+1 0 concat: an Array! space: an Array a Directory
+1 1 0 1
+show got Array 1
+8 a Dir
+The NIL object The Array class 1 0
+my thing my thing
+rc=0

@@ -234,6 +234,21 @@ static const struct function_type functions[] = {
   { 0,              std_x2c,               "X2C" },
   { 0,              std_x2d,               "X2D" },
   { 0,              std_xrange,            "XRANGE" },
+  /* OO extension: workspace functions, written []NL(2) and so on; '[' sorts after 'Z' */
+  { 0,              oo_q_clear,         "[]CLEAR" },
+  { 0,              oo_q_cr,            "[]CR" },
+  { 0,              oo_q_ex,            "[]EX" },
+  { 0,              oo_q_fx,            "[]FX" },
+  { 0,              oo_q_gc,            "[]GC" },
+  { 0,              oo_q_in,            "[]IN" },
+  { 0,              oo_q_load,          "[]LOAD" },
+  { 0,              oo_q_nl,            "[]NL" },
+  { 0,              oo_q_out,           "[]OUT" },
+  { 0,              oo_q_save,          "[]SAVE" },
+  { 0,              oo_q_wsid,          "[]WSID" },
+  { 0,              oo_q_wsitem,        "[]WSITEM" },
+  { 0,              oo_q_wsobj,         "[]WSOBJ" },
+  { 0,              oo_q_wsvar,         "[]WSVAR" },
   { 0,              NULL,                  NULL }
 } ;
 
@@ -343,7 +358,30 @@ streng *buildtinfunc( tsd_t *TSD, nodeptr thisptr )
                      * deallocplink. FGC
                      */
 
-      TSD->bif_first = initplist( TSD, thisptr ) ;
+      /* VALUE and the workspace functions []... take objects as they are */
+      if ( TSD->oo_active && ( BIFname == NULL
+           || ( strcmp( BIFname, "VALUE" ) != 0 && BIFname[0] != '[' ) ) )
+      {
+         /*
+          * OO extension: built-in functions see the STRING of an object.
+          * The list stays local until then: a STRING method may call
+          * built-in functions itself, which reuse TSD->bif_first.
+          */
+         paramboxptr p, first = initplist( TSD, thisptr );
+         for ( p = first; p; p = p->next )
+         {
+            streng *v;
+            if ( p->value == NULL || ( v = oo_stringify( TSD, p->value ) ) == NULL )
+               continue;
+            if ( p->dealloc )
+               Free_stringTSD( p->value );
+            p->value = v;
+            p->dealloc = 1;
+         }
+         TSD->bif_first = first;
+      }
+      else
+         TSD->bif_first = initplist( TSD, thisptr ) ;
       TSD->BIFname = BIFname;
       TSD->BIFfunc = (void *) BIFfunc;
       if (vptr)
@@ -402,6 +440,18 @@ paramboxptr initplist( tsd_t *TSD, cnodeptr thisptr )
       {
          currnt->next = newptr ;
          currnt = newptr ;
+      }
+
+      /* OO extension: a plain stem argument may be used by USE ARG s. */
+      if ( thisptr->p[0] && thisptr->p[0]->type == X_STEM_SYMBOL )
+      {
+         currnt->stempool = TSD->currlevel->vars ;
+         currnt->stemname = thisptr->p[0]->name ;
+      }
+      else
+      {
+         currnt->stempool = NULL ;
+         currnt->stemname = NULL ;
       }
 
       if (thisptr->type==X_CEXPRLIST && TSD->trace_stat!='I')
@@ -468,6 +518,8 @@ paramboxptr initargs( tsd_t *TSD, int argc, const int *lengths,
          currnt = newptr;
       }
 
+      currnt->stempool = NULL;
+      currnt->stemname = NULL;
       if ( lengths[i] == RX_NO_STRING )
       {
          currnt->dealloc = 1;
@@ -1277,4 +1329,31 @@ const char *BIFname( tsd_t *TSD )
       }
    }
    return "(internal)";
+}
+
+/*
+ * OO extension: returns the built-in function name (uppercase, 0-terminated)
+ * or NULL if it doesn't exist or isn't enabled by the current OPTIONS.
+ */
+streng *(*oo_find_bif( tsd_t *TSD, const char *name ))( tsd_t *, cparamboxptr )
+{
+   int low = 0, up = num_funcs - 1, mid, cmp;
+
+   while ( low <= up )
+   {
+      mid = ( low + up ) / 2;
+      cmp = strcmp( functions[mid].funcname, name );
+      if ( cmp == 0 )
+      {
+         if ( functions[mid].compat
+           && !get_options_flag( TSD->currlevel, functions[mid].compat ) )
+            return NULL;
+         return functions[mid].function;
+      }
+      if ( cmp > 0 )
+         up = mid - 1;
+      else
+         low = mid + 1;
+   }
+   return NULL;
 }

@@ -1,0 +1,5 @@
+use arg: a b
+loop ran 3 times
+nil is The NIL object
+interpret j 3
+rc=0

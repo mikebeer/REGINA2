@@ -1,0 +1,121 @@
+
+==========================================================================
+; a=(); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 6
+----------
+1E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+1E02: Error 36.901: Expecting ")" in expression before position 6
+
+==========================================================================
+; a=(()); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 7
+----------
+1E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+1E02: Error 36.901: Expecting ")" in expression before position 7
+
+==========================================================================
+; result=a(()); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 13
+----------
+1E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+1E02: Error 36.901: Expecting ")" in expression before position 13
+
+==========================================================================
+; call a(); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 10
+
+==========================================================================
+; call a (); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 11
+
+==========================================================================
+; call a() 1; return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 10
+
+==========================================================================
+; call a()+1; return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 10
+
+==========================================================================
+; call a 1 (); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 13
+----------
+1E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+1E02: Error 36.901: Expecting ")" in expression before position 13
+
+==========================================================================
+; call a 1 (),2; return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 13
+----------
+1E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+1E02: Error 36.901: Expecting ")" in expression before position 13
+
+==========================================================================
+; call a() 1,2; return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 10
+
+==========================================================================
+; call a ()1; return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 11
+
+==========================================================================
+; call a ()1,2; return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 11
+
+==========================================================================
+; call a(()); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 11
+----------
+1E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+1E02: Error 36.901: Expecting ")" in expression before position 11
+
+==========================================================================
+; call a((())); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 12
+----------
+1E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+1E02: Error 36.901: Expecting ")" in expression before position 12
+
+==========================================================================
+; call a())); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 10
+
+==========================================================================
+; call a 2,(); return RESULT
+---
+0E01: Error 36 running "@WORK@/trip/TST.rexx", line 1: Unmatched "(" in expression
+0E02: Error 36.901: Expecting ")" in expression before position 13
+
+Some tests didn't pass successfully.
+Please, check the standard output log.
+rc=1

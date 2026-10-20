@@ -1,0 +1,6 @@
+/* OOREGINA */
+options ooregina
+a options ooregina
+do counter: 2
+still a variable
+rc=0

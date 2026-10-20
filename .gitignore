@@ -1,3 +1,5 @@
 # Copied from common/ by configure during builds
 /config.guess
 /config.sub
+/packages/
+/build-win64/

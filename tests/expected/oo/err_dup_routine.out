@@ -1,0 +1,4 @@
+     5 +++ routine r
+Error 99 running "@WORK@/oo/err_dup_routine.rexx", line 5: [Translation error]
+Error 99.7: [Duplicate ::ROUTINE "R"]
+rc=157

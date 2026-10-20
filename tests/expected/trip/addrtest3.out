@@ -1,0 +1,37 @@
+
+Action: ADDRESS SYSTEM Std WITH OUTPUT STEM o. ERROR STEM e.
+o.0=1
+o.1=Line to stdout
+e.0=1
+e.1=Line to stderr
+
+Action: ADDRESS REGINA myself "mixed" WITH OUTPUT STEM o. ERROR STEM e.
+o.0=1
+o.1=Line to stdout
+e.0=1
+e.1=Line to stderr
+
+Action: ADDRESS REGINA myself "stdout" WITH OUTPUT STEM o. ERROR STEM e.
+o.0=2
+o.1=Line to stderr
+o.2=Line to stdout
+e.0=0
+
+Action: ADDRESS REGINA myself "stderr" WITH OUTPUT STEM o. ERROR STEM e.
+o.0=0
+e.0=2
+e.1=Line to stderr
+e.2=Line to stdout
+
+Action: ADDRESS COMMAND WITH OUTPUT STREAM "junk.tst" ERROR STREAM Junk
+
+Action: ADDRESS COMMAND "./std" (with some implicite redirections)
+Line 1 from 'junk.tst' is: 'Line to stderr'
+Line 2 from 'junk.tst' is: 'Line to stdout'
+
+Action: ADDRESS SYSTEM "cat" WITH INPUT STREAM Junk OUTPUT APPEND STREAM Junk
+Line 1 from 'junk.tst' is: 'Line to stderr'
+Line 2 from 'junk.tst' is: 'Line to stdout'
+Line 3 from 'junk.tst' is: 'Line to stderr'
+Line 4 from 'junk.tst' is: 'Line to stdout'
+rc=0

@@ -415,6 +415,17 @@ static void doparse3( tsd_t *TSD, cnodeptr thisptr, const char *start, int len )
 
 void doparse( tsd_t *TSD, const streng *source, cnodeptr thisptr, int caseless )
 {
+   if ( TSD->oo_active && source && OO_LOOKS_LIKE_HANDLE( source ) )
+   {
+      /* OO extension: PARSE uses the STRING of an object */
+      streng *s = oo_stringify( TSD, source );
+      if ( s )
+      {
+         doparse( TSD, s, thisptr, caseless );
+         Free_stringTSD( s );
+         return;
+      }
+   }
    int start=0,point=0,length=0, end=0, nextstart=0, solid=0 ;
    const streng *pattern=NULL ;
    const streng *xtmp=NULL ;

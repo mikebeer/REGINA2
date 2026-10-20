@@ -1,0 +1,6 @@
+lib2 prolog
+lib1 prolog
+main
+c3 c3>c2>c1
+libfn 2 20
+rc=0

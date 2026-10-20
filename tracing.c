@@ -384,6 +384,18 @@ void tracevalue( tsd_t *TSD, const streng *str, char type )
    if ( tt->traceflag || tt->quiet )
       return;
 
+   if ( TSD->oo_active && str && OO_LOOKS_LIKE_HANDLE( str ) )
+   {
+      /* OO extension: show "an Array" instead of the object handle */
+      streng *d = oo_describe( TSD, str );
+      if ( d )
+      {
+         tracevalue( TSD, d, type );
+         Free_stringTSD( d );
+         return;
+      }
+   }
+
    indent = TSD->systeminfo->cstackcnt + TSD->systeminfo->ctrlcounter;
    message = Str_makeTSD( str->len + 30 + indent );
    sprintf( tt->tracestr, "       >%c> %%%ds  \"", type, indent );

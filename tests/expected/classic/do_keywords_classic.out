@@ -1,0 +1,10 @@
+do counter: 2
+do label c: 3
+do with: 1
+do with index i item 2: 2
+do x over 2: 2
+loop = 5
+label loop reached
+Error 27.27.1 Error 27.1: Invalid use of keyword "FOR" in DO clause
+Error 10 Error 10.1: END has no corresponding DO or SELECT
+rc=0

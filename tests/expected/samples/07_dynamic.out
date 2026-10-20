@@ -1,0 +1,15 @@
+  [log] APPEND with 1 argument(s)
+  [log] APPEND with 1 argument(s)
+  [log] ITEMS with 0 argument(s)
+  [log] TOSTRING with 1 argument(s)
+proxied array has 2 items: first, second
+POINT: (3, 4)
+PERSON: Ada aged 36
+Person has PRINT: 1
+Printable is a mixin: 1
+Person inherits it: 1
+p~x = 6
+p~y = 8
+p~length = 10
+scaled: (60, 80)
+rc=0

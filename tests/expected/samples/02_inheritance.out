@@ -1,0 +1,9 @@
+circle     area 3.14
+rectangle  area 6.00
+square     area 16.00
+total area 25.14
+a square is a rectangle: 1
+and a shape: 1  class: SQUARE
+superclass of Square: RECTANGLE
+as expected: Error 98.6: [Method "AREA" is abstract]
+rc=0

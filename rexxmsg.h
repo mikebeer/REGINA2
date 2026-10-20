@@ -30,7 +30,7 @@ struct textindex
  * error indicating that the error message files are corrupt will be
  * displayed instead of a real error message.
  */
-#define NUMBER_ERROR_MESSAGES   273
+#define NUMBER_ERROR_MESSAGES   317
 #define NUMBER_PREFIX_MESSAGES    3
 #define MAX_NUMBER_INSERTS        5
 /*#define MAX_MESSAGE_LINE_LENGTH 500*/

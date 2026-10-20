@@ -1,0 +1,31 @@
+RgMqtt 1.0 (MQTT 3.1.1)
+connect: 1
+subscribe: 2 1
+publish qos 0: 0
+publish qos 1: 0
+publish qos 2: 0
+publish binary: 0
+publish 200 KB: 0
+not matched: 0
+pending: 5
+  test/q0 0 0 6D6573736167652030 (message 0)
+  test/q1 1 0 6D6573736167652031 (message 1)
+  test/q2 2 0 6D6573736167652032 (message 2)
+  other/a/x 1 0 00FF0D0A 
+  test/big 1 0 3230303030302062797465732C2073616D653A2031 (200000 bytes, same: 1)
+ping: 0
+retain: 0
+second: 2 1 1 keep/me kept value 1
+will: 1 test/will - h3 went away
+after kick: -1 connection closed by the broker
+unsubscribe: 0
+nothing: 0
+denied: 128
+wildcard topic: -1 a topic name must not be empty or contain wildcards
+bad handle: -1 not a connection handle
+refused: 0 connection refused: bad user name or password
+no host: 0 unknown host no.such.host.invalid
+qos 3: error 40
+disconnect: 0 0 -1
+dropped: 1
+rc=0

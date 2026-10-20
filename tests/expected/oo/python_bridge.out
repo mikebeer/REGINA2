@@ -1,0 +1,51 @@
+--- modules and functions
+4.0 2 3.141592653589793
+1.4142135623730951
+3 9 5
+--- values coming back
+1
+1 0
+1180591620717411303424
+0.25 text
+list [1, 'two', 3.5] 3
+--- values going to Python
+42 4.5 '4 5' None
+'007' [1, 'a', [2]]
+{'k': 'v'}
+[[1, 2], [3, 4]]
+{'1': 'one', '2': 'two', 'X': 'ex'}
+--- objects
+Rect(3, 4) 12 3
+20 4 80 Rect(15, 12)
+args=(1, 2) kw=[('a', 1), ('z', 26)]
+Rect(5, 10)
+--- items and iteration
+[5, 10, 20, 30] 5 30
+[99, 10, 20, 30]
+  item 99
+  item 10
+  item 20
+  item 30
+{'name': 'Mike', 'age': 60} Mike
+  key name
+  key age
+The Directory class Mike
+The Array class 3 4
+3 3 10 30
+Bern 3000
+--- operators
+[1, 2, 1, 2] [1, 2, 1, 2] 1 0
+8.5
+5/6 3/2 1/4 1 -1/2 1
+--- exec and eval
+42 abab
+42
+5
+{"a": null, "b": [1, 2]}
+--- errors
+caught 98 Error 98.14: [Python: ValueError: math domain error]
+caught Error 98.14: [Python: ModuleNotFoundError: No module named 'no_such_module']
+caught Error 98.14: [Python: AttributeError: 'Rect' object has no attribute 'nonexistent']
+caught Error 98.14: [Python: SyntaxError: invalid syntax (line 1)]
+done
+rc=0

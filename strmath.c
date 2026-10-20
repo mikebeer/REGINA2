@@ -2440,7 +2440,18 @@ num_descr *get_a_descr( tsd_t *TSD, const char *bif, int argno,
    descr->max = 0 ;
    descr->num = NULL ;
 
-   if ( ( i = getdescr( TSD, num, descr ) ) != 0 )
+   i = getdescr( TSD, num, descr );
+   if ( i != 0 && TSD->oo_active && OO_LOOKS_LIKE_HANDLE( num ) )
+   {
+      /* OO extension: an object is used by its string value */
+      streng *v = oo_stringify( TSD, num );
+      if ( v )
+      {
+         i = getdescr( TSD, v, descr );
+         Free_stringTSD( v );
+      }
+   }
+   if ( i != 0 )
    {
       mt = (mat_tsd_t *)TSD->mat_tsd;
 

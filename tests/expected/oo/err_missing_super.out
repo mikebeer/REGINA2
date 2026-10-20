@@ -1,0 +1,4 @@
+     4 +++ class A subclass Nope
+Error 98 running "@WORK@/oo/err_missing_super.rexx", line 4: [Execution error]
+Error 98.1: [Class "NOPE" not found]
+rc=158

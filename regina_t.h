@@ -124,6 +124,13 @@ typedef struct pparambox {
    paramboxptr next ;
    int dealloc ;
    struct strengtype *value ;
+   /*
+    * OO extension: for an argument that is a plain stem ("call f st."),
+    * the caller's variable pool and the stem name, so that "USE ARG s."
+    * can make s. an alias of the caller's stem. NULL otherwise.
+    */
+   var_hashtable *stempool ;
+   const struct strengtype *stemname ;
 } parambox ;
 
 typedef struct tnode {
@@ -340,6 +347,13 @@ typedef struct proclevelbox {
    jmp_buf *signal_continue; /* see jump_rexx_signal() */
    unsigned long options;
    int pool;
+   void *oo_ctx;              /* OO: method/routine frame, see oo.c */
+   void *oo_propagate;        /* OO: jmp_buf for SYNTAX errors to pass up */
+   unsigned long oo_serial;   /* OO: tells activations apart, see blocks */
+   void *oo_blocks;           /* OO: blocks created here, see oo_level_ends */
+   unsigned long oo_mark;     /* OO GC: objects when the clause began */
+   unsigned long oo_callmark; /* OO GC: objects when it called the next level */
+   unsigned long oo_clause;   /* OO GC: number of its current clause */
 } proclevbox ;
 
 typedef struct _ttree { /* bucket list of treenodes which allows ultra fast
@@ -479,6 +493,7 @@ typedef struct systeminfobox {
    int trace_override;
    internal_parser_type tree;
    int ctrlcounter;
+   int oo_keep_tree;          /* OO: tree is used by classes, keep it */
 } sysinfobox ;
 
 #ifndef DONT_TYPEDEF_PFN

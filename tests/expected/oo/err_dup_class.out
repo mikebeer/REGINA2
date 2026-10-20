@@ -1,0 +1,4 @@
+     5 +++ class A
+Error 99 running "@WORK@/oo/err_dup_class.rexx", line 5: [Translation error]
+Error 99.2: [Duplicate ::CLASS "A"]
+rc=157

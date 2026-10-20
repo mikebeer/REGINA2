@@ -1,0 +1,14 @@
+sales      120 340 210 90 150 60
+total      970
+mean       161.66666666666666
+median     135.0
+stdev      101.47
+product    tea      3
+product    coffee   2
+product    cocoa    1
+Zurich     390
+by city    {"Basel": 90, "Bern": 490, "Zurich": 390}
+json       [{"city": "Zurich", "product": "tea", "amount": 120}, {"city...
+read back  6 sales, first in Zurich
+with VAT   129.72 123.12
+rc=0

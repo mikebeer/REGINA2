@@ -1,0 +1,128 @@
+RgMqtt - an MQTT 3.1.1 client package for Regina Rexx
+=====================================================
+
+RgMqtt lets Rexx programs talk to an MQTT broker (Mosquitto, HiveMQ, EMQX,
+the brokers of IoT platforms, ...). It is an external function package
+like RegUtil: the shared library librgmqtt.so (rgmqtt.dll in the Windows zip),
+built and installed together with Regina. It needs nothing but the system's
+sockets. TLS is not supported; use a local TLS tunnel (stunnel) or a broker
+listener without TLS.
+
+External function packages are loaded by the dynamic interpreter `regina`
+(which uses libregina; in the Windows zip regina.exe with regina.dll and
+rgmqtt.dll). The standalone `rexx` executables (the static Linux build, the
+Windows rexx.exe and the macOS build) can't load packages.
+
+To try it without a broker of your own, use the public test server
+test.mosquitto.org of the Eclipse Mosquitto project: port 1883 without a
+password, or 1884 with user "rw" and password "readwrite" (the TLS ports
+can't be used). Everybody can read what is published there.
+demo/mqtt/15_public_broker.rexx does this; 13_mqtt.rexx and
+14_mqtt_oo.rexx take a host and port.
+
+Loading
+-------
+
+    call RxFuncAdd 'MqttLoadFuncs', 'rgmqtt', 'MqttLoadFuncs'
+    call MqttLoadFuncs
+
+In OO programs `::requires 'mqtt'` gives the classes Mqtt and MqttMessage,
+which load the functions themselves (see below).
+
+Functions
+---------
+
+MqttConnect(host [,port] [,clientid] [,options.])
+    Connects and returns a handle (a whole number), or 0 if the connection
+    failed (MqttError() says why). port defaults to 1883. Without a client
+    id one is generated. options. is the name of a stem whose tails set:
+      KEEPALIVE    seconds between pings (default 60, 0 = none)
+      CLEAN        1 (default) a clean session, 0 keep the session
+      USER, PASSWORD
+      WILLTOPIC, WILLMESSAGE, WILLQOS, WILLRETAIN
+                   the message the broker publishes when the connection
+                   breaks without MqttDisconnect
+      TIMEOUT      seconds to wait for an acknowledgement (default 10)
+
+MqttPublish(h, topic, message [,qos] [,retain])
+    Publishes message (any bytes) with QoS 0 (default), 1 or 2. retain 1
+    keeps it on the broker for later subscribers (an empty retained
+    message removes it). Returns 0, or -1 on error. QoS 1 and 2 wait for
+    the broker's acknowledgement.
+
+MqttSubscribe(h, filter [,qos])
+    Subscribes to a topic filter (+ and # are wildcards). Returns the QoS
+    the broker granted, 128 if it refused, -1 on error.
+
+MqttUnsubscribe(h, filter)
+    Returns 0, or -1 on error.
+
+MqttReceive(h, stem. [,seconds])
+    Returns 1 and sets stem.TOPIC, stem.MESSAGE, stem.QOS, stem.RETAIN and
+    stem.DUP when a message arrived within seconds (default 0: only those
+    already received; decimals allowed), 0 if none came, -1 if the
+    connection was lost. Messages that arrive while another call waits for
+    an acknowledgement are queued; MqttReceive returns them in order.
+
+MqttPending(h)
+    The number of received messages MqttReceive has not returned yet.
+
+MqttPing(h)
+    A round trip to the broker: 0, or -1 if the connection is lost.
+    Keep-alive pings are sent automatically while RgMqtt waits.
+
+MqttDisconnect(h)
+    Disconnects (the will is not published). Returns 0.
+
+MqttError()
+    The text of the last error, empty after a successful MqttConnect.
+
+MqttVersion(), MqttDropFuncs()
+
+A lost connection is closed; later calls with its handle return -1 with
+"not a connection handle". Wrong arguments (a QoS of 3, say) raise error
+40, "Incorrect call to routine".
+
+Example
+-------
+
+    call RxFuncAdd 'MqttLoadFuncs', 'rgmqtt', 'MqttLoadFuncs'
+    call MqttLoadFuncs
+    opt.user = 'rexx'; opt.password = 'secret'
+    opt.willtopic = 'status/rexx'; opt.willmessage = 'offline'
+    h = MqttConnect('broker.example.com', 1883, 'rexx-1', 'opt.')
+    if h = 0 then do; say 'no connection:' MqttError(); exit 1; end
+    call MqttSubscribe h, 'sensors/#', 1
+    call MqttPublish h, 'status/rexx', 'online', 1, 1
+    do while MqttReceive(h, 'msg.', 30)
+      say msg.topic '=' msg.message
+    end
+    call MqttDisconnect h
+
+The Mqtt class (OO programs)
+----------------------------
+
+    c = .mqtt~connect('localhost')                 -- .nil if it failed
+    if c == .nil then do; say .mqtt~error; exit 1; end
+    c~subscribe('sensors/#', 1)
+    c~publish('sensors/kitchen', 21.5, 1)
+    n = c~listen({ use arg m; say m~topic '=' m~message }, 5)
+    c~disconnect
+    ::requires 'mqtt'
+
+.mqtt~connect(host [,port] [,clientid] [,options]) takes the options as a
+Directory (keepAlive, user, password, willTopic, ...). An Mqtt object has
+publish (1 or 0), subscribe (granted QoS, -1 if refused), unsubscribe,
+receive([seconds]) (an MqttMessage with topic, message, qos, retain, dup,
+or .nil), listen(block [,seconds]) (calls the block for every message
+until none comes for seconds, forever if omitted, or the block returns
+0; returns the number of messages), pending, ping, isConnected, error
+and disconnect.
+
+Tests
+-----
+
+tests/packages/mqtt_functions.rexx and mqtt_class.rexx run against
+tests/packages/minibroker.py (a small broker written for the tests) in the
+"packages" suite of tests/run-regression.sh. RgMqtt was also checked
+against Mosquitto 2.0 and its mosquitto_pub/mosquitto_sub clients.

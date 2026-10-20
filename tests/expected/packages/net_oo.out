@@ -1,0 +1,6 @@
+host: 1 127.0.0.1
+connect: 0
+sent: 20
+received: 26 echo: hello from Regina OO
+words: 5
+rc=0

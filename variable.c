@@ -1750,6 +1750,19 @@ static int setvalue_stem( const tsd_t *TSD, var_hashtable *vars,
 
    DPRINTF((TSD,"setvalue_stem:     ?"));
 
+   /* OO extension: "r. = <a Stem object>" copies the whole stem */
+   if ( TSD->oo_active && value && OO_LOOKS_LIKE_HANDLE( value ) )
+   {
+      variableptr from = oo_stem_object_box( (tsd_t *) TSD, value );
+      if ( from )
+      {
+         oo_stem_assign( (tsd_t *) TSD, vars, name, from );
+         Free_stringTSD( value );
+         vt->thespot = NULL;
+         return 0;
+      }
+   }
+
    vars->writes++;
    ptr = findsimple( TSD, vars, name, &rehash );
 
@@ -4056,4 +4069,481 @@ void set_reserved_value( tsd_t *TSD, int poolid, streng *val_str, int val_int,
          val_str = Str_dupTSD( val_str );
       setshortcut( TSD, &vt->pool0nodes[poolid][1], val_str );
    }
+}
+
+/*
+ * ---------------------------------------------------------------------
+ * OO extension helpers (see oo.c)
+ * ---------------------------------------------------------------------
+ */
+
+/*
+ * oo_pool_new creates a variable pool for the variables of an object.
+ * Unlike create_new_varpool() it must not touch current_valid because the
+ * pool is never killed like a procedure's pool.
+ */
+var_hashtable *oo_pool_new( const tsd_t *TSD )
+{
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+   var_hashtable *retval;
+
+   retval = make_hash_table( TSD, vt->initialHashTableLength );
+   retval->tbl[retval->size] = (variableptr) vt->current_valid;
+   return retval;
+}
+
+/*
+ * oo_pool_get returns the value of the simple variable name in pool or NULL
+ * if it has no value.
+ */
+const streng *oo_pool_get( const tsd_t *TSD, var_hashtable *pool,
+                           const streng *name )
+{
+   variableptr ptr;
+   int expand = 0;
+
+   ptr = findsimple( TSD, pool, name, &expand );
+   if ( expand )
+      reorgHashtable( TSD, pool );
+   if ( ptr == NULL )
+      return NULL;
+   ptr = get_realbox( ptr );
+   if ( ptr->flag & VFLAG_STR )
+      return ptr->value;
+   if ( ptr->flag & VFLAG_NUM )
+   {
+      expand_to_str( TSD, ptr );
+      return ptr->value;
+   }
+   return NULL;
+}
+
+/*
+ * oo_pool_set sets the simple variable name in pool. value is consumed.
+ */
+void oo_pool_set( const tsd_t *TSD, var_hashtable *pool, const streng *name,
+                  streng *value )
+{
+   setvalue_simple( TSD, pool, name, value );
+}
+
+/*
+ * oo_expose links the variable name (simple, stem or compound) of the
+ * object pool src into the current procedure's pool, like PROCEDURE EXPOSE
+ * does with the caller's pool.
+ */
+void oo_expose( tsd_t *TSD, var_hashtable *src, const streng *name )
+{
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+   var_hashtable *own = TSD->currlevel->vars;
+   int i, len = Str_len( name );
+
+   vt->var_table = own;   /* destination */
+   for ( i = 0; ( i < len ) && ( name->value[i] != '.' ); i++ )
+      ;
+   if ( i == len )
+      expose_simple( TSD, src, name );
+   else if ( i + 1 == len )
+      expose_stem( TSD, src, name );
+   else
+      expose_compound( TSD, src, name );
+   vt->var_table = NULL;
+}
+
+/*
+ * oo_stem_tails calls cb for every tail of the stem stemname (uppercase,
+ * with the trailing dot) of the current procedure that has a value.
+ * Returns the number of tails.
+ */
+int oo_stem_tails( tsd_t *TSD, const streng *stemname,
+                   void (*cb)( tsd_t *, void *, const streng *, const streng * ),
+                   void *data )
+{
+   variableptr st, p, r;
+   int expand = 0, count = 0;
+   unsigned i;
+
+   st = findsimple( TSD, TSD->currlevel->vars, stemname, &expand );
+   if ( expand )
+      reorgHashtable( TSD, TSD->currlevel->vars );
+   st = get_realbox( st );
+   if ( st == NULL || st->index == NULL )
+      return 0;
+   for ( i = 0; i < st->index->size; i++ )
+   {
+      for ( p = st->index->tbl[i]; p; p = p->next )
+      {
+         r = get_realbox( p );
+         if ( r->flag & VFLAG_NUM && !( r->flag & VFLAG_STR ) )
+            expand_to_str( TSD, r );
+         if ( !( r->flag & VFLAG_STR ) )
+            continue;
+         cb( TSD, data, p->name, r->value );
+         count++;
+      }
+   }
+   return count;
+}
+
+/*
+ * oo_pool_copy copies the variables with a value of pool from into pool to
+ * (used by the COPY method of objects): simple variables and stems with
+ * their default value and all tails.
+ */
+void oo_pool_copy( const tsd_t *TSD, var_hashtable *from, var_hashtable *to )
+{
+   variableptr p, r, t, rt;
+   unsigned i, k;
+   int j;
+   streng *full;
+
+   for ( i = 0; i < from->size; i++ )
+   {
+      for ( p = from->tbl[i]; p; p = p->next )
+      {
+         for ( j = 0; j < p->name->len && p->name->value[j] != '.'; j++ )
+            ;
+         r = get_realbox( p );
+         if ( r->flag & VFLAG_NUM && !( r->flag & VFLAG_STR ) )
+            expand_to_str( TSD, r );
+         if ( j == p->name->len )
+         {
+            if ( r->flag & VFLAG_STR )
+               setvalue_simple( TSD, to, p->name, Str_dupTSD( r->value ) );
+            continue;
+         }
+         /* a stem: default value, then the tails */
+         if ( r->flag & VFLAG_STR )
+            setvalue_stem( TSD, to, p->name, Str_dupTSD( r->value ) );
+         if ( r->index == NULL )
+            continue;
+         for ( k = 0; k < r->index->size; k++ )
+         {
+            for ( t = r->index->tbl[k]; t; t = t->next )
+            {
+               rt = get_realbox( t );
+               if ( rt->flag & VFLAG_NUM && !( rt->flag & VFLAG_STR ) )
+                  expand_to_str( TSD, rt );
+               if ( !( rt->flag & VFLAG_STR ) )
+                  continue;
+               full = Str_makeTSD( p->name->len + t->name->len );
+               memcpy( full->value, p->name->value, p->name->len );
+               memcpy( full->value + p->name->len, t->name->value, t->name->len );
+               full->len = p->name->len + t->name->len;
+               setdirvalue_compound( (tsd_t *) TSD, to, full, Str_dupTSD( rt->value ) );
+               Free_stringTSD( full );
+            }
+         }
+      }
+   }
+}
+
+/*
+ * oo_peek_simple returns the value of the simple variable name of the
+ * current procedure without tracing it and without a NOVALUE condition,
+ * or NULL if it has no value.
+ */
+const streng *oo_peek_simple( tsd_t *TSD, const streng *name )
+{
+   if ( KNOWN_RESERVED( name->value, Str_len( name ) ) )
+      return isvariable( TSD, name );
+   return oo_pool_get( TSD, TSD->currlevel->vars, name );
+}
+
+/* ------------------------------------------------------------------ */
+/* OO extension: stems by reference (USE ARG s.) and Stem objects     */
+/* ------------------------------------------------------------------ */
+
+/*
+ * oo_stem_box returns the real box of the stem stemname ("X.", uppercase)
+ * in vars. It is created without a value if it doesn't exist yet.
+ */
+variableptr oo_stem_box( tsd_t *TSD, var_hashtable *vars, const streng *stemname )
+{
+   variableptr ptr;
+   unsigned hashn;
+   int rehash = 0;
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+
+   hashn = hashfunc( vt, stemname, 0, NULL, vars->size );
+   ptr = vars->tbl[hashn];
+   vars->reads++;
+   SEEK_VAR_CCMP( ptr, stemname, vt->fullhash, vars, rehash );
+   SEEK_EXPOSED( ptr );
+   if ( ptr == NULL )
+   {
+      newbox( TSD, stemname, NULL, &vars->tbl[hashn], vt->fullhash );
+      vars->elements++;
+      NEW_HASHTABLE_CHECK( vars, rehash );
+      ptr = vars->tbl[hashn];
+   }
+   if ( ptr->index == NULL )
+      ptr->index = make_hash_table( TSD, vt->initialHashTableLength );
+   if ( rehash )
+      reorgHashtable( TSD, vars );
+   return ptr;
+}
+
+/*
+ * oo_link_stem makes the stem localname of the current procedure an alias
+ * of target (a real stem box), like PROCEDURE EXPOSE does.
+ */
+void oo_link_stem( tsd_t *TSD, const streng *localname, variableptr target )
+{
+   var_hashtable *vars = TSD->currlevel->vars;
+   variableptr ptr, r;
+   unsigned hashv;
+   int junk, rehash = 0;
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+
+   hashv = hashfunc( vt, localname, 0, &junk, vars->size );
+   ptr = vars->tbl[hashv];
+   vars->writes++;
+   SEEK_VAR_CCMP( ptr, localname, vt->fullhash, vars, rehash );
+   if ( ptr )
+   {
+      for ( r = ptr; r->realbox; r = r->realbox )
+         ;
+      if ( r == target )
+         return;           /* already the same stem */
+      if ( ptr->index )
+      {
+         remove_foliage( TSD, ptr->index );
+         ptr->index = NULL;
+      }
+      ptr->realbox = target;
+   }
+   else
+   {
+      newbox( TSD, localname, NULL, &vars->tbl[hashv], vt->fullhash );
+      vars->elements++;
+      NEW_HASHTABLE_CHECK( vars, rehash );
+      vars->tbl[hashv]->realbox = target;
+   }
+   if ( rehash )
+      reorgHashtable( TSD, vars );
+}
+
+/* the default value of a real stem box, NULL if it has none */
+const streng *oo_stem_default( tsd_t *TSD, variableptr stem )
+{
+   if ( stem->flag & VFLAG_NUM && !( stem->flag & VFLAG_STR ) )
+      expand_to_str( TSD, stem );
+   return ( stem->flag & VFLAG_STR ) ? stem->value : NULL;
+}
+
+/* the value of stem.tail (tail as is, not substituted), NULL if unset */
+const streng *oo_stem_get( tsd_t *TSD, variableptr stem, const streng *tail )
+{
+   variableptr p;
+   int rehash = 0;
+   var_tsd_t *vt = (var_tsd_t *)TSD->var_tsd;
+
+   if ( stem->index == NULL )
+      return NULL;
+   /* tails are case sensitive, like in getdirvalue_compound */
+   p = stem->index->tbl[hashfunc( vt, tail, 0, NULL, stem->index->size )];
+   stem->index->reads++;
+   SEEK_VAR_CMP( p, tail, vt->fullhash, stem->index, rehash );
+   SEEK_EXPOSED( p );
+   if ( rehash )
+      reorgHashtable( TSD, stem->index );
+   if ( p == NULL )
+      return NULL;
+   if ( p->flag & VFLAG_NUM && !( p->flag & VFLAG_STR ) )
+      expand_to_str( TSD, p );
+   return ( p->flag & VFLAG_STR ) ? p->value : NULL;
+}
+
+/* calls cb for each tail of the real stem box that has a value */
+int oo_stem_each( tsd_t *TSD, variableptr st,
+                  void (*cb)( tsd_t *, void *, const streng *, const streng * ),
+                  void *data )
+{
+   variableptr p, r;
+   int count = 0;
+   unsigned i;
+
+   if ( st == NULL || st->index == NULL )
+      return 0;
+   for ( i = 0; i < st->index->size; i++ )
+   {
+      for ( p = st->index->tbl[i]; p; p = p->next )
+      {
+         r = get_realbox( p );
+         if ( r->flag & VFLAG_NUM && !( r->flag & VFLAG_STR ) )
+            expand_to_str( TSD, r );
+         if ( !( r->flag & VFLAG_STR ) )
+            continue;
+         if ( cb )
+            cb( TSD, data, p->name, r->value );
+         count++;
+      }
+   }
+   return count;
+}
+
+/* name.tail as a new string */
+static streng *oo_compound_name( tsd_t *TSD, const streng *stemname, const streng *tail )
+{
+   streng *n = Str_makeTSD( stemname->len + tail->len );
+
+   memcpy( n->value, stemname->value, stemname->len );
+   memcpy( n->value + stemname->len, tail->value, tail->len );
+   n->len = stemname->len + tail->len;
+   return n;
+}
+
+/* sets (value != NULL) or drops stem.tail of the stem stemname in vars */
+void oo_stem_put( tsd_t *TSD, var_hashtable *vars, const streng *stemname,
+                  const streng *tail, streng *value )
+{
+   streng *n = oo_compound_name( TSD, stemname, tail );
+
+   /* the stem box needs its tail index before compounds can be set */
+   oo_stem_box( TSD, vars, stemname );
+   if ( value )
+      setdirvalue_compound( TSD, vars, n, value );
+   else
+      drop_dirvar_compound( TSD, vars, n );
+   Free_stringTSD( n );
+}
+
+typedef struct { var_hashtable *vars; const streng *name; } oo_stemcopy;
+
+static void oo_copy_cb( tsd_t *TSD, void *data, const streng *tail, const streng *value )
+{
+   oo_stemcopy *c = (oo_stemcopy *) data;
+   oo_stem_put( TSD, c->vars, c->name, tail, Str_dupTSD( value ) );
+}
+
+/*
+ * oo_stem_assign replaces the whole stem name of vars by a copy of the
+ * real stem box from: its default value and every tail.
+ */
+void oo_stem_assign( tsd_t *TSD, var_hashtable *vars, const streng *name, variableptr from )
+{
+   variableptr to = oo_stem_box( TSD, vars, name );
+   const streng *def;
+   oo_stemcopy c;
+
+   if ( to == from )
+      return;
+   drop_var_stem( TSD, vars, name );
+   def = oo_stem_default( TSD, from );
+   if ( def )
+      setvalue_stem( TSD, vars, name, Str_dupTSD( def ) );
+   c.vars = vars;
+   c.name = name;
+   oo_stem_each( TSD, from, oo_copy_cb, &c );
+}
+
+/*
+ * OO blocks: like PROCEDURE EXPOSE with every variable of the current
+ * pool except those for which keep() returns 1; they become local.
+ */
+void oo_expose_except( tsd_t *TSD, int ( *keep )( const streng *, void * ), void *data )
+{
+   var_hashtable *from = TSD->currlevel->vars;
+   variableptr p;
+   streng **names;
+   unsigned i;
+   long n = 0, k;
+
+   for ( i = 0; i < from->size; i++ )
+      for ( p = from->tbl[i]; p; p = p->next )
+         n++;
+   names = (streng **) MallocTSD( ( n + 1 ) * sizeof( streng * ) );
+   n = 0;
+   for ( i = 0; i < from->size; i++ )
+      for ( p = from->tbl[i]; p; p = p->next )
+         if ( !keep( p->name, data ) )
+            names[n++] = Str_dupTSD( p->name );
+   for ( k = 0; k < n; k++ )
+   {
+      expose_var( TSD, names[k] );
+      Free_stringTSD( names[k] );
+   }
+   expose_var( TSD, NULL );
+   FreeTSD( names );
+}
+
+/*
+ * OO garbage collection: calls cb for every value in pool, including the
+ * default values and tails of its stems.
+ */
+void oo_scan_pool( const tsd_t *TSD, var_hashtable *pool,
+                   void ( *cb )( void *data, const streng *s ), void *data )
+{
+   variableptr p, r, t, rt;
+   unsigned i, k;
+
+   if ( pool == NULL )
+      return;
+   for ( i = 0; i < pool->size; i++ )
+      for ( p = pool->tbl[i]; p; p = p->next )
+      {
+         r = get_realbox( p );
+         if ( ( r->flag & VFLAG_STR ) && r->value )
+            cb( data, r->value );
+         if ( r->index == NULL )
+            continue;
+         for ( k = 0; k < r->index->size; k++ )
+            for ( t = r->index->tbl[k]; t; t = t->next )
+            {
+               rt = get_realbox( t );
+               if ( ( rt->flag & VFLAG_STR ) && rt->value )
+                  cb( data, rt->value );
+            }
+      }
+}
+
+/* the pool of the reserved variables (.RC, .RESULT, ...) */
+var_hashtable *oo_pool0( const tsd_t *TSD )
+{
+   return ( (var_tsd_t *) TSD->var_tsd )->pool0;
+}
+
+/*
+ * OO workspaces: calls cb for every variable of pool that has a value:
+ * simple variables with tail NULL, the default value of a stem with
+ * tail NULL and name "S.", and every tail of a stem.
+ */
+void oo_pool_walk( const tsd_t *TSD, var_hashtable *pool,
+                   void ( *cb )( void *data, const streng *name, const streng *tail,
+                                 const streng *value ),
+                   void *data )
+{
+   variableptr p, r, t, rt;
+   unsigned i, k;
+
+   if ( pool == NULL )
+      return;
+   for ( i = 0; i < pool->size; i++ )
+      for ( p = pool->tbl[i]; p; p = p->next )
+      {
+         r = get_realbox( p );
+         if ( ( r->flag & VFLAG_NUM ) && !( r->flag & VFLAG_STR ) )
+            expand_to_str( TSD, r );
+         if ( ( r->flag & VFLAG_STR ) && r->value )
+            cb( data, p->name, NULL, r->value );
+         if ( r->index == NULL )
+            continue;
+         for ( k = 0; k < r->index->size; k++ )
+            for ( t = r->index->tbl[k]; t; t = t->next )
+            {
+               rt = get_realbox( t );
+               if ( ( rt->flag & VFLAG_NUM ) && !( rt->flag & VFLAG_STR ) )
+                  expand_to_str( TSD, rt );
+               if ( ( rt->flag & VFLAG_STR ) && rt->value )
+                  cb( data, p->name, t->name, rt->value );
+            }
+      }
+}
+
+/* OO workspaces: the default value of the stem name ("S.") in pool */
+void oo_pool_set_stem( const tsd_t *TSD, var_hashtable *pool, const streng *name,
+                       streng *value )
+{
+   setvalue_stem( TSD, pool, name, value );
 }
