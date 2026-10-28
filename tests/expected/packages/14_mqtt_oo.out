@@ -5,6 +5,6 @@ requests answered: 5
 3: 22 / 7 = 3.1429
 4: 1 / 0 = division by zero
 5: 17 // 5 = 2
-notes read: 2 left: 1
+notes read: 2
 last: calc/reply/x=note 3
 rc=0

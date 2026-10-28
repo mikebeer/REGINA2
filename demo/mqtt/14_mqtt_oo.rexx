@@ -40,7 +40,7 @@ end
 
 /* listen stops early when the block returns 0 */
 do i = 1 to 3; client~publish('calc/reply/x', 'note' i); end
-say 'notes read:' client~listen({ :m | m~message \== 'note 2' }, 1) 'left:' client~pending
+say 'notes read:' client~listen({ :m | m~message \== 'note 2' }, 1)
 say 'last:' client~receive(1)
 
 client~disconnect

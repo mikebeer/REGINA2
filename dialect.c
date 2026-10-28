@@ -182,7 +182,18 @@ typedef struct {
    dmeth *meths; int nmeths;
    int nblocks; int *blockstatic;
    int line;
+   /* Level B */
+   struct lbmem *mem; int nmem;   /* factories, matches, methods        */
+   char **attrval;                /* initial value of props[i]          */
 } dclass;
+
+/* a member of a Level B class or interface */
+typedef struct lbmem {
+   char *name;                    /* "*" for the default factory        */
+   int kind;                      /* 'F' factory, 'M' match, 'm' method */
+   long line, argline;            /* its line, its "arg" line or -1     */
+   int body;                      /* code besides the arg line          */
+} lbmem;
 
 typedef struct {
    int dialect;
@@ -220,8 +231,9 @@ static dclass *superclass( dctx *c, dclass *k )
 /* method m of class k or a (local) superclass; *owner gets its class */
 static dmeth *find_meth( dctx *c, dclass *k, const char *n, long len, dclass **owner )
 {
-   int i, guard = 0;
+   int i, j, guard = 0;
    for ( ; k && guard < 64; k = superclass( c, k ), guard++ )
+   {
       for ( i = 0; i < k->nmeths; i++ )
          if ( eqi( n, len, k->meths[i].name ) )
          {
@@ -229,6 +241,21 @@ static dmeth *find_meth( dctx *c, dclass *k, const char *n, long len, dclass **o
                *owner = k;
             return &k->meths[i];
          }
+      /* the methods of the interfaces it implements */
+      for ( j = 0; j < k->nimpl; j++ )
+      {
+         dclass *ic = find_class( c, k->impl[j], (long) strlen( k->impl[j] ) );
+         if ( ic == NULL || ic == k )
+            continue;
+         for ( i = 0; i < ic->nmeths; i++ )
+            if ( eqi( n, len, ic->meths[i].name ) )
+            {
+               if ( owner )
+                  *owner = ic;
+               return &ic->meths[i];
+            }
+      }
+   }
    return NULL;
 }
 
@@ -355,6 +382,64 @@ static const char *type_name( int k )
    return NULL;
 }
 
+static const char *strstr_n( const char *s, long n, const char *w )
+{
+   long i, wl = (long) strlen( w );
+   for ( i = 0; i + wl <= n; i++ )
+      if ( memcmp( s + i, w, wl ) == 0 )
+         return s + i;
+   return NULL;
+}
+
+/*
+ * A Level B type: .int, .float, .string, .myclass, ... optionally with []
+ * (an array). Returns 'W', 'N', 'B', 'S' (string), 'R' (array), 'O'
+ * (object) or 0.
+ */
+static int lb_type( dctx *c, const char *s, long n )
+{
+   long a = 0, e = n, i;
+   (void) c;
+   while ( a < e && isspace( (unsigned char) s[a] ) )
+      a++;
+   while ( e > a && isspace( (unsigned char) s[e - 1] ) )
+      e--;
+   if ( e - a < 2 || s[a] != '.' || !symstart( (unsigned char) s[a + 1] ) )
+      return 0;
+   if ( e - a > 2 && s[e - 1] == ']' && s[e - 2] == '[' )
+   {
+      for ( i = a + 1; i < e - 2; i++ )
+         if ( !symch( (unsigned char) s[i] ) )
+            return 0;
+      return 'R';
+   }
+   for ( i = a + 1; i < e; i++ )
+      if ( !symch( (unsigned char) s[i] ) )
+         return 0;
+   s += a + 1;
+   n = e - a - 1;
+   if ( eqi( s, n, "int" ) )
+      return 'W';
+   if ( eqi( s, n, "float" ) || eqi( s, n, "decimal" ) )
+      return 'N';
+   if ( eqi( s, n, "boolean" ) )
+      return 'B';
+   if ( eqi( s, n, "string" ) || eqi( s, n, "binary" ) )
+      return 'S';
+   return 'O';
+}
+
+static const char *lb_default( int kind )
+{
+   switch ( kind )
+   {
+      case 'W': case 'N': case 'B': return "0";
+      case 'S': return "''";
+      case 'R': return ".array~new";
+   }
+   return ".nil";
+}
+
 /* ------------------------------------------------------------------ */
 /* expression rewriting                                               */
 /* ------------------------------------------------------------------ */
@@ -465,6 +550,33 @@ static int rewrite( dctx *c, const char *s, const unsigned char *m, long n, int 
          for ( seg = 0; seg < l && sym[seg] != '.'; seg++ )
             ;
 
+         if ( c->dialect == DIALECT_LEVELB && prev != '~' && sym[0] == '.' && l > 1 )
+         {
+            /* .ns..name: the namespace is dropped; .iface(args): a provider */
+            const char *nm = sym + 1, *dd;
+            long nl = l - 1;
+            dclass *ic;
+            if ( ( dd = strstr_n( nm, nl, ".." ) ) != NULL )
+            {
+               nl -= ( dd + 2 ) - nm;
+               nm = dd + 2;
+            }
+            for ( seg = 0; seg < nl && nm[seg] != '.'; seg++ )
+               ;
+            ic = find_class( c, nm, seg );
+            sb_ch( out, '.' );
+            if ( ic && ic->iface && seg == nl && nc == '(' )
+            {
+               sb_add( out, nm, nl );
+               sb_str( out, "~__LBPICK" );
+            }
+            else
+               sb_add( out, nm, nl );
+            prev2 = prev;
+            prev = 'a';
+            at_stmt = 0;
+            continue;
+         }
          if ( prev == '~' || !symstart( (unsigned char) sym[0] ) )
          {
             sb_add( out, sym, l );
@@ -545,10 +657,55 @@ static int rewrite( dctx *c, const char *s, const unsigned char *m, long n, int 
                }
             }
          }
+         if ( at_stmt && c->dialect == DIALECT_LEVELB )
+         {
+            at_stmt = 0;
+            if ( eqi( sym, l, "call" ) && k && c->inmeth )
+            {
+               /* call m(args) for a method of the class: self~m(args) */
+               long q = i, ws, wl = next_word( s, n, &q, &ws );
+               if ( wl > 0 && q < n && s[q] == '(' && find_meth( c, k, s + ws, wl, NULL ) )
+               {
+                  while ( i < ws )
+                     i++;
+                  continue;          /* the method name is written next */
+               }
+            }
+            if ( nn == '=' && !( nx + 1 < n && s[nx + 1] == '=' ) && seg == l )
+            {
+               /* name = .type: a declaration with the type's initial value */
+               long e = nx + 1;
+               int kind;
+               while ( e < n && !( m[e] == 0 && s[e] == ';' ) && m[e] != 2 )
+                  e++;
+               if ( ( kind = lb_type( c, s + nx + 1, e - nx - 1 ) ) != 0 )
+               {
+                  sb_add( out, sym, l );
+                  sb_str( out, " = " );
+                  sb_str( out, lb_default( kind ) );
+                  i = e;
+                  prev2 = prev;
+                  prev = 'a';
+                  continue;
+               }
+            }
+         }
          at_stmt = 0;
 
+         if ( c->dialect == DIALECT_LEVELB && nc == '[' && i + 2 < n && s[i + 1] == '0'
+           && s[i + 2] == ']' )
+         {
+            /* a[0]: the number of items */
+            sb_add( out, sym, l );
+            sb_str( out, "~items()" );
+            i += 3;
+            prev2 = prev;
+            prev = ')';
+            continue;
+         }
+
          /* N(args), N.f(...), x <= N, N >= x: the local class N */
-         kc = find_class( c, sym, seg );
+         kc = c->dialect == DIALECT_NETREXX ? find_class( c, sym, seg ) : NULL;
          if ( kc && ( seg < l || nc == '(' || ( prev2 == '<' && prev == '=' )
                    || ( nn == '>' && nx + 1 < n && s[nx + 1] == '=' ) ) )
          {
@@ -628,6 +785,15 @@ static int rewrite( dctx *c, const char *s, const unsigned char *m, long n, int 
             continue;
          }
          sb_add( out, sym, l );
+         prev2 = prev;
+         prev = 'a';
+         continue;
+      }
+      if ( c->dialect == DIALECT_LEVELB && ch == '<' && i + 8 <= n
+        && eqi( s + i, 8, "<typeof>" ) )
+      {
+         sb_str( out, "typeof" );
+         i += 8;
          prev2 = prev;
          prev = 'a';
          continue;
@@ -1399,6 +1565,15 @@ int __regina_dialect_translate( const char *src, long len, int nrx_name,
          free( kc->meths[j].name );
       free( kc->meths );
       free( kc->blockstatic );
+      for ( j = 0; j < kc->nmem; j++ )
+         free( kc->mem[j].name );
+      free( kc->mem );
+      if ( kc->attrval )
+      {
+         for ( j = 0; j < kc->nprops; j++ )
+            free( kc->attrval[j] );
+         free( kc->attrval );
+      }
    }
    free( c.cls );
    free( c.ls );
@@ -1410,10 +1585,620 @@ int __regina_dialect_translate( const char *src, long len, int nrx_name,
 }
 
 /* ------------------------------------------------------------------ */
-/* cREXX Level B (stage 3): not translated yet, the program runs as is */
+/* cREXX Level B                                                      */
 /* ------------------------------------------------------------------ */
+
+/*
+ * "name: kind ..." at the start of a line. Returns 'C' class, 'I'
+ * interface, 'F' factory, 'M' match, 'm' method, 'P' procedure or 0; the
+ * name in s[*ns], *nl chars ("*" for the default factory) and the
+ * position after the keyword in *rest.
+ */
+static int lb_decl( const char *s, long n, long *ns, long *nl, long *rest )
+{
+   long i = 0, a, e, p, ws, l;
+   int k = 0;
+
+   while ( i < n && isspace( (unsigned char) s[i] ) )
+      i++;
+   a = i;
+   if ( i < n && s[i] == '*' )
+      i++;
+   else
+   {
+      if ( i >= n || !symstart( (unsigned char) s[i] ) )
+         return 0;
+      while ( i < n && symch( (unsigned char) s[i] ) )
+         i++;
+   }
+   e = i;
+   while ( i < n && ( s[i] == ' ' || s[i] == '\t' ) )
+      i++;
+   if ( i >= n || s[i] != ':' || ( i + 1 < n && s[i + 1] == ':' ) )
+      return 0;
+   p = i + 1;
+   l = next_word( s, n, &p, &ws );
+   if ( l <= 0 )
+      return 0;
+   if ( eqi( s + ws, l, "class" ) )
+      k = 'C';
+   else if ( eqi( s + ws, l, "interface" ) )
+      k = 'I';
+   else if ( eqi( s + ws, l, "factory" ) )
+      k = 'F';
+   else if ( eqi( s + ws, l, "match" ) )
+      k = 'M';
+   else if ( eqi( s + ws, l, "method" ) )
+      k = 'm';
+   else if ( eqi( s + ws, l, "procedure" ) )
+      k = 'P';
+   if ( k == 0 || ( s[a] == '*' && k != 'F' && k != 'M' ) )
+      return 0;
+   if ( p < n && symch( (unsigned char) s[p] ) )
+      return 0;
+   *ns = a;
+   *nl = e - a;
+   *rest = p;
+   return k;
+}
+
+static lbmem *lb_member( dclass *k, int kind, const char *name, long len )
+{
+   int i;
+   for ( i = 0; k && i < k->nmem; i++ )
+      if ( k->mem[i].kind == kind && eqi( name, len, k->mem[i].name ) )
+         return &k->mem[i];
+   return NULL;
+}
+
+/* the interface of class k that declares factory f */
+static lbmem *lb_iface_factory( dctx *c, dclass *k, const char *f, dclass **ifc )
+{
+   int j;
+   for ( j = 0; j < k->nimpl; j++ )
+   {
+      dclass *ic = find_class( c, k->impl[j], (long) strlen( k->impl[j] ) );
+      lbmem *m;
+      if ( ic && ic->iface && ( m = lb_member( ic, 'F', f, (long) strlen( f ) ) ) != NULL )
+      {
+         if ( ifc )
+            *ifc = ic;
+         return m;
+      }
+   }
+   return NULL;
+}
+
+/*
+ * The arguments of an "arg" line: "use arg a, b = 5" (and checks) when
+ * full, else just the names "a, b".
+ */
+static void lb_args( dctx *c, long ln, int full, sbuf *out )
+{
+   long n, p = 0, ws, l, e;
+   unsigned char *m;
+   char *s;
+   int first = 1;
+   sbuf checks = { NULL, 0, 0 };
+
+   if ( ln < 0 )
+      return;
+   s = line_code( c, ln, &m, &n );
+   next_word( s, n, &p, &ws );                       /* arg */
+   {
+      long q = p;
+      l = next_word( s, n, &q, &ws );
+      if ( l == 6 && eqi( s + ws, 6, "expose" ) )
+         p = q;
+   }
+   e = n;
+   for ( l = p; l < n; l++ )
+      if ( m[l] == 0 && s[l] == ';' )
+      {
+         e = l;
+         break;
+      }
+   while ( p < e )
+   {
+      long a = p, q, eq = -1;
+      int depth = 0;
+      for ( q = p; q < e; q++ )
+      {
+         if ( m[q] != 0 )
+            continue;
+         if ( s[q] == '(' || s[q] == '[' )
+            depth++;
+         else if ( s[q] == ')' || s[q] == ']' )
+            depth--;
+         else if ( depth == 0 && s[q] == ',' )
+            break;
+         else if ( depth == 0 && s[q] == '=' && eq < 0 )
+            eq = q;
+      }
+      p = q + 1;
+      while ( a < q && isspace( (unsigned char) s[a] ) )
+         a++;
+      {
+         long ne = eq >= 0 ? eq : q;
+         int kind;
+         while ( ne > a && isspace( (unsigned char) s[ne - 1] ) )
+            ne--;
+         if ( ne <= a )
+            continue;
+         sb_str( out, first ? ( full ? "use arg " : "" ) : ", " );
+         first = 0;
+         sb_add( out, s + a, ne - a );
+         if ( !full || eq < 0 )
+            continue;
+         kind = lb_type( c, s + eq + 1, q - eq - 1 );
+         if ( !kind )
+         {
+            sb_str( out, " = " );
+            rewrite_frag( c, s + eq + 1, q - eq - 1, out );
+         }
+         else if ( kind == 'W' || kind == 'N' || kind == 'B' )
+         {
+            sb_str( &checks, "; " );
+            sb_add( &checks, s + a, ne - a );
+            sb_str( &checks, " = __OOTYPE(" );
+            sb_add( &checks, s + a, ne - a );
+            sb_str( &checks, ", '" );
+            sb_str( &checks, kind == 'W' ? "int" : kind == 'N' ? "float" : "boolean" );
+            sb_str( &checks, "', '" );
+            sb_add( &checks, s + a, ne - a );
+            sb_str( &checks, "')" );
+         }
+      }
+   }
+   if ( checks.n )
+      sb_add( out, checks.s, checks.n );
+   free( checks.s );
+   free( s );
+}
+
+static void lb_expose( dclass *k, sbuf *out )
+{
+   int i;
+   for ( i = 0; i < k->nprops; i++ )
+   {
+      sb_str( out, i ? " " : "; expose " );
+      sb_str( out, k->props[i].name );
+   }
+}
+
+static int cmp_name( const void *a, const void *b )
+{
+   const dclass *x = *(const dclass * const *) a, *y = *(const dclass * const *) b;
+   const char *p = x->name, *q = y->name;
+   for ( ; *p && *q; p++, q++ )
+      if ( tolower( (unsigned char) *p ) != tolower( (unsigned char) *q ) )
+         return tolower( (unsigned char) *p ) - tolower( (unsigned char) *q );
+   return (unsigned char) *p - (unsigned char) *q;
+}
+
+/* the class method of an interface that selects the provider of factory f */
+static void lb_picker( dctx *c, dclass *ic, lbmem *f, sbuf *out )
+{
+   dclass **cand = (dclass **) malloc( ( c->ncls + 1 ) * sizeof( dclass * ) );
+   int nc = 0, i, j, dflt = ( f->name[0] == '*' );
+   sbuf names = { NULL, 0, 0 };
+
+   lb_args( c, f->argline, 0, &names );
+   if ( names.s == NULL )
+      sb_add( &names, "", 0 );
+   for ( i = 0; i < c->ncls; i++ )
+   {
+      dclass *k = &c->cls[i];
+      if ( k->iface )
+         continue;
+      for ( j = 0; j < k->nimpl; j++ )
+         if ( eqi( k->impl[j], (long) strlen( k->impl[j] ), ic->name ) )
+            break;
+      if ( j == k->nimpl )
+         continue;
+      if ( !dflt && !lb_member( k, 'F', f->name, (long) strlen( f->name ) ) )
+         continue;
+      cand[nc++] = k;
+   }
+   qsort( cand, nc, sizeof( dclass * ), cmp_name );
+   sb_str( out, "; ::method " );
+   sb_str( out, dflt ? "__LBPICK" : f->name );
+   sb_str( out, " class" );
+   if ( names.n )
+   {
+      sb_str( out, "; use arg " );
+      sb_str( out, names.s );
+   }
+   sb_str( out, "; b = .nil; s = 0" );
+   for ( i = 0; i < nc; i++ )
+   {
+      if ( lb_member( cand[i], 'M', f->name, (long) strlen( f->name ) ) )
+      {
+         sb_str( out, "; t = ." );
+         sb_str( out, cand[i]->name );
+         sb_str( out, "~__LBM_" );
+         if ( !dflt )
+            sb_str( out, f->name );
+         sb_ch( out, '(' );
+         sb_str( out, names.s );
+         sb_ch( out, ')' );
+      }
+      else
+         sb_str( out, "; t = 1" );
+      sb_str( out, "; if t > s then do; b = ." );
+      sb_str( out, cand[i]->name );
+      sb_str( out, "; s = t; end" );
+   }
+   sb_str( out, "; if b == .nil then return .nil; return b~" );
+   sb_str( out, dflt ? "new" : f->name );
+   sb_ch( out, '(' );
+   sb_str( out, names.s );
+   sb_ch( out, ')' );
+   free( names.s );
+   free( cand );
+}
+
+static void lb_gen_class( dctx *c, dclass *k, sbuf *out )
+{
+   int i, any = 0;
+
+   sb_str( out, "::class " );
+   sb_str( out, k->name );
+   if ( k->iface )
+      sb_str( out, " mixinclass Object" );
+   for ( i = 0; i < k->nimpl; i++ )
+   {
+      dclass *ic = find_class( c, k->impl[i], (long) strlen( k->impl[i] ) );
+      if ( ic == NULL || !ic->iface || ic == k )
+         continue;
+      sb_str( out, any ? " " : " inherit " );
+      sb_str( out, ic->name );
+      any = 1;
+   }
+   sb_str( out, " public" );
+   if ( k->iface )
+   {
+      for ( i = 0; i < k->nmem; i++ )
+         if ( k->mem[i].kind == 'F' )
+            lb_picker( c, k, &k->mem[i], out );
+      return;
+   }
+   if ( k->nprops )
+   {
+      sb_str( out, "; ::method __LBA" );
+      lb_expose( k, out );
+      for ( i = 0; i < k->nprops; i++ )
+      {
+         int kind = k->attrval[i] ? lb_type( c, k->attrval[i], (long) strlen( k->attrval[i] ) ) : 0;
+         sb_str( out, "; " );
+         sb_str( out, k->props[i].name );
+         sb_str( out, " = " );
+         if ( kind || k->attrval[i] == NULL )
+            sb_str( out, lb_default( kind ) );
+         else
+            rewrite_frag( c, k->attrval[i], (long) strlen( k->attrval[i] ), out );
+      }
+   }
+   if ( !lb_member( k, 'F', "*", 1 ) )
+   {
+      sb_str( out, "; ::method init" );
+      if ( k->nprops )
+         sb_str( out, "; self~__LBA" );
+   }
+}
+
+static void lb_gen_member( dctx *c, dclass *k, lbmem *mb, sbuf *out )
+{
+   int dflt = ( mb->name[0] == '*' );
+   lbmem *im = NULL;
+
+   if ( k->iface )
+   {
+      if ( mb->kind == 'm' )
+      {
+         sb_str( out, "::method " );
+         sb_str( out, mb->name );
+         if ( !mb->body )
+            sb_str( out, " abstract" );
+      }
+      return;                   /* factories: see lb_picker */
+   }
+   if ( mb->argline < 0 && ( mb->kind == 'F' || mb->kind == 'M' ) )
+      im = lb_iface_factory( c, k, mb->name, NULL );
+   switch ( mb->kind )
+   {
+      case 'F':
+         if ( dflt )
+         {
+            sb_str( out, "::method init" );
+            lb_expose( k, out );
+            if ( k->nprops )
+               sb_str( out, "; self~__LBA" );
+            sb_str( out, "; if arg() = 1 then if arg(1) == '__LBNOINIT__' then return" );
+         }
+         else
+         {
+            sbuf names = { NULL, 0, 0 };
+            lb_args( c, mb->argline >= 0 ? mb->argline : ( im ? im->argline : -1 ), 0, &names );
+            if ( names.s == NULL )
+               sb_add( &names, "", 0 );
+            sb_str( out, "::method " );
+            sb_str( out, mb->name );
+            sb_str( out, " class" );
+            if ( names.n )
+            {
+               sb_str( out, "; use arg " );
+               sb_str( out, names.s );
+            }
+            sb_str( out, "; o = self~new('__LBNOINIT__'); o~__LBF_" );
+            sb_str( out, mb->name );
+            sb_ch( out, '(' );
+            sb_str( out, names.s );
+            sb_str( out, "); return o; ::method __LBF_" );
+            sb_str( out, mb->name );
+            lb_expose( k, out );
+            free( names.s );
+         }
+         break;
+      case 'M':
+         sb_str( out, "::method __LBM_" );
+         if ( !dflt )
+            sb_str( out, mb->name );
+         sb_str( out, " class" );
+         break;
+      default:
+         sb_str( out, "::method " );
+         sb_str( out, mb->name );
+         if ( mb->body )
+            lb_expose( k, out );
+         else
+            sb_str( out, " abstract" );
+   }
+   if ( im && im->argline >= 0 )
+   {
+      /* the class factory takes the arguments of the interface's */
+      sb_str( out, "; " );
+      lb_args( c, im->argline, 1, out );
+   }
+}
 
 static void lb_translate( dctx *c, sbuf *out )
 {
-   sb_add( out, c->src, c->len );
+   long ln, first = 0;
+   int cur = -1, curmem = -1, toplevel = 0, seen = 0, mainproc = 0, j;
+   char **imports = NULL;
+   int nimports = 0;
+
+   /* pass 1 */
+   for ( ln = 0; ln < c->nlines; ln++ )
+   {
+      long n, ns, nl, rest, p = 0, ws, l;
+      unsigned char *m;
+      char *s = line_code( c, ln, &m, &n );
+      int kind;
+
+      l = next_word( s, n, &p, &ws );
+      if ( l <= 0 )
+      {
+         free( s );
+         continue;
+      }
+      kind = lb_decl( s, n, &ns, &nl, &rest );
+      if ( kind == 'C' || kind == 'I' )
+      {
+         dclass *k;
+         c->cls = (dclass *) realloc( c->cls, ( c->ncls + 1 ) * sizeof( dclass ) );
+         k = &c->cls[c->ncls++];
+         memset( k, 0, sizeof( *k ) );
+         k->name = dupn( s + ns, nl );
+         k->iface = ( kind == 'I' );
+         k->line = (int) ln;
+         p = rest;
+         while ( ( l = next_word( s, n, &p, &ws ) ) > 0 )
+         {
+            if ( eqi( s + ws, l, "implements" ) || s[ws] == ',' )
+               continue;
+            if ( s[ws] == '.' && l > 1 )
+            {
+               const char *nm = s + ws + 1, *dd = strstr_n( nm, l - 1, ".." );
+               long nn = l - 1;
+               if ( dd )
+               {
+                  nn -= ( dd + 2 ) - nm;
+                  nm = dd + 2;
+               }
+               add_impl( k, nm, nn );
+            }
+         }
+         cur = c->ncls - 1;
+         curmem = -1;
+         seen = 1;
+      }
+      else if ( kind == 'P' )
+      {
+         cur = -1;
+         curmem = -1;
+         seen = 1;
+         if ( eqi( s + ns, nl, "main" ) )
+            mainproc = 1;
+      }
+      else if ( kind && cur >= 0 )
+      {
+         dclass *k = &c->cls[cur];
+         lbmem *mb;
+         k->mem = (lbmem *) realloc( k->mem, ( k->nmem + 1 ) * sizeof( lbmem ) );
+         mb = &k->mem[k->nmem];
+         curmem = k->nmem++;
+         mb->name = dupn( s + ns, nl );
+         mb->kind = kind;
+         mb->line = ln;
+         mb->argline = -1;
+         mb->body = 0;
+         if ( kind == 'm' )
+         {
+            k->meths = (dmeth *) realloc( k->meths, ( k->nmeths + 1 ) * sizeof( dmeth ) );
+            k->meths[k->nmeths].name = dupn( s + ns, nl );
+            k->meths[k->nmeths].stat = 0;
+            k->meths[k->nmeths].abstract = 0;
+            k->nmeths++;
+         }
+      }
+      else if ( !seen )
+      {
+         if ( !eqi( s + ws, l, "options" ) && !eqi( s + ws, l, "namespace" )
+           && !eqi( s + ws, l, "import" ) )
+            toplevel = 1;
+      }
+      else if ( cur >= 0 && curmem >= 0 )
+      {
+         lbmem *mb = &c->cls[cur].mem[curmem];
+         if ( eqi( s + ws, l, "arg" ) && mb->argline < 0 && !mb->body )
+            mb->argline = ln;
+         else
+            mb->body = 1;
+      }
+      else if ( cur >= 0 && !c->cls[cur].iface )
+      {
+         /* an attribute: _name = .type | value */
+         dclass *k = &c->cls[cur];
+         long q;
+         if ( symstart( (unsigned char) s[ws] ) )
+         {
+            k->props = (dprop *) realloc( k->props, ( k->nprops + 1 ) * sizeof( dprop ) );
+            k->attrval = (char **) realloc( k->attrval, ( k->nprops + 1 ) * sizeof( char * ) );
+            memset( &k->props[k->nprops], 0, sizeof( dprop ) );
+            k->props[k->nprops].name = dupn( s + ws, l );
+            k->attrval[k->nprops] = NULL;
+            for ( q = p; q < n && isspace( (unsigned char) s[q] ); q++ )
+               ;
+            if ( q < n && s[q] == '=' )
+            {
+               long e = q + 1, w;
+               while ( e < n && !( m[e] == 0 && s[e] == ';' ) )
+                  e++;
+               /* "with register.N" is a VM layout: not needed here */
+               for ( w = q + 1; w + 4 < e; w++ )
+                  if ( m[w] == 0 && eqi( s + w, 4, "with" ) && isspace( (unsigned char) s[w - 1] )
+                    && isspace( (unsigned char) s[w + 4] ) )
+                  {
+                     e = w;
+                     break;
+                  }
+               k->attrval[k->nprops] = dupn( s + q + 1, e - q - 1 );
+            }
+            k->nprops++;
+         }
+      }
+      free( s );
+   }
+
+   /* pass 2 */
+   cur = -1;
+   curmem = -1;
+   if ( c->len >= 2 && c->src[0] == '#' && c->src[1] == '!' )
+      first = 1;
+   {
+      int inproc = 0;
+      long procarg = -1;
+      for ( ln = 0; ln < c->nlines; ln++ )
+      {
+         long n, ns, nl, rest, p = 0, ws, l, a = c->ls[ln];
+         unsigned char *m;
+         char *s = line_code( c, ln, &m, &n );
+         sbuf g = { NULL, 0, 0 };
+         int kind = lb_decl( s, n, &ns, &nl, &rest );
+
+         l = next_word( s, n, &p, &ws );
+         if ( ln == first && mainproc && !toplevel )
+            sb_str( out, "call main arg(1); exit; " );
+         if ( kind == 'C' || kind == 'I' )
+         {
+            cur++;
+            curmem = -1;
+            inproc = 0;
+            c->cur = cur;
+            c->inmeth = 0;
+            lb_gen_class( c, &c->cls[cur], &g );
+            gen_line( c, ln, g.s, g.n, out );
+         }
+         else if ( kind == 'P' )
+         {
+            cur = -1;
+            curmem = -1;
+            c->cur = -1;
+            c->inmeth = 0;
+            inproc = 1;
+            procarg = ln;
+            sb_str( &g, "::routine " );
+            sb_add( &g, s + ns, nl );
+            gen_line( c, ln, g.s, g.n, out );
+         }
+         else if ( kind && cur >= 0 )
+         {
+            dclass *k = &c->cls[cur];
+            lbmem *mb = &k->mem[++curmem];
+            c->inmeth = 1;
+            c->methstatic = 0;
+            lb_gen_member( c, k, mb, &g );
+            gen_line( c, ln, g.s, g.n, out );
+         }
+         else if ( l > 0 && ( eqi( s + ws, l, "namespace" ) || eqi( s + ws, l, "import" ) ) )
+         {
+            if ( eqi( s + ws, l, "import" ) )
+            {
+               long q = p, w2, l2 = next_word( s, n, &q, &w2 );
+               if ( l2 > 0 && !( l2 > 2 && tolower( (unsigned char) s[w2] ) == 'r'
+                                 && tolower( (unsigned char) s[w2 + 1] ) == 'x' ) )
+               {
+                  imports = (char **) realloc( imports, ( nimports + 1 ) * sizeof( char * ) );
+                  imports[nimports++] = dupn( s + w2, l2 );
+               }
+            }
+            gen_line( c, ln, "", 0, out );
+         }
+         else if ( l > 0 && cur >= 0 && curmem >= 0 && c->cls[cur].mem[curmem].argline == ln )
+         {
+            dclass *k = &c->cls[cur];
+            if ( !k->iface )
+               lb_args( c, ln, 1, &g );
+            gen_line( c, ln, g.s ? g.s : "", g.n, out );
+         }
+         else if ( l > 0 && inproc && procarg >= 0 && eqi( s + ws, l, "arg" ) )
+         {
+            lb_args( c, ln, 1, &g );
+            gen_line( c, ln, g.s, g.n, out );
+            procarg = -1;
+         }
+         else if ( l > 0 && cur >= 0 && curmem < 0 )
+            gen_line( c, ln, "", 0, out );       /* an attribute */
+         else if ( l > 0 && cur >= 0 && c->cls[cur].iface && curmem >= 0
+                && c->cls[cur].mem[curmem].kind != 'm' )
+            gen_line( c, ln, "", 0, out );       /* an interface factory's lines */
+         else
+         {
+            if ( l > 0 )
+               procarg = -1;
+            c->cont = rewrite( c, c->src + a, c->mask + a, c->le[ln] - a, !c->cont, out );
+         }
+         free( g.s );
+         free( s );
+         {
+            long e = c->le[ln], nx = ( ln + 1 < c->nlines ) ? c->ls[ln + 1] : c->len;
+            sb_add( out, c->src + e, nx - e );
+         }
+      }
+   }
+   if ( nimports )
+   {
+      if ( c->len > 0 && c->src[c->len - 1] != '\n' )
+         sb_ch( out, '\n' );
+      for ( j = 0; j < nimports; j++ )
+      {
+         sb_str( out, "::requires '" );
+         sb_str( out, imports[j] );
+         sb_str( out, "'\n" );
+         free( imports[j] );
+      }
+      free( imports );
+   }
 }
