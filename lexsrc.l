@@ -85,6 +85,7 @@ static int do_level = 0 ;
 static int in_numform=0, next_numform=0 ;
 static int obs_with=0, in_do=0, in_then=0;
 static int in_parse=0 ;
+static int in_usearg=0 ; /* OO: in a USE ARG clause (defaults are expressions) */
 static int in_trace=0, itflag=0 ;
 static int in_signal=0, in_call=0 ;
 static enum { not_in_address = 0,
@@ -166,6 +167,8 @@ static int oo_symch( char c );
  * token directly following the message name.
  */
 static int oo_expect_name=0, oo_in_name=0, oo_after_name=0;
+/* OO: the last token was ")" or "]", so ".name(" is a message (a.b().c()) */
+static int oo_close_pending=0, oo_after_close=0;
 
 /*
  * The spelling of the last message or cascade operator ("~", "->", "~~",
@@ -404,6 +407,8 @@ key_with          [wW][iI][tT][hH]
         return retval;
      }
 
+     oo_after_close = oo_close_pending ;
+     oo_close_pending = 0 ;
      oo_after_name = oo_in_name ;
      oo_in_name = oo_expect_name ;
      oo_expect_name = 0 ;
@@ -481,6 +486,7 @@ key_with          [wW][iI][tT][hH]
    in_signal = in_call = 0 ;
    in_address = not_in_address;
    in_parse = 0 ;
+   in_usearg = 0 ;
    if ( seek_with == seek_with_from_address )
       seek_with = no_seek_with ;
    if ((ptr = strchr(yytext, '\n')) != NULL)
@@ -578,6 +584,7 @@ key_with          [wW][iI][tT][hH]
       REJECT ;
    BEGIN other ;
    in_parse = 1 ;
+   in_usearg = 1 ;
    SET_NEXTSTART() ;
    return USEARG ; }
 
@@ -1946,6 +1953,7 @@ key_with          [wW][iI][tT][hH]
    }
 
 {between}\) {
+   oo_close_pending = 1 ;
    expression_ended = 1 ;
    SET_NEXTSTART() ;
    return ')' ; }
@@ -1997,6 +2005,8 @@ key_with          [wW][iI][tT][hH]
    return '&' ; }
 
 {between}={between} {
+   if ( in_usearg )
+      in_parse = 0 ; /* "use arg b = 5": the default is an expression */
    SET_NEXTSTART() ;
    return '=' ; }
 
@@ -2028,6 +2038,35 @@ key_with          [wW][iI][tT][hH]
       REJECT ;
    __regina_oo_operator = "->" ;
    oo_seen = 1 ;
+   oo_expect_name = 1 ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return MSGSEND ; }
+
+   /*
+    * cREXX notation: "x is .T" and "x as .T" after a term, when the right
+    * operand starts with a period and a letter (else IS stays a symbol).
+    */
+{blank}+[iI][sS]{blank}+/\.[A-Za-z_!?] {
+   if ( !insert_abuttal || in_parse || !OO_KEYWORDS )
+      REJECT ;
+   SET_NEXTSTART() ;
+   return OO_IS ; }
+
+{blank}+[aA][sS]{blank}+/\.[A-Za-z_!?] {
+   if ( !insert_abuttal || in_parse || !OO_KEYWORDS )
+      REJECT ;
+   SET_NEXTSTART() ;
+   return OO_AS ; }
+
+   /*
+    * cREXX/NetRexx notation: ".name(" directly after ")" or "]" sends a
+    * message, a.b().c() is a~b()~c(). Only the period is consumed.
+    */
+\./[A-Za-z_!?][A-Za-z0-9_!?]*\( {
+   if ( !oo_after_close || !insert_abuttal || !OO_KEYWORDS )
+      REJECT ;
+   __regina_oo_operator = "." ;
    oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -2149,6 +2188,7 @@ key_with          [wW][iI][tT][hH]
    if ( bracket_depth == 0 )
       REJECT ;
    bracket_depth-- ;
+   oo_close_pending = 1 ;
    expression_ended = 1 ;
    SET_NEXTSTART() ;
    return ']' ; }
@@ -3180,6 +3220,7 @@ static void init_it_all( tsd_t *TSD )
    oo_expect_name = oo_in_name = oo_after_name = 0 ;
    firstln = 0 ;
    in_parse = 0 ;
+   in_usearg = 0 ;
    in_trace = 0 ;
    itflag = 0 ;
    in_signal = 0 ;

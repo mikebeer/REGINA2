@@ -9726,6 +9726,299 @@ void oo_exec_message( tsd_t *TSD, nodeptr thisptr )
       set_reserved_value( TSD, POOL0_RESULT, NULL, 0, VFLAG_NONE );
 }
 
+/* ------------------------------------------------------------------ */
+/* cREXX / NetRexx notation: obj.m(args), .Class(args), this, null    */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The object a plain symbol refers to in the dialect notations: the value
+ * of the variable, or for an unset THIS (SELF in methods) and NULL (.nil).
+ * Returns a new string, or NULL if the symbol isn't an object.
+ */
+static streng *dot_receiver( tsd_t *TSD, const char *s, int len )
+{
+   oo_tsd *ot = get_ot( TSD );
+   streng *nm = Str_ncreTSD( s, len ), *r = NULL;
+   const streng *v;
+
+   if ( len > 1 && s[0] == '.' )
+   {
+      treenode fake;
+
+      memset( &fake, 0, sizeof( fake ) );
+      fake.name = nm;
+      r = oo_eval_envsymbol( TSD, &fake );
+      if ( !obj_of( TSD, r ) )
+      {
+         Free_stringTSD( r );
+         r = NULL;
+      }
+   }
+   else if ( ( v = oo_peek_simple( TSD, nm ) ) != NULL )
+   {
+      if ( obj_of( TSD, v ) )
+         r = Str_dupTSD( v );
+   }
+   else if ( str_eqc( nm, "THIS" ) )
+   {
+      if ( ( v = oo_peek_simple( TSD, ot->s_self ) ) != NULL && obj_of( TSD, v ) )
+         r = Str_dupTSD( v );
+   }
+   else if ( str_eqc( nm, "NULL" ) )
+      r = hdup( TSD, ot->nil );
+   Free_stringTSD( nm );
+   return r;
+}
+
+/* value of the symbols THIS and NULL while no variable of that name is set */
+streng *oo_dialect_symbol( tsd_t *TSD, const streng *name )
+{
+   if ( !TSD->oo_active || name->len != 4 )
+      return NULL;
+   if ( !str_eqc( name, "THIS" ) && !str_eqc( name, "NULL" ) )
+      return NULL;
+   if ( oo_peek_simple( TSD, name ) != NULL )
+      return NULL;
+   return dot_receiver( TSD, name->value, name->len );
+}
+
+/*
+ * A function call whose name contains a period: a.b(1) is a~b(1), a.b.c()
+ * is a~b~c(), .Class(1) is .Class~new(1) and .Class.f(1) is .Class~f(1) if
+ * the part before the first period names an object. *handled is 0 if it
+ * doesn't; the call then has its classic meaning.
+ */
+streng *oo_dot_call( tsd_t *TSD, nodeptr thisptr, int need_result, int *handled )
+{
+   oo_tsd *ot;
+   const streng *nm = thisptr->name;
+   const char *p, *end, *dot;
+   streng *recv, *result = NULL, *msg;
+   paramboxptr plist;
+   const streng **argv, **save_argv;
+   paramboxptr save_plist;
+   int argc;
+
+   *handled = 0;
+   if ( nm == NULL || nm->len < 2 )
+      return NULL;
+   p = nm->value;
+   end = p + nm->len;
+   dot = memchr( p + 1, '.', nm->len - 1 );
+   if ( p[0] != '.' && dot == NULL )
+      return NULL;
+   if ( dot == NULL )
+      dot = end;
+   if ( dot == end - 1 )
+      return NULL;                      /* a stem name: f. */
+   if ( ( recv = dot_receiver( TSD, p, (int) ( dot - p ) ) ) == NULL )
+      return NULL;
+   if ( dot == end )
+   {
+      /* .Class(args) creates an instance */
+      oo_object *c = obj_of( TSD, recv );
+      if ( c == NULL || c->kind != OK_CLASS )
+      {
+         Free_stringTSD( recv );
+         return NULL;
+      }
+   }
+   *handled = 1;
+   ot = get_ot( TSD );
+   /* the parts between the first and the last period: messages without arguments */
+   p = dot;
+   if ( p < end )
+   {
+      const char *last = end - 1;
+      while ( *last != '.' )
+         last--;
+      while ( p < last )
+      {
+         const char *q = memchr( p + 1, '.', last - p );
+         streng *r;
+         if ( q == NULL )
+            q = last;
+         if ( q == p + 1 )
+            exiterror( ERR_SYMBOL_EXPECTED, 1, tmpstr_of( TSD, nm ) );
+         msg = Str_ncreTSD( p + 1, (int) ( q - p - 1 ) );
+         r = send_msg( TSD, recv, msg, 0, NULL );
+         if ( r == NULL )
+            exiterror( ERR_NO_RESULT_OBJECT, 1, tmpstr_of( TSD, msg ) );
+         Free_stringTSD( msg );
+         Free_stringTSD( recv );
+         recv = r;
+         p = q;
+      }
+      msg = Str_ncreTSD( last + 1, (int) ( end - last - 1 ) );
+   }
+   else
+      msg = Str_creTSD( "NEW" );
+   argc = eval_args( TSD, thisptr->p[0], &plist, &argv );
+   save_argv = ot->pend_argv;
+   save_plist = ot->pend_plist;
+   ot->pend_argv = argv;
+   ot->pend_plist = plist;
+   set_reserved_value( TSD, POOL0_SIGL, NULL, TSD->currentnode->lineno, VFLAG_NUM );
+   result = send_msg( TSD, recv, msg, argc, argv );
+   ot->pend_argv = save_argv;
+   ot->pend_plist = save_plist;
+   if ( plist )
+      deallocplink( TSD, plist );
+   FreeTSD( (void *) argv );
+   Free_stringTSD( recv );
+   if ( need_result && result == NULL )
+      exiterror( ERR_NO_RESULT_OBJECT, 1, tmpstr_of( TSD, msg ) );
+   Free_stringTSD( msg );
+   if ( result && TSD->trace_stat == 'I' )
+      tracevalue( TSD, result, 'F' );
+   return result;
+}
+
+/* 1 if value v is an instance of the class object c (v~isA(c)) */
+static int value_isa( tsd_t *TSD, const streng *v, const streng *c )
+{
+   const streng *argv[1];
+   streng *nm = Str_creTSD( "ISA" ), *r;
+   int b;
+
+   argv[0] = c;
+   r = send_msg( TSD, v, nm, 1, argv );
+   Free_stringTSD( nm );
+   b = ( r != NULL && r->len == 1 && r->value[0] == '1' );
+   if ( r )
+      Free_stringTSD( r );
+   return b;
+}
+
+static streng *eval_copy( tsd_t *TSD, nodeptr n )
+{
+   streng *kill;
+   const streng *v = evaluate( TSD, n, &kill );
+
+   if ( kill )
+      return kill;
+   return Str_dupTSD( v );
+}
+
+/* the class object an expression gives, or an error naming the operator */
+static streng *class_operand( tsd_t *TSD, nodeptr n, const char *op )
+{
+   streng *c = eval_copy( TSD, n );
+   oo_object *co = obj_of( TSD, c );
+
+   if ( co == NULL || co->kind != OK_CLASS )
+      exiterror( ERR_INVALID_ARGUMENT, 2, op, 2, tmpstr_of( TSD, c ) );
+   return c;
+}
+
+/* x IS .T (1 or 0) and x AS .T (x, or error 88.9) */
+streng *oo_is_as( tsd_t *TSD, nodeptr thisptr )
+{
+   int as = ( thisptr->type == X_OO_AS );
+   streng *v = eval_copy( TSD, thisptr->p[0] );
+   streng *c = class_operand( TSD, thisptr->p[1], as ? "AS" : "IS" );
+   int ok = value_isa( TSD, v, c );
+
+   if ( !as )
+   {
+      Free_stringTSD( v );
+      Free_stringTSD( c );
+      return mkbool( TSD, ok );
+   }
+   if ( !ok )
+   {
+      streng *vs = oo_stringify( TSD, v );
+      streng *cn = class_name_str( TSD, obj_of( TSD, c ) );
+      exiterror( ERR_INVALID_ARGUMENT, 9, tmpstr_of( TSD, vs ? vs : v ),
+                 tmpstr_of( TSD, cn ) );
+   }
+   Free_stringTSD( c );
+   return v;
+}
+
+/*
+ * NetRexx type tests: x <= .T and .T >= x are x~isA(.T) when the operand
+ * on the side of the class is an environment symbol naming a class.
+ * Returns NULL (*handled 0) otherwise; nothing has been evaluated then
+ * but that environment symbol.
+ */
+static streng *type_compare( tsd_t *TSD, nodeptr thisptr, int *handled )
+{
+   int lte;
+   nodeptr cn, vn;
+   streng *c, *v, *r;
+   oo_object *co;
+
+   switch ( thisptr->type )
+   {
+      case X_LTE: case X_SLTE: case X_NLTE: lte = 1; break;
+      case X_GTE: case X_SGTE: case X_NGTE: lte = 0; break;
+      default: return NULL;
+   }
+   cn = lte ? thisptr->p[1] : thisptr->p[0];
+   vn = lte ? thisptr->p[0] : thisptr->p[1];
+   if ( cn == NULL || vn == NULL || cn->type != X_CON_SYMBOL || !OO_IS_ENVSYMBOL( cn ) )
+      return NULL;
+   c = oo_eval_envsymbol( TSD, cn );
+   co = obj_of( TSD, c );
+   if ( co == NULL || co->kind != OK_CLASS )
+   {
+      Free_stringTSD( c );
+      return NULL;
+   }
+   v = eval_copy( TSD, vn );
+   r = mkbool( TSD, value_isa( TSD, v, c ) );
+   Free_stringTSD( v );
+   Free_stringTSD( c );
+   *handled = 1;
+   return r;
+}
+
+/* typeof(x) (cREXX): the name of x's class; only in OO programs and only
+   when no label, ::routine or builtin function of that name exists */
+streng *oo_typeof( tsd_t *TSD, nodeptr thisptr )
+{
+   nodeptr a = thisptr->p[0];
+   streng *v, *c, *id, *nm;
+
+   if ( a == NULL || a->p[0] == NULL || a->p[1] != NULL )
+      exiterror( ERR_INCORRECT_CALL, 3, "TYPEOF", 1 );
+   v = eval_copy( TSD, a->p[0] );
+   nm = Str_creTSD( "CLASS" );
+   c = send_msg( TSD, v, nm, 0, NULL );
+   Free_stringTSD( nm );
+   nm = Str_creTSD( "ID" );
+   id = c ? send_msg( TSD, c, nm, 0, NULL ) : NULL;
+   Free_stringTSD( nm );
+   if ( c )
+      Free_stringTSD( c );
+   Free_stringTSD( v );
+   return id ? id : Str_creTSD( "" );
+}
+
+/* a clause that is only a.b(args): a message instruction, not a command */
+int oo_dot_instruction( tsd_t *TSD, nodeptr expr )
+{
+   streng *r;
+   int handled;
+
+   if ( expr == NULL || expr->name == NULL
+     || ( expr->type != X_IN_FUNC && expr->type != X_IS_EXTERNAL ) )
+      return 0;
+   if ( memchr( expr->name->value, '.', expr->name->len ) == NULL )
+      return 0;
+   if ( expr->type == X_IN_FUNC && getlabel( TSD, expr->name ) != NULL )
+      return 0;
+   r = oo_dot_call( TSD, expr, 0, &handled );
+   if ( !handled )
+      return 0;
+   if ( r )
+      set_reserved_value( TSD, POOL0_RESULT, r, 0, VFLAG_STR );
+   else
+      set_reserved_value( TSD, POOL0_RESULT, NULL, 0, VFLAG_NONE );
+   return 1;
+}
+
 void oo_exec_assign( tsd_t *TSD, nodeptr thisptr )
 {
    nodeptr target = thisptr->p[0];
@@ -9801,6 +10094,16 @@ void oo_exec_usearg( tsd_t *TSD, nodeptr thisptr )
             oo_link_stem( TSD, nm, box );
          else if ( a && a->value )
             setvalue( TSD, nm, Str_dupTSD( a->value ), -1 );
+         else if ( n->p[1] )
+         {
+            /* "use arg b = 5": the default when the argument is omitted */
+            streng *kill;
+            const streng *v = evaluate( TSD, n->p[1], &kill );
+
+            setvalue( TSD, nm, Str_dupTSD( v ), -1 );
+            if ( kill )
+               Free_stringTSD( kill );
+         }
          else
             drop_var( TSD, nm );
       }
@@ -10237,6 +10540,13 @@ streng *oo_operator( tsd_t *TSD, nodeptr thisptr, int *handled, streng **leftval
 
    *handled = 0;
    *leftval = NULL;
+   if ( thisptr->type == X_OO_IS || thisptr->type == X_OO_AS )
+   {
+      *handled = 1;
+      return oo_is_as( TSD, thisptr );
+   }
+   if ( op != NULL && ( r = type_compare( TSD, thisptr, handled ) ) != NULL )
+      return r;
    if ( op == NULL || left == NULL || ( thisptr->p[1] == NULL && !unary ) )
       return NULL;
    switch ( left->type )

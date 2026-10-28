@@ -180,6 +180,8 @@
 #define X_OO_STEMOBJ    162 /* RETURN stem. in OO code: p[0] the X_STEM_SYMBOL */
 #define X_OO_DOWITH     161 /* parse time only: p[0] coll, p[1] INDEX var, p[2] ITEM var, p[3] FOR */
 #define X_OO_BLOCK      163 /* { ... }: name the source of the block */
+#define X_OO_IS         164 /* p[0] IS p[1]: p[0]~isA(p[1]) (cREXX) */
+#define X_OO_AS         165 /* p[0] AS p[1]: p[0] if it isA p[1], else error 88.9 */
 
 
 /* The three first two numbers have not errortext attched to them */

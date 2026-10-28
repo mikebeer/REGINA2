@@ -323,6 +323,8 @@
  88,  6,[Array index %s exceeds the maximum of 100000000]|<value>
  88,  7,[Method "%s": argument %d must be a whole number; found "%s"]|<name>,<argnumber>,<value>
  88,  8,[Method "%s": argument %d must not be zero]|<name>,<argnumber>
+ 88,  9,[Value "%s" is not an instance of %s]|<value>,<class>
+ 88, 10,[%s must be of type %s; found "%s"]|<name>,<type>,<value>
  90,  0,[Propiedad no-ANSI usada con "OPTIONS STRICT_ANSI"]
  90,  1,[%s es un BIF de la extensión de Regina]|<bif>
  90,  2,[%s es una instrucción de la extensión de Regina]|<token>

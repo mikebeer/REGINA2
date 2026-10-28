@@ -1513,6 +1513,9 @@ oo_plain_assign:
          streng *stmp,*kill;
 
          update_envirs( TSD, TSD->currlevel ) ;
+         if ( thisptr->p[0] && TSD->oo_active
+           && oo_dot_instruction( TSD, thisptr->p[0] ) )
+            break;   /* obj.m(args) as an instruction */
          if (thisptr->p[0])
          {
             /* bja - added Free_stringTSD() around perform() */
