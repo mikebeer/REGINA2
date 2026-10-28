@@ -1,9 +1,9 @@
 connecting to 127.0.0.1 port @PORT@
 subscribe: 2
 4 messages came back:
-  greeting/qos0 = Hello from Regina Rexx OO, QoS 0
-  greeting/qos1 = Hello from Regina Rexx OO, QoS 1
-  greeting/qos2 = Hello from Regina Rexx OO, QoS 2
+  greeting/qos0 = Hello from ooRegina, QoS 0
+  greeting/qos1 = Hello from ooRegina, QoS 1
+  greeting/qos2 = Hello from ooRegina, QoS 2
   status = online
 ping: 1
 disconnect: 1

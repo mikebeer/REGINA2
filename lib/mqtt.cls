@@ -1,4 +1,4 @@
-/* mqtt.cls - MQTT classes for Regina Rexx OO
+/* mqtt.cls - MQTT classes for ooRegina
  *
  * ::requires 'mqtt' loads this library. It is built into the interpreter
  * and uses the RgMqtt function package (librgmqtt.so, rgmqtt.dll), which

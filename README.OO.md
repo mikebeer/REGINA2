@@ -1,9 +1,9 @@
-# Object-oriented extensions for Regina Rexx
+# ooRegina: object-oriented extensions for Regina Rexx
 
-The full manual is [doc/Regina-OO-Manual.pdf](doc/Regina-OO-Manual.pdf); this page is a short guide.
+The full manual is [doc/ooRegina-Manual.pdf](doc/ooRegina-Manual.pdf); this page is a short guide.
 
-This version of Regina (3.9.7 plus the OO extension) can run object-oriented
-Rexx programs in the style of ooRexx. **It is fully optional:** a program
+ooRegina (Regina 3.9.7 plus the OO extension) can run object-oriented
+Rexx programs. **It is fully optional:** a program
 that doesn't use any of the new syntax runs exactly as it does on Regina
 3.9.7, including its TRACE output, error messages and limits. The object
 system switches on only when a program sends its first message, refers to an
@@ -364,12 +364,12 @@ a one-dimensional array.
 A Directory or StringTable uses the string value of an index, and `[]`,
 `at` and `put` are case sensitive. The Directory methods `entry`,
 `setEntry`, `hasEntry`, `removeEntry` and the `d~name` form uppercase the
-name, as in ooRexx: `d~city` finds the entry stored with `d['CITY']`. A
+name: `d~city` finds the entry stored with `d['CITY']`. A
 Table also accepts objects as indexes and compares them by identity.
 
-## Other dialects: cREXX and NetRexx notation
+## Other dialects: NetRexx and CREXX notation
 
-The notation of cREXX and NetRexx is accepted at three levels (manual,
+The notation of NetRexx and CREXX is accepted at three levels (manual,
 Chapter 10):
 
 **In every OO program** (`--no-oo` switches it off; a period sends a
@@ -394,20 +394,20 @@ arguments checked at run time (error 88.10). A `.nrx` file can be loaded
 with `::requires`. Not available: the Java library, `catch`/`finally`,
 exceptions, casts, overloading.
 
-**cREXX Level B programs**: `options levelb`. `name: interface`,
+**CREXX programs**: `options levelg` (or `options levelb`). `name: interface`,
 `name: class implements .i`, attributes `_x = .type`, `*: factory` and
 named factories, provider selection with `match`, `m: method = .type`,
 `p: procedure = .type`, `arg a = .int` (checked), `x = .int`, `list[0]`,
-`import` (as `::requires`). Not available: the cREXX libraries, other
-levels, reference arguments, compile-time type checks.
+`import` (as `::requires`). Not available: the CREXX libraries, the tasks
+and `DO PARALLEL` of Level G, reference arguments, compile-time type checks.
 
 Both kinds of programs are translated to Regina OO before they are parsed
 (`dialect.c`), line for line, so line numbers in messages stay right.
-Samples: `demo/oo/13_notation.rexx`, `14_netrexx.rexx`, `15_levelb.rexx`.
+Samples: `demo/oo/13_notation.rexx`, `14_netrexx.rexx`, `15_crexx.rexx`.
 
 ## Errors
 
-The new error numbers follow ooRexx:
+The new error numbers:
 
 | Error | Meaning |
 |---|---|

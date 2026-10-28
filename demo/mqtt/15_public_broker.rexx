@@ -43,7 +43,7 @@ end
 say 'subscribe:' c~subscribe(root'/#', 2)
 c~publish(root'/status', 'online', 1, 1)            /* retained */
 do qos = 0 to 2
-  c~publish(root'/greeting/qos'qos, 'Hello from Regina Rexx OO, QoS' qos, qos)
+  c~publish(root'/greeting/qos'qos, 'Hello from ooRegina, QoS' qos, qos)
 end
 got = .sortedCollection~new
 n = c~listen({ use arg m; got~add(m~topic~substr(length(root) + 2) '=' m~message) }, 5)

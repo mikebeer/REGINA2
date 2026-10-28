@@ -1,4 +1,4 @@
-/* lisp.cls - LISP-style list functions for Regina Rexx OO
+/* lisp.cls - LISP-style list functions for ooRegina
  *
  * ::requires 'lisp' loads this library. It is built into the
  * interpreter, so no file is needed; a file named lisp.cls next to the

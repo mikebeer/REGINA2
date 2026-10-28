@@ -1,5 +1,5 @@
 /*
- * dialect.c - NetRexx and cREXX Level B notation for Regina OO
+ * dialect.c - NetRexx and CREXX notation for Regina OO
  *
  * The translation works line by line and keeps the line structure: every
  * output line is the input line with its declarations replaced by Regina
@@ -25,7 +25,7 @@
  *   a trailing "-" (continuation)               -> ","
  *   import, package                             -> (removed)
  *
- * cREXX Level B (options levelb):
+ * CREXX (options levelg, or levelb):
  *   name: class [implements .i, ...]            -> ::class name ...
  *   name: interface                             -> ::class name mixinclass Object
  *   m: method = .type   (in a class)            -> ::method m; expose attributes
@@ -182,12 +182,12 @@ typedef struct {
    dmeth *meths; int nmeths;
    int nblocks; int *blockstatic;
    int line;
-   /* Level B */
+   /* CREXX */
    struct lbmem *mem; int nmem;   /* factories, matches, methods        */
    char **attrval;                /* initial value of props[i]          */
 } dclass;
 
-/* a member of a Level B class or interface */
+/* a member of a CREXX class or interface */
 typedef struct lbmem {
    char *name;                    /* "*" for the default factory        */
    int kind;                      /* 'F' factory, 'M' match, 'm' method */
@@ -392,7 +392,7 @@ static const char *strstr_n( const char *s, long n, const char *w )
 }
 
 /*
- * A Level B type: .int, .float, .string, .myclass, ... optionally with []
+ * A CREXX type: .int, .float, .string, .myclass, ... optionally with []
  * (an array). Returns 'W', 'N', 'B', 'S' (string), 'R' (array), 'O'
  * (object) or 0.
  */
@@ -558,7 +558,7 @@ static int rewrite( dctx *c, const char *s, const unsigned char *m, long n, int 
          for ( seg = 0; seg < l && sym[seg] != '.'; seg++ )
             ;
 
-         if ( c->dialect == DIALECT_LEVELB && prev != '~' && sym[0] == '.' && l > 1 )
+         if ( c->dialect == DIALECT_CREXX && prev != '~' && sym[0] == '.' && l > 1 )
          {
             /* .ns..name: the namespace is dropped; .iface(args): a provider */
             const char *nm = sym + 1, *dd;
@@ -665,7 +665,7 @@ static int rewrite( dctx *c, const char *s, const unsigned char *m, long n, int 
                }
             }
          }
-         if ( at_stmt && c->dialect == DIALECT_LEVELB )
+         if ( at_stmt && c->dialect == DIALECT_CREXX )
          {
             at_stmt = 0;
             if ( eqi( sym, l, "call" ) && k && c->inmeth )
@@ -700,7 +700,7 @@ static int rewrite( dctx *c, const char *s, const unsigned char *m, long n, int 
          }
          at_stmt = 0;
 
-         if ( c->dialect == DIALECT_LEVELB && nc == '[' && i + 2 < n && s[i + 1] == '0'
+         if ( c->dialect == DIALECT_CREXX && nc == '[' && i + 2 < n && s[i + 1] == '0'
            && s[i + 2] == ']' )
          {
             /* a[0]: the number of items */
@@ -797,7 +797,7 @@ static int rewrite( dctx *c, const char *s, const unsigned char *m, long n, int 
          prev = 'a';
          continue;
       }
-      if ( c->dialect == DIALECT_LEVELB && ch == '<' && i + 8 <= n
+      if ( c->dialect == DIALECT_CREXX && ch == '<' && i + 8 <= n
         && eqi( s + i, 8, "<typeof>" ) )
       {
          sb_str( out, "typeof" );
@@ -1492,8 +1492,8 @@ static int detect( const char *s, long len, const unsigned char *m )
                p++;
             if ( p - a == 7 && eqi( s + a, 7, "netrexx" ) )
                return DIALECT_NETREXX;
-            if ( p - a == 6 && eqi( s + a, 6, "levelb" ) )
-               return DIALECT_LEVELB;
+            if ( p - a == 6 && ( eqi( s + a, 6, "levelg" ) || eqi( s + a, 6, "levelb" ) ) )
+               return DIALECT_CREXX;
             if ( p == a )
                p++;
          }
@@ -1593,7 +1593,7 @@ int __regina_dialect_translate( const char *src, long len, int nrx_name,
 }
 
 /* ------------------------------------------------------------------ */
-/* cREXX Level B                                                      */
+/* CREXX                                                      */
 /* ------------------------------------------------------------------ */
 
 /*

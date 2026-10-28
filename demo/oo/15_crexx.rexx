@@ -1,10 +1,10 @@
-options levelb
-/* 15_levelb.rexx - a cREXX Level B program run by Regina
+options levelg
+/* 15_crexx.rexx - a CREXX program run by ooRegina
  *
- * "options levelb" switches the cREXX notation on: interfaces with
- * factories, classes implementing them, attributes (_name = .type),
- * methods "name: method = .type", procedures, typed arguments and
- * declarations. .vehicle("...") asks every class implementing the
+ * "options levelg" (or "options levelb") switches the CREXX notation on:
+ * interfaces with factories, classes implementing them, attributes
+ * (_name = .type), methods "name: method = .type", procedures, typed
+ * arguments and declarations. .vehicle("...") asks every class implementing the
  * interface (their "match") which one should make the object.
  */
 namespace garage expose vehicle

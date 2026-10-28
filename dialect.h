@@ -1,17 +1,18 @@
 /*
- * dialect.h - NetRexx and cREXX Level B notation for Regina OO
+ * dialect.h - NetRexx and CREXX notation for Regina OO
  *
  * A program that starts with "options netrexx" (or is read from a file
- * ending in .nrx) or with "options levelb" is translated to Regina OO
- * source before it is parsed. Every line of the translation is the same
- * line of the original, so line numbers in messages and traces stay right.
+ * ending in .nrx) or with "options levelg" (CREXX; also "levelb") is
+ * translated to Regina OO source before it is parsed. Every line of the
+ * translation is the same line of the original, so line numbers in
+ * messages and traces stay right.
  */
 #ifndef DIALECT_H_INCLUDED
 #define DIALECT_H_INCLUDED
 
 #define DIALECT_NONE    0
 #define DIALECT_NETREXX 1
-#define DIALECT_LEVELB  2
+#define DIALECT_CREXX  2
 
 /* flags of __regina_dialect_translate */
 #define DIALECT_NRX_NAME 1  /* the file name ends in .nrx               */

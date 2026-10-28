@@ -5,8 +5,28 @@ const d = require('docx');
 const {
   Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle,
   ShadingType, AlignmentType, HeadingLevel, TabStopType, PageBreak,
-  LevelFormat,
+  LevelFormat, ImageRun,
 } = d;
+const fs = require('fs');
+const path = require('path');
+
+// the colours of the Queen of Clubs on the cover
+const RED = 'B3262A', GOLD = 'F6D148', GOLD_LIGHT = 'FCF0BF', BLUE = '1C78BE';
+
+// an image of doc/manual/art, w and h in points
+const ART = path.join(__dirname, 'art');
+function img(file, w, h, alt) {
+  return new ImageRun({
+    type: file.endsWith('.jpg') ? 'jpg' : 'png',
+    data: fs.readFileSync(path.join(ART, file)),
+    // docx sizes images in pixels of 1/96 inch
+    transformation: { width: Math.round(w * 4 / 3), height: Math.round(h * 4 / 3) },
+    altText: { title: alt || file, description: alt || file, name: file },
+  });
+}
+// an ornament in a paragraph of its own
+const ornament = (file, w, h, before = 0, after = 0) => new Paragraph({
+  alignment: AlignmentType.CENTER, spacing: { before, after }, children: [img(file, w, h)] });
 
 const BODY_W = 9638;                 // A4 width minus 2 x 1134 twips
 const ARIAL = 'Arial', TIMES = 'Times New Roman', COURIER = 'Courier New';
@@ -40,8 +60,25 @@ function runs(text, base = {}) {
 const P = (text, opts = {}) => new Paragraph({
   children: runs(text), spacing: { after: 120 }, ...opts });
 
-const H1 = (text, pageBreak = true) => new Paragraph({
-  heading: HeadingLevel.HEADING_1, pageBreakBefore: pageBreak, children: [new TextRun(text)] });
+// a chapter title; the band of white clubs is added after it (see decorate)
+const H1 = (text, pageBreak = true) => {
+  const p = new Paragraph({
+    heading: HeadingLevel.HEADING_1, pageBreakBefore: pageBreak, children: [new TextRun(text)] });
+  p._isH1 = true;
+  return p;
+};
+// the band (from the collar of the queen) under every chapter title and a
+// flower at the end of every chapter
+function decorate(children) {
+  const out = [];
+  children.forEach((c, i) => {
+    if (c && c._isH1 && i > 0) out.push(ornament('flower.png', 26, 21, 240, 0));
+    out.push(c);
+    if (c && c._isH1)
+      out.push(new Paragraph({ spacing: { before: 0, after: 300 }, children: [img('band.png', 482, 16, 'band of clubs')] }));
+  });
+  return out;
+}
 const H2 = (text) => new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun(text)] });
 const H3 = (text) => new Paragraph({ heading: HeadingLevel.HEADING_3, children: [new TextRun(text)] });
 
@@ -70,7 +107,7 @@ function table(headers, rows, widths, cap) {
     tableHeader: true, cantSplit: true,
     children: headers.map((h, i) => new TableCell({
       width: { size: widths[i], type: WidthType.DXA }, margins: cellMargins,
-      shading: { fill: 'D9D9D9', type: ShadingType.CLEAR, color: 'auto' },
+      shading: { fill: GOLD_LIGHT, type: ShadingType.CLEAR, color: 'auto' },
       children: [new Paragraph({ children: runs(h, { font: ARIAL, bold: true, size: 18 }) })],
     })),
   });
@@ -118,10 +155,9 @@ const styles = {
   paragraphStyles: [
     { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
       run: { font: ARIAL, size: 36, bold: true },
-      paragraph: { spacing: { before: 0, after: 360 }, outlineLevel: 0,
-                   border: { bottom: { style: BorderStyle.SINGLE, size: 18, color: '000000', space: 6 } } } },
+      paragraph: { spacing: { before: 0, after: 120 }, outlineLevel: 0 } },
     { id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true,
-      run: { font: ARIAL, size: 26, bold: true },
+      run: { font: ARIAL, size: 26, bold: true, color: RED },
       paragraph: { spacing: { before: 320, after: 140 }, outlineLevel: 1, keepNext: true } },
     { id: 'TOC1', name: 'toc 1', basedOn: 'Normal', next: 'Normal',
       run: { font: 'Arial', size: 19, bold: true },
@@ -129,15 +165,16 @@ const styles = {
     { id: 'TOC2', name: 'toc 2', basedOn: 'Normal', next: 'Normal',
       run: { size: 19 }, paragraph: { indent: { left: 280 }, spacing: { after: 0 } } },
     { id: 'Heading3', name: 'Heading 3', basedOn: 'Normal', next: 'Normal', quickFormat: true,
-      run: { font: ARIAL, size: 22, bold: true },
+      run: { font: ARIAL, size: 22, bold: true, color: BLUE },
       paragraph: { spacing: { before: 220, after: 100 }, outlineLevel: 2, keepNext: true } },
   ],
 };
 
 const numbering = {
   config: [
-    { reference: 'bullets', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•',
-      alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 540, hanging: 270 } } } }] },
+    { reference: 'bullets', levels: [{ level: 0, format: LevelFormat.BULLET, text: '\u2663',
+      alignment: AlignmentType.LEFT, style: { run: { font: 'DejaVu Sans', size: 16 },
+        paragraph: { indent: { left: 540, hanging: 270 } } } }] },
     ...['steps', 's2', 's3', 's4', 's5', 's6'].map((ref) => ({
       reference: ref, levels: [{ level: 0, format: LevelFormat.DECIMAL, text: '%1.',
         alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 540, hanging: 300 } } } }] })),
@@ -146,5 +183,5 @@ const numbering = {
 
 module.exports = {
   d, runs, P, H1, H2, H3, UL, OL, table, screen, caption, pageBreak, styles, numbering,
-  BODY_W, ARIAL, TIMES, COURIER, figures,
+  BODY_W, ARIAL, TIMES, COURIER, figures, img, ornament, decorate, RED, GOLD, BLUE,
 };

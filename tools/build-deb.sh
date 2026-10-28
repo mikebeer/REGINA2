@@ -41,7 +41,7 @@ mkdir -p "$WORK/root/usr/share/doc/regina-rexx-oo/examples"
 cp "$SRC"/demo/oo_demo.rexx "$SRC"/demo/oo/* "$WORK/root/usr/share/doc/regina-rexx-oo/examples/"
 mkdir -p "$WORK/root/usr/share/doc/regina-rexx-oo/examples/mqtt"
 cp "$SRC"/demo/mqtt/* "$WORK/root/usr/share/doc/regina-rexx-oo/examples/mqtt/"
-for m in "$SRC"/doc/Regina-OO-Manual.*; do
+for m in "$SRC"/doc/ooRegina-Manual.*; do
   [ -f "$m" ] && cp "$m" "$WORK/root/usr/share/doc/regina-rexx-oo/"
 done
 [ -f "$WORK/root/etc/rxstack.conf" ] && echo /etc/rxstack.conf >"$WORK/root/DEBIAN/conffiles"
@@ -62,12 +62,13 @@ Provides: regina-rexx, libregina3
 Section: interpreters
 Priority: optional
 Homepage: https://github.com/mikebeer/REGINA2
-Description: Regina Rexx interpreter with optional OO syntax
- Regina $VER_DOT with an optional object-oriented extension in the style
- of ooRexx: classes, methods, attributes and routines (:: directives),
- message operators ~ and ->, cascades ~~ and ->>, collections, DO OVER
- and DO WITH, USE ARG and stems passed by reference. Classic Rexx
- programs run unchanged; --no-oo switches the extension off.
+Description: ooRegina - the Regina Rexx interpreter with optional OO syntax
+ ooRegina is Regina $VER_DOT with an optional object-oriented extension:
+ classes, methods, attributes and routines (:: directives), message
+ operators ~ and ->, cascades ~~ and ->>, collections, DO OVER and DO WITH,
+ USE ARG and stems passed by reference, and the notation of NetRexx and
+ CREXX. Classic Rexx programs run unchanged; --no-oo switches the
+ extension off.
  Includes RgMqtt, an MQTT 3.1.1 client function package.
 EOC
 printf '#!/bin/sh\nset -e\n[ "$1" = configure ] && ldconfig || true\n' >"$WORK/root/DEBIAN/postinst"

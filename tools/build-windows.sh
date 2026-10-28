@@ -51,7 +51,7 @@ BEGIN
   BEGIN
     BLOCK "040904b0"
     BEGIN
-      VALUE "CompanyName", "Regina Rexx OO (github.com/mikebeer/REGINA2)"
+      VALUE "CompanyName", "ooRegina (github.com/mikebeer/REGINA2)"
       VALUE "FileDescription", "$2"
       VALUE "FileVersion", "$VER_DOT.0"
       VALUE "InternalName", "$1"
@@ -166,11 +166,11 @@ mkdir -p "$DIST/demo/mqtt"; cp "$SRC"/demo/mqtt/* "$DIST/demo/mqtt/"
 cp "$SRC/rgmqtt/README" "$DIST/README.rgmqtt.txt"; sed -i 's/$/\r/' "$DIST/README.rgmqtt.txt"
 # the Python library, found next to rexx.exe
 cp -R "$SRC/python/pylib" "$DIST/pylib"
-for m in "$SRC"/doc/Regina-OO-Manual.*; do [ -f "$m" ] && cp "$m" "$DIST/"; done
+for m in "$SRC"/doc/ooRegina-Manual.*; do [ -f "$m" ] && cp "$m" "$DIST/"; done
 cp "$SRC/COPYING-LIB" "$DIST/COPYING-LIB.txt"
 cp "$SRC/README.OO.md" "$DIST/README.OO.md"
 cat > "$DIST/README.txt" <<EOR
-Regina Rexx $VER_DOT with the optional OO extension - 64-bit Windows
+ooRegina: Regina Rexx $VER_DOT with the optional OO extension - 64-bit Windows
 
 rexx.exe is a standalone interpreter; it needs no DLL and no installation.
 Run a program with:   rexx.exe myprog.rexx
@@ -205,7 +205,7 @@ Python modules (statistics, json, numpy, pandas, ...) are used with
   rexx.exe --oo prog.rexx      OO keywords on in every program
   rexx.exe --no-oo prog.rexx   OO extension off (classic Regina 3.9.7)
 
-Manual: Regina-OO-Manual.pdf / .docx.  Samples: demo\oo\*.rexx
+Manual: ooRegina-Manual.pdf / .docx.  Samples: demo\oo\*.rexx
 
 Error messages in other languages: set REGINA_LANG (e.g. de) and
 REGINA_LANG_DIR to the folder containing the *.mtb files.
