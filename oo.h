@@ -87,6 +87,10 @@ streng *oo_dot_call( tsd_t *TSD, nodeptr thisptr, int need_result, int *handled 
 int oo_dot_instruction( tsd_t *TSD, nodeptr expr );
 streng *oo_is_as( tsd_t *TSD, nodeptr thisptr );
 streng *oo_typeof( tsd_t *TSD, nodeptr thisptr );
+void oo_dialect_start( tsd_t *TSD, int dialect );
+streng *oo_dialect_compound( tsd_t *TSD, nodeptr thisptr );
+int oo_dialect_assign( tsd_t *TSD, nodeptr target, streng *value );
+streng *oo_typecheck( tsd_t *TSD, nodeptr thisptr );
 streng *oo_dialect_symbol( tsd_t *TSD, const streng *name );
 streng *oo_eval_over_init( tsd_t *TSD, nodeptr thisptr );
 streng *oo_eval_over_item( tsd_t *TSD, nodeptr thisptr );

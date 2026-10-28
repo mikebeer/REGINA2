@@ -100,7 +100,7 @@ SOURCES="funcs builtin error variable interprt debug dbgfuncs memory parsing
  files misc unxfuncs arxfuncs cmsfuncs os2funcs shell rexxext stack extstack
  tracing interp cmath convert strengs library strmath signals macros envir
  expr instore rexxbif yaccsrc lexsrc options os_win wrappers mt_notmt
- os_other mygetopt rexx nosaa oo"
+ os_other mygetopt rexx nosaa oo dialect"
 
 cd "$OUT"
 OBJS=""

@@ -8064,7 +8064,14 @@ static void load_required( tsd_t *TSD, const streng *name, oo_program *from, nod
    {
       if ( ( fp = fopen( path->value, "r" ) ) == NULL )
          exiterror( ERR_EXECUTION_ERROR, 3, tmpstr_of( TSD, name ) );
-      fetch_file( TSD, fp, &parsing );
+      {
+         extern const char *__regina_fetch_name;   /* lexsrc.l: *.nrx */
+         char *fname = str_of( TSD, path );
+         __regina_fetch_name = fname;
+         fetch_file( TSD, fp, &parsing );
+         __regina_fetch_name = NULL;
+         FreeTSD( fname );
+      }
       fclose( fp );
    }
    if ( parsing.result != 0 )
@@ -9740,6 +9747,7 @@ static streng *dot_receiver( tsd_t *TSD, const char *s, int len )
    oo_tsd *ot = get_ot( TSD );
    streng *nm = Str_ncreTSD( s, len ), *r = NULL;
    const streng *v;
+   oo_object *c;
 
    if ( len > 1 && s[0] == '.' )
    {
@@ -9756,9 +9764,12 @@ static streng *dot_receiver( tsd_t *TSD, const char *s, int len )
    }
    else if ( ( v = oo_peek_simple( TSD, nm ) ) != NULL )
    {
-      if ( obj_of( TSD, v ) )
+      /* NetRexx and Level B: strings receive messages, too (s.length()) */
+      if ( obj_of( TSD, v ) || TSD->oo_dialect )
          r = Str_dupTSD( v );
    }
+   else if ( TSD->oo_dialect && ( c = class_by_id( ot, nm ) ) != NULL )
+      r = hdup( TSD, c );           /* NetRexx: Point.f(), Point.count */
    else if ( str_eqc( nm, "THIS" ) )
    {
       if ( ( v = oo_peek_simple( TSD, ot->s_self ) ) != NULL && obj_of( TSD, v ) )
@@ -9806,13 +9817,22 @@ streng *oo_dot_call( tsd_t *TSD, nodeptr thisptr, int need_result, int *handled 
    end = p + nm->len;
    dot = memchr( p + 1, '.', nm->len - 1 );
    if ( p[0] != '.' && dot == NULL )
-      return NULL;
+   {
+      /* NetRexx: Name(args) creates an instance of the class Name */
+      oo_object *c;
+      if ( !TSD->oo_dialect || ( c = class_by_id( get_ot( TSD ), nm ) ) == NULL )
+         return NULL;
+      recv = hdup( TSD, c );
+      dot = end = p + nm->len;
+      goto have_receiver;
+   }
    if ( dot == NULL )
       dot = end;
    if ( dot == end - 1 )
       return NULL;                      /* a stem name: f. */
    if ( ( recv = dot_receiver( TSD, p, (int) ( dot - p ) ) ) == NULL )
       return NULL;
+have_receiver:
    if ( dot == end )
    {
       /* .Class(args) creates an instance */
@@ -9994,6 +10014,157 @@ streng *oo_typeof( tsd_t *TSD, nodeptr thisptr )
       Free_stringTSD( c );
    Free_stringTSD( v );
    return id ? id : Str_creTSD( "" );
+}
+
+/* a NetRexx or Level B program was read (see dialect.c) */
+void oo_dialect_start( tsd_t *TSD, int dialect )
+{
+   get_ot( TSD );
+   TSD->oo_dialect = dialect;
+}
+
+/*
+ * The receiver and messages of a compound symbol a.b.c in NetRexx and
+ * Level B programs: a is a variable with a value (or THIS, or a class
+ * name). Returns the receiver (new string) and the number of messages in
+ * *nmsg (their names in msgs[]), or NULL for a classic compound variable.
+ */
+#define DIALECT_MAXTAILS 16
+static streng *dialect_split( tsd_t *TSD, nodeptr thisptr, streng **msgs, int *nmsg )
+{
+   const streng *stem = thisptr->name;
+   nodeptr t;
+   streng *recv;
+   int n = 0;
+
+   *nmsg = 0;
+   if ( stem == NULL || stem->len < 2 )
+      return NULL;
+   for ( t = thisptr->p[0]; t; t = t->p[0] )
+      if ( t->type != X_CTAIL_SYMBOL && t->type != X_VTAIL_SYMBOL )
+         return NULL;
+   if ( ( recv = dot_receiver( TSD, stem->value, stem->len - 1 ) ) == NULL )
+      return NULL;
+   for ( t = thisptr->p[0]; t; t = t->p[0] )
+   {
+      const char *a = t->name->value, *e = a + t->name->len, *q;
+      while ( a < e )
+      {
+         for ( q = a; q < e && *q != '.'; q++ )
+            ;
+         if ( q == a || n >= DIALECT_MAXTAILS || rx_isdigit( *a ) )
+         {
+            /* a.1 or a..b: no message name, a classic compound */
+            while ( n > 0 )
+               Free_stringTSD( msgs[--n] );
+            Free_stringTSD( recv );
+            return NULL;
+         }
+         msgs[n++] = Str_ncreTSD( a, (int) ( q - a ) );
+         a = q + 1;
+      }
+   }
+   *nmsg = n;
+   return recv;
+}
+
+/* NetRexx/Level B: the value of a.b (a~b), or NULL for a classic compound */
+streng *oo_dialect_compound( tsd_t *TSD, nodeptr thisptr )
+{
+   streng *msgs[DIALECT_MAXTAILS], *recv, *r;
+   int n, i;
+
+   if ( !TSD->oo_dialect )
+      return NULL;
+   if ( ( recv = dialect_split( TSD, thisptr, msgs, &n ) ) == NULL )
+      return NULL;
+   for ( i = 0; i < n; i++ )
+   {
+      r = send_msg( TSD, recv, msgs[i], 0, NULL );
+      if ( r == NULL )
+         exiterror( ERR_NO_RESULT_OBJECT, 1, tmpstr_of( TSD, msgs[i] ) );
+      Free_stringTSD( recv );
+      recv = r;
+   }
+   for ( i = 0; i < n; i++ )
+      Free_stringTSD( msgs[i] );
+   return recv;
+}
+
+/* NetRexx/Level B: a.b = value sends b= to a; takes value if it returns 1 */
+int oo_dialect_assign( tsd_t *TSD, nodeptr target, streng *value )
+{
+   streng *msgs[DIALECT_MAXTAILS], *recv, *r;
+   const streng *argv[1];
+   int n, i;
+
+   if ( !TSD->oo_dialect )
+      return 0;
+   if ( ( recv = dialect_split( TSD, target, msgs, &n ) ) == NULL )
+      return 0;
+   if ( !obj_of( TSD, recv ) )
+   {
+      /* only an object has properties to set */
+      for ( i = 0; i < n; i++ )
+         Free_stringTSD( msgs[i] );
+      Free_stringTSD( recv );
+      return 0;
+   }
+   for ( i = 0; i < n - 1; i++ )
+   {
+      r = send_msg( TSD, recv, msgs[i], 0, NULL );
+      if ( r == NULL )
+         exiterror( ERR_NO_RESULT_OBJECT, 1, tmpstr_of( TSD, msgs[i] ) );
+      Free_stringTSD( recv );
+      recv = r;
+   }
+   msgs[n - 1] = catc( TSD, msgs[n - 1], "=" );
+   argv[0] = value;
+   r = send_msg( TSD, recv, msgs[n - 1], 1, argv );
+   if ( r )
+      Free_stringTSD( r );
+   for ( i = 0; i < n; i++ )
+      Free_stringTSD( msgs[i] );
+   Free_stringTSD( recv );
+   Free_stringTSD( value );
+   return 1;
+}
+
+/*
+ * __OOTYPE(value, type, name): the run-time check of a typed argument in
+ * NetRexx and Level B methods (int: a whole number, float: a number,
+ * boolean: 0 or 1, char: one character). Returns value or raises 88.10.
+ */
+streng *oo_typecheck( tsd_t *TSD, nodeptr thisptr )
+{
+   nodeptr a = thisptr->p[0];
+   streng *v, *t, *n;
+   int ok = 1;
+
+   if ( a == NULL || a->p[1] == NULL || a->p[1]->p[1] == NULL )
+      exiterror( ERR_INCORRECT_CALL, 3, "__OOTYPE", 3 );
+   v = eval_copy( TSD, a->p[0] );
+   t = eval_copy( TSD, a->p[1]->p[0] );
+   n = eval_copy( TSD, a->p[1]->p[1]->p[0] );
+   mem_upper( t->value, t->len );
+   if ( str_eqc( t, "INT" ) || str_eqc( t, ".INT" ) )
+      ok = myiswnumber( TSD, v, NULL, 0 );
+   else if ( str_eqc( t, "FLOAT" ) || str_eqc( t, ".FLOAT" ) || str_eqc( t, ".DECIMAL" ) )
+      ok = myisnumber( TSD, v );
+   else if ( str_eqc( t, "BOOLEAN" ) || str_eqc( t, ".BOOLEAN" ) )
+      ok = v->len == 1 && ( v->value[0] == '0' || v->value[0] == '1' );
+   else if ( str_eqc( t, "CHAR" ) )
+      ok = v->len == 1;
+   if ( !ok )
+   {
+      streng *vs = oo_stringify( TSD, v );
+      mem_lower( t->value, t->len );
+      exiterror( ERR_INVALID_ARGUMENT, 10, tmpstr_of( TSD, n ), tmpstr_of( TSD, t ),
+                 tmpstr_of( TSD, vs ? vs : v ) );
+   }
+   Free_stringTSD( t );
+   Free_stringTSD( n );
+   return v;
 }
 
 /* a clause that is only a.b(args): a message instruction, not a command */

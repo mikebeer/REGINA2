@@ -115,7 +115,7 @@ EOV
 SOURCES="funcs builtin error variable interprt debug dbgfuncs memory parsing
  files misc unxfuncs cmsfuncs os2funcs shell rexxext stack tracing interp
  cmath convert strengs library strmath signals macros envir expr extstack
- yaccsrc lexsrc options os_unx rexxbif wrappers mt_notmt instore oo arxfuncs
+ yaccsrc lexsrc options os_unx rexxbif wrappers mt_notmt instore oo dialect arxfuncs
  rexx nosaa pybridge"
 
 DEFS="-DNDEBUG -funsigned-char -DHAVE_CONFIG_H"

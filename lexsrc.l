@@ -32,6 +32,7 @@
 
 #include "rexx.h"
 #include "yaccsrc.h"
+#include "dialect.h"
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
@@ -3412,6 +3413,60 @@ static int oo_prescan( const char *s, long len )
    return 0;
 }
 
+/*
+ * The name of the file fetch_file() reads (set by the caller, NULL for the
+ * main program: then the input file of the system is used). A file *.nrx
+ * is NetRexx even without "options netrexx".
+ */
+const char *__regina_fetch_name = NULL;
+void oo_dialect_start( tsd_t *TSD, int dialect ); /* oo.c */
+
+static int fetch_is_nrx( void )
+{
+   const char *n = __regina_fetch_name;
+   long len;
+   const streng *f;
+
+   if ( n == NULL && parser_data.TSD && parser_data.TSD->systeminfo
+     && ( f = parser_data.TSD->systeminfo->input_file ) != NULL )
+   {
+      len = Str_len( f );
+      return len > 4 && ( f->value[len - 4] == '.' )
+          && ( f->value[len - 3] | 0x20 ) == 'n' && ( f->value[len - 2] | 0x20 ) == 'r'
+          && ( f->value[len - 1] | 0x20 ) == 'x';
+   }
+   if ( n == NULL )
+      return 0;
+   len = (long) strlen( n );
+   return len > 4 && n[len - 4] == '.' && ( n[len - 3] | 0x20 ) == 'n'
+       && ( n[len - 2] | 0x20 ) == 'r' && ( n[len - 1] | 0x20 ) == 'x';
+}
+
+/*
+ * NetRexx and cREXX Level B programs (see dialect.c): the translation is
+ * read by the lexer from pre_buf. Returns 1 if buf was translated; buf is
+ * then owned by pre_buf (freed here).
+ */
+static int dialect_take( char *buf, long len )
+{
+   char *out;
+   long olen;
+   int d = __regina_dialect_translate( buf, len,
+                ( fetch_is_nrx() ? DIALECT_NRX_NAME : 0 )
+                | ( __regina_fetch_name ? DIALECT_LIBRARY : 0 ), &out, &olen );
+
+   if ( d == DIALECT_NONE )
+      return 0;
+   free( buf );
+   if ( pre_buf )
+      free( pre_buf );
+   pre_buf = out;
+   pre_len = olen;
+   pre_pos = 0;
+   oo_dialect_start( parser_data.TSD, d );
+   return 1;
+}
+
 static int has_directive_line( FILE *fptr, const streng *str )
 {
    char *buf;
@@ -3461,6 +3516,13 @@ static int has_directive_line( FILE *fptr, const streng *str )
          pre_buf = buf ? buf : (char *) malloc( 1 );
          pre_len = buf ? len : 0;
          pre_pos = 0;
+         if ( buf && oo_force >= 0 )
+         {
+            pre_buf = NULL;
+            if ( dialect_take( buf, len ) )
+               return 1;
+            pre_buf = buf;
+         }
          return buf ? oo_prescan( buf, len ) : 0;
       }
    }
@@ -3481,6 +3543,8 @@ static int has_directive_line( FILE *fptr, const streng *str )
          break;
       len += (long) n;
    }
+   if ( buf && oo_force >= 0 && dialect_take( buf, len ) )
+      return 1;    /* the lexer reads the translation from pre_buf */
    found = buf ? oo_prescan( buf, len ) : 0;
    free( buf );
    clearerr( fptr );
@@ -3506,8 +3570,14 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
     * them on or switch the whole extension off.
     */
    oo_force = oo_mode() ;
-   if ( oo_force )
-      in_directives = ( oo_force > 0 ) ;
+   if ( oo_force > 0 )
+   {
+      in_directives = 1 ;
+      if ( str == NULL )
+         (void) has_directive_line( fptr, NULL ) ;  /* a NetRexx program? */
+   }
+   else if ( oo_force )
+      in_directives = 0 ;
    else
       in_directives = has_directive_line( fptr, str )
                    || ( str != NULL && TSD->oo_active );

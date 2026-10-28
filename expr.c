@@ -399,6 +399,15 @@ do_an_add:
             return copy_num( TSD, nptr ) ;
 
       case X_HEAD_SYMBOL:
+         if ( TSD->oo_dialect && ( sptr = oo_dialect_compound( TSD, thisptr ) ) != NULL )
+         {
+            /* NetRexx/Level B: p.x is p~x */
+            numthr = get_a_descr( TSD, NULL, 0, sptr );
+            Free_stringTSD( sptr );
+            if ( kill )
+               *kill = numthr;
+            return numthr;
+         }
          if (kill)
             *kill = NULL ;
 
@@ -702,6 +711,11 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          RETURN_NEW( stmp1 );
 
       case X_HEAD_SYMBOL:
+         if ( TSD->oo_dialect && ( stmp1 = oo_dialect_compound( TSD, thisptr ) ) != NULL )
+         {
+            /* NetRexx/Level B: p.x is p~x */
+            RETURN_NEW( stmp1 );
+         }
          /* always duplicate, since stmp1 might point to tmp area */
          stmp1 = Str_dupTSD( fix_compound( TSD, thisptr, NULL ) );
          RETURN_NEW( stmp1 );
@@ -760,6 +774,12 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
                if ( TSD->trace_stat == 'I' )
                   tracevalue( TSD, ptr, 'F' );
                RETURN_NEW( ptr );
+            }
+            if ( TSD->oo_active && thisptr->name->len == 8
+              && memcmp( thisptr->name->value, "__OOTYPE", 8 ) == 0 )
+            {
+               /* the argument check of NetRexx/Level B methods */
+               RETURN_NEW( oo_typecheck( TSD, thisptr ) );
             }
             if ( TSD->oo_active && thisptr->name->len == 6
               && memcmp( thisptr->name->value, "TYPEOF", 6 ) == 0 )
@@ -1188,6 +1208,12 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          return num_to_bool( TSD, shortcutnum( TSD, thisptr ), thisptr->name, suberror, op ) ;
 
       case X_HEAD_SYMBOL:
+         if ( TSD->oo_dialect && ( stmp1 = oo_dialect_compound( TSD, thisptr ) ) != NULL )
+         {
+            tmp = str_to_bool( stmp1 );
+            Free_stringTSD( stmp1 );
+            return tmp;
+         }
          if ( get_options_flag( TSD->currlevel, EXT_STRICT_ANSI ) )
          {
             /* fixes bug 1111931 */
