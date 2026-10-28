@@ -399,6 +399,15 @@ do_an_add:
             return copy_num( TSD, nptr ) ;
 
       case X_HEAD_SYMBOL:
+         if ( TSD->oo_dialect && ( sptr = oo_dialect_compound( TSD, thisptr ) ) != NULL )
+         {
+            /* NetRexx/Level B: p.x is p~x */
+            numthr = get_a_descr( TSD, NULL, 0, sptr );
+            Free_stringTSD( sptr );
+            if ( kill )
+               *kill = numthr;
+            return numthr;
+         }
          if (kill)
             *kill = NULL ;
 
@@ -443,6 +452,8 @@ do_an_add:
       case X_OO_OVERITEM:
       case X_OO_STEMOBJ:
       case X_OO_BLOCK:
+      case X_OO_IS:
+      case X_OO_AS:
       {
          numthr = get_a_descr( TSD, NULL, 0, evaluate( TSD, thisptr, &sptr ) );
          FREE_TMP_STRING( sptr );
@@ -700,12 +711,27 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          RETURN_NEW( stmp1 );
 
       case X_HEAD_SYMBOL:
+         if ( TSD->oo_dialect && ( stmp1 = oo_dialect_compound( TSD, thisptr ) ) != NULL )
+         {
+            /* NetRexx/Level B: p.x is p~x */
+            RETURN_NEW( stmp1 );
+         }
          /* always duplicate, since stmp1 might point to tmp area */
          stmp1 = Str_dupTSD( fix_compound( TSD, thisptr, NULL ) );
          RETURN_NEW( stmp1 );
 
       case X_STEM_SYMBOL:
       case X_SIM_SYMBOL:
+         if ( TSD->oo_active && thisptr->type == X_SIM_SYMBOL
+           && thisptr->name && thisptr->name->len == 4 )
+         {
+            /* cREXX/NetRexx: THIS and NULL while no such variable is set */
+            stmp1 = oo_dialect_symbol( TSD, thisptr->name );
+            if ( stmp1 )
+            {
+               RETURN_NEW( stmp1 );
+            }
+         }
          cstmp = shortcut(TSD,thisptr) ;
          if ( kill )
             return (streng *) cstmp; /* and *kill is set to NULL above */
@@ -726,6 +752,16 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          else
          {
             thisptr->u.node = NULL;
+            if ( TSD->oo_active )
+            {
+               /* cREXX/NetRexx notation: obj.m(args), .Class(args) */
+               int handled;
+               streng *ptr = oo_dot_call( TSD, thisptr, 1, &handled );
+               if ( handled )
+               {
+                  RETURN_NEW( ptr );
+               }
+            }
             if ( TSD->oo_active && oo_has_routine( TSD, thisptr->name ) )
             {
                paramboxptr args = initplist( TSD, thisptr );
@@ -735,6 +771,21 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
                ptr = oo_call_routine( TSD, thisptr->name, args );
                if ( ptr == NULL )
                   exiterror( ERR_NO_DATA_RETURNED, 1, tmpstr_of( TSD, thisptr->name ) );
+               if ( TSD->trace_stat == 'I' )
+                  tracevalue( TSD, ptr, 'F' );
+               RETURN_NEW( ptr );
+            }
+            if ( TSD->oo_active && thisptr->name->len == 8
+              && memcmp( thisptr->name->value, "__OOTYPE", 8 ) == 0 )
+            {
+               /* the argument check of NetRexx/Level B methods */
+               RETURN_NEW( oo_typecheck( TSD, thisptr ) );
+            }
+            if ( TSD->oo_active && thisptr->name->len == 6
+              && memcmp( thisptr->name->value, "TYPEOF", 6 ) == 0 )
+            {
+               /* cREXX typeof(x), kept as X_IN_FUNC so a later label wins */
+               streng *ptr = oo_typeof( TSD, thisptr );
                if ( TSD->trace_stat == 'I' )
                   tracevalue( TSD, ptr, 'F' );
                RETURN_NEW( ptr );
@@ -808,6 +859,17 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          streng *ptr, *command;
          int stackmark,len,err;
          paramboxptr args, targs;
+
+         if ( TSD->oo_active && thisptr->type == X_IS_EXTERNAL )
+         {
+            /* obj.m(args) again, now with an object in obj */
+            int handled;
+            ptr = oo_dot_call( TSD, thisptr, 1, &handled );
+            if ( handled )
+            {
+               RETURN_NEW( ptr );
+            }
+         }
 
          if ( TSD->restricted )
             exiterror( ERR_RESTRICTED, 5 );
@@ -984,6 +1046,13 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          stmp1 = oo_eval_block( TSD, thisptr );
          RETURN_NEW( stmp1 );
 
+      case X_OO_IS:
+      case X_OO_AS:
+         stmp1 = oo_is_as( TSD, thisptr );
+         if ( TSD->trace_stat == 'I' )
+            tracevalue( TSD, stmp1, 'O' );
+         RETURN_NEW( stmp1 );
+
       case X_OO_OVERINIT:
          stmp1 = oo_eval_over_init( TSD, thisptr );
          RETURN_NEW( stmp1 );
@@ -1139,6 +1208,12 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
          return num_to_bool( TSD, shortcutnum( TSD, thisptr ), thisptr->name, suberror, op ) ;
 
       case X_HEAD_SYMBOL:
+         if ( TSD->oo_dialect && ( stmp1 = oo_dialect_compound( TSD, thisptr ) ) != NULL )
+         {
+            tmp = str_to_bool( stmp1 );
+            Free_stringTSD( stmp1 );
+            return tmp;
+         }
          if ( get_options_flag( TSD->currlevel, EXT_STRICT_ANSI ) )
          {
             /* fixes bug 1111931 */
@@ -1174,6 +1249,8 @@ int isboolean( tsd_t *TSD, nodeptr thisptr, int suberror, const char *op )
       case X_MSGSEND:
       case X_CASCADE:
       case X_INDEX:
+      case X_OO_IS:
+      case X_OO_AS:
          tmp = str_to_bool( evaluate( TSD, thisptr, &stmp1 ) );
          FREE_TMP_STRING( stmp1 );
          return tmp;

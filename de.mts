@@ -263,6 +263,8 @@
  88,  6,[Array-Index %s überschreitet das Maximum von 100000000]|<value>
  88,  7,[Methode "%s": Argument %d muss eine ganze Zahl sein; gefunden "%s"]|<name>,<argnumber>,<value>
  88,  8,[Methode "%s": Argument %d darf nicht null sein]|<name>,<argnumber>
+ 88,  9,[Wert "%s" ist keine Instanz von %s]|<value>,<class>
+ 88, 10,[%s muss vom Typ %s sein; gefunden "%s"]|<name>,<type>,<value>
  90,  0,[Nicht-ANSI-Besonderheit mit "OPTIONS STRICT_ANSI" benutzt]
  90,  1,[%s ist eine Erweiterungs-BIF von Regina (BIF = built in function, Standardfunktion)]|<bif>
  90,  2,[%s ist eine Erweiterungsinstruktion von Regina]|<token>

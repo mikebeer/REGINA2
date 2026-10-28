@@ -32,6 +32,7 @@
 
 #include "rexx.h"
 #include "yaccsrc.h"
+#include "dialect.h"
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
@@ -85,6 +86,7 @@ static int do_level = 0 ;
 static int in_numform=0, next_numform=0 ;
 static int obs_with=0, in_do=0, in_then=0;
 static int in_parse=0 ;
+static int in_usearg=0 ; /* OO: in a USE ARG clause (defaults are expressions) */
 static int in_trace=0, itflag=0 ;
 static int in_signal=0, in_call=0 ;
 static enum { not_in_address = 0,
@@ -166,6 +168,8 @@ static int oo_symch( char c );
  * token directly following the message name.
  */
 static int oo_expect_name=0, oo_in_name=0, oo_after_name=0;
+/* OO: the last token was ")" or "]", so ".name(" is a message (a.b().c()) */
+static int oo_close_pending=0, oo_after_close=0;
 
 /*
  * The spelling of the last message or cascade operator ("~", "->", "~~",
@@ -404,6 +408,8 @@ key_with          [wW][iI][tT][hH]
         return retval;
      }
 
+     oo_after_close = oo_close_pending ;
+     oo_close_pending = 0 ;
      oo_after_name = oo_in_name ;
      oo_in_name = oo_expect_name ;
      oo_expect_name = 0 ;
@@ -481,6 +487,7 @@ key_with          [wW][iI][tT][hH]
    in_signal = in_call = 0 ;
    in_address = not_in_address;
    in_parse = 0 ;
+   in_usearg = 0 ;
    if ( seek_with == seek_with_from_address )
       seek_with = no_seek_with ;
    if ((ptr = strchr(yytext, '\n')) != NULL)
@@ -578,6 +585,7 @@ key_with          [wW][iI][tT][hH]
       REJECT ;
    BEGIN other ;
    in_parse = 1 ;
+   in_usearg = 1 ;
    SET_NEXTSTART() ;
    return USEARG ; }
 
@@ -1946,6 +1954,7 @@ key_with          [wW][iI][tT][hH]
    }
 
 {between}\) {
+   oo_close_pending = 1 ;
    expression_ended = 1 ;
    SET_NEXTSTART() ;
    return ')' ; }
@@ -1997,6 +2006,8 @@ key_with          [wW][iI][tT][hH]
    return '&' ; }
 
 {between}={between} {
+   if ( in_usearg )
+      in_parse = 0 ; /* "use arg b = 5": the default is an expression */
    SET_NEXTSTART() ;
    return '=' ; }
 
@@ -2028,6 +2039,35 @@ key_with          [wW][iI][tT][hH]
       REJECT ;
    __regina_oo_operator = "->" ;
    oo_seen = 1 ;
+   oo_expect_name = 1 ;
+   BEGIN other ;
+   SET_NEXTSTART() ;
+   return MSGSEND ; }
+
+   /*
+    * cREXX notation: "x is .T" and "x as .T" after a term, when the right
+    * operand starts with a period and a letter (else IS stays a symbol).
+    */
+{blank}+[iI][sS]{blank}+/\.[A-Za-z_!?] {
+   if ( !insert_abuttal || in_parse || !OO_KEYWORDS )
+      REJECT ;
+   SET_NEXTSTART() ;
+   return OO_IS ; }
+
+{blank}+[aA][sS]{blank}+/\.[A-Za-z_!?] {
+   if ( !insert_abuttal || in_parse || !OO_KEYWORDS )
+      REJECT ;
+   SET_NEXTSTART() ;
+   return OO_AS ; }
+
+   /*
+    * cREXX/NetRexx notation: ".name(" directly after ")" or "]" sends a
+    * message, a.b().c() is a~b()~c(). Only the period is consumed.
+    */
+\./[A-Za-z_!?][A-Za-z0-9_!?]*\( {
+   if ( !oo_after_close || !insert_abuttal || !OO_KEYWORDS )
+      REJECT ;
+   __regina_oo_operator = "." ;
    oo_expect_name = 1 ;
    BEGIN other ;
    SET_NEXTSTART() ;
@@ -2149,6 +2189,7 @@ key_with          [wW][iI][tT][hH]
    if ( bracket_depth == 0 )
       REJECT ;
    bracket_depth-- ;
+   oo_close_pending = 1 ;
    expression_ended = 1 ;
    SET_NEXTSTART() ;
    return ']' ; }
@@ -3180,6 +3221,7 @@ static void init_it_all( tsd_t *TSD )
    oo_expect_name = oo_in_name = oo_after_name = 0 ;
    firstln = 0 ;
    in_parse = 0 ;
+   in_usearg = 0 ;
    in_trace = 0 ;
    itflag = 0 ;
    in_signal = 0 ;
@@ -3371,6 +3413,60 @@ static int oo_prescan( const char *s, long len )
    return 0;
 }
 
+/*
+ * The name of the file fetch_file() reads (set by the caller, NULL for the
+ * main program: then the input file of the system is used). A file *.nrx
+ * is NetRexx even without "options netrexx".
+ */
+const char *__regina_fetch_name = NULL;
+void oo_dialect_start( tsd_t *TSD, int dialect ); /* oo.c */
+
+static int fetch_is_nrx( void )
+{
+   const char *n = __regina_fetch_name;
+   long len;
+   const streng *f;
+
+   if ( n == NULL && parser_data.TSD && parser_data.TSD->systeminfo
+     && ( f = parser_data.TSD->systeminfo->input_file ) != NULL )
+   {
+      len = Str_len( f );
+      return len > 4 && ( f->value[len - 4] == '.' )
+          && ( f->value[len - 3] | 0x20 ) == 'n' && ( f->value[len - 2] | 0x20 ) == 'r'
+          && ( f->value[len - 1] | 0x20 ) == 'x';
+   }
+   if ( n == NULL )
+      return 0;
+   len = (long) strlen( n );
+   return len > 4 && n[len - 4] == '.' && ( n[len - 3] | 0x20 ) == 'n'
+       && ( n[len - 2] | 0x20 ) == 'r' && ( n[len - 1] | 0x20 ) == 'x';
+}
+
+/*
+ * NetRexx and cREXX Level B programs (see dialect.c): the translation is
+ * read by the lexer from pre_buf. Returns 1 if buf was translated; buf is
+ * then owned by pre_buf (freed here).
+ */
+static int dialect_take( char *buf, long len )
+{
+   char *out;
+   long olen;
+   int d = __regina_dialect_translate( buf, len,
+                ( fetch_is_nrx() ? DIALECT_NRX_NAME : 0 )
+                | ( __regina_fetch_name ? DIALECT_LIBRARY : 0 ), &out, &olen );
+
+   if ( d == DIALECT_NONE )
+      return 0;
+   free( buf );
+   if ( pre_buf )
+      free( pre_buf );
+   pre_buf = out;
+   pre_len = olen;
+   pre_pos = 0;
+   oo_dialect_start( parser_data.TSD, d );
+   return 1;
+}
+
 static int has_directive_line( FILE *fptr, const streng *str )
 {
    char *buf;
@@ -3420,6 +3516,13 @@ static int has_directive_line( FILE *fptr, const streng *str )
          pre_buf = buf ? buf : (char *) malloc( 1 );
          pre_len = buf ? len : 0;
          pre_pos = 0;
+         if ( buf && oo_force >= 0 )
+         {
+            pre_buf = NULL;
+            if ( dialect_take( buf, len ) )
+               return 1;
+            pre_buf = buf;
+         }
          return buf ? oo_prescan( buf, len ) : 0;
       }
    }
@@ -3440,6 +3543,8 @@ static int has_directive_line( FILE *fptr, const streng *str )
          break;
       len += (long) n;
    }
+   if ( buf && oo_force >= 0 && dialect_take( buf, len ) )
+      return 1;    /* the lexer reads the translation from pre_buf */
    found = buf ? oo_prescan( buf, len ) : 0;
    free( buf );
    clearerr( fptr );
@@ -3465,8 +3570,14 @@ static void fetch(tsd_t *TSD, FILE *fptr, const streng *str,
     * them on or switch the whole extension off.
     */
    oo_force = oo_mode() ;
-   if ( oo_force )
-      in_directives = ( oo_force > 0 ) ;
+   if ( oo_force > 0 )
+   {
+      in_directives = 1 ;
+      if ( str == NULL )
+         (void) has_directive_line( fptr, NULL ) ;  /* a NetRexx program? */
+   }
+   else if ( oo_force )
+      in_directives = 0 ;
    else
       in_directives = has_directive_line( fptr, str )
                    || ( str != NULL && TSD->oo_active );

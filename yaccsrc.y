@@ -142,14 +142,14 @@ extern const char *__regina_oo_operator; /* lexsrc.l, OO extension */
 %token GTGT LTLT NOTGTGT NOTLTLT GTGTE LTLTE
 %token INPUT OUTPUT ERROR NORMAL APPEND REPLACE STREAM STEM LIFO FIFO NOEOL
 %token LOWER CASELESS
-%token MSGSEND CASCADE DCOLON USEARG MSGSUPER BLOCK /* OO extension */
+%token MSGSEND CASCADE DCOLON USEARG MSGSUPER BLOCK OO_IS OO_AS /* OO extension */
 %token PLUSASSIGNMENTVARIABLE MINUSASSIGNMENTVARIABLE MULTASSIGNMENTVARIABLE DIVASSIGNMENTVARIABLE MODULUSASSIGNMENTVARIABLE INTDIVASSIGNMENTVARIABLE ORASSIGNMENTVARIABLE XORASSIGNMENTVARIABLE ANDASSIGNMENTVARIABLE CONCATASSIGNMENTVARIABLE
 
 %start start
 
 %left '|' XOR
 %left '&'
-%left '=' DIFFERENT GTE GT LT LTE EQUALEQUAL NOTEQUALEQUAL GTGT LTLT NOTGTGT NOTLTLT GTGTE LTLTE
+%left '=' DIFFERENT GTE GT LT LTE EQUALEQUAL NOTEQUALEQUAL GTGT LTLT NOTGTGT NOTLTLT GTGTE LTLTE OO_IS OO_AS
 %left CONCATENATE SPACE CCAT
 %left '+' '-'
 %left '*' '/' '%' MODULUS
@@ -361,7 +361,10 @@ usevars      : usevar ',' usevars      { $$ = $1;
              | usevar                  { $$ = $1; }
              ;
 
-usevar       : xsimsymb                { $$ = makenode( X_SIM_SYMBOL, 0 );
+usevar       : xsimsymb '=' expr       { /* USE ARG name = default */
+                                         $$ = makenode( X_SIM_SYMBOL, 2, NULL, $3 );
+                                         $$->name = (streng *) $1; }
+             | xsimsymb                { $$ = makenode( X_SIM_SYMBOL, 0 );
                                          $$->name = (streng *) $1; }
              |                         { $$ = makenode( X_SIM_SYMBOL, 0 );
                                          $$->name = NULL; }
@@ -1381,6 +1384,14 @@ expr        : '('                      { /* We have to accept exprs here even
             | NOT expr                 { AUTO_REDUCE( $2, "\\" );
                                          $$ = makenode( X_LOG_NOT, 1, $2 ); }
             |      NOT                 { exiterror( ERR_INVALID_EXPRESSION, 1, "\\" ); }
+            | expr OO_IS               { parendepth--; }
+                       expr            { parendepth++; AUTO_REDUCE( $1, "IS" );
+                                         /* OO, cREXX: x is .T */
+                                         $$ = makenode( X_OO_IS, 2, $1, $4 ); }
+            | expr OO_AS               { parendepth--; }
+                       expr            { parendepth++; AUTO_REDUCE( $1, "AS" );
+                                         /* OO, cREXX: x as .T */
+                                         $$ = makenode( X_OO_AS, 2, $1, $4 ); }
             | expr '='                 { parendepth--; }
                        expr            { parendepth++; AUTO_REDUCE( $1, "=" );
                                          $$ = makenode( X_EQUAL, 2, $1, $4 );

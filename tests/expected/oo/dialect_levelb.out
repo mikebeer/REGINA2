@@ -1,0 +1,10 @@
+file:log.txt:8
+cache:memo:1
+file:sized-file:8
+cache:cache-3:3
+5 FILEASSET 1 1
+n=0 s=.
+gear 4 8 6
+WIDGET 1
+error 88: Error 88.10: [length must be of type int; found "notanumber"]
+rc=0

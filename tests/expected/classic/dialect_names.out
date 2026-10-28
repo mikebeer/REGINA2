@@ -1,0 +1,9 @@
+T N
+THIS NULL
+1 2
+a 1 .B
+a 2 .B
+one 3
+sh: 1: A.B: not found
+
+rc=0
