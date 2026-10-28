@@ -16,5 +16,10 @@ Run any of them with:   rexx 01_classes.rexx
 10_python.rexx           Python libraries: statistics, collections, json
 11_blocks.rexx           blocks { :x | ... } with select, collect, inject, sortWith
 12_extensions.rexx       Bag, Set, SortedCollection, Interval, ::extension, ensure
+13_notation.rexx         cREXX/NetRexx notation: obj.m(), .Class(), this, null,
+                         USE ARG defaults, is, as, typeof
+14_netrexx.rexx          a NetRexx program (options netrexx; also *.nrx files)
+15_levelb.rexx           a cREXX Level B program (options levelb): interfaces,
+                         factories, match
 
 ../oo_demo.rexx          a quick self-test of classic and OO features

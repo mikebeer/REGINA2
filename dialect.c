@@ -479,6 +479,14 @@ static int rewrite( dctx *c, const char *s, const unsigned char *m, long n, int 
             at_stmt = 0;
          }
          sb_ch( out, s[i++] );
+         /*
+          * NetRexx: '('x is the string and x, Rexx would read a hex string:
+          * an explicit concatenation keeps the meaning.
+          */
+         if ( c->dialect == DIALECT_NETREXX && m[i - 1] == 1 && i < n && m[i] == 0
+           && ( s[i] == 'x' || s[i] == 'X' || s[i] == 'b' || s[i] == 'B' )
+           && ( i + 1 >= n || !symch( (unsigned char) s[i + 1] ) ) )
+            sb_str( out, "||" );
          continue;
       }
       for ( j = 0; j < nclose; j++ )

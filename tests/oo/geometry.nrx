@@ -1,0 +1,13 @@
+-- geometry.nrx: NetRexx classes used by dialect_nrxlib.rexx (::requires)
+-- the main method doesn't run when the file is required
+class Vec
+  properties
+    x = 0; y = 0
+  method Vec(ax = int, ay = int)
+    x = ax; y = ay
+  method plus(o) returns Vec
+    return Vec(x + o.x, y + o.y)
+  method toString returns String
+    return '('x','y')'
+  method main(args = String[]) static
+    say 'not run when required'

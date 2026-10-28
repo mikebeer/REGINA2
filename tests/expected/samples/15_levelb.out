@@ -1,0 +1,7 @@
+car:mini wheels: 4 CAR
+truck:truck wheels: 6 TRUCK
+car(60 kWh):e-car wheels: 4 CAR
+load of the fleet: 7.5 t
+1 0
+count starts at 0
+rc=0
