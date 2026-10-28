@@ -1,4 +1,4 @@
-options levelb   -- cREXX Level B notation (stage 3)
+options levelg   -- CREXX notation (stage 3); "options levelb" works, too
 namespace showcase expose asset
 
 main: procedure = .int

@@ -5764,7 +5764,7 @@ YY_RULE_SETUP
    return MSGSEND ; }
 	YY_BREAK
 /*
-    * cREXX notation: "x is .T" and "x as .T" after a term, when the right
+    * CREXX notation: "x is .T" and "x as .T" after a term, when the right
     * operand starts with a period and a letter (else IS stays a symbol).
     */
 case 137:
@@ -5792,7 +5792,7 @@ YY_RULE_SETUP
    return OO_AS ; }
 	YY_BREAK
 /*
-    * cREXX/NetRexx notation: ".name(" directly after ")" or "]" sends a
+    * CREXX/NetRexx notation: ".name(" directly after ")" or "]" sends a
     * message, a.b().c() is a~b()~c(). Only the period is consumed.
     */
 case 139:
@@ -8264,7 +8264,7 @@ static int fetch_is_nrx( void )
 }
 
 /*
- * NetRexx and cREXX Level B programs (see dialect.c): the translation is
+ * NetRexx and CREXX programs (see dialect.c): the translation is
  * read by the lexer from pre_buf. Returns 1 if buf was translated; buf is
  * then owned by pre_buf (freed here).
  */

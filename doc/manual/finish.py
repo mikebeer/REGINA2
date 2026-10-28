@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fills the table of contents of the manual and writes .docx and .pdf.
 
-   python3 doc/manual/finish.py doc/Regina-OO-Manual.docx
+   python3 doc/manual/finish.py doc/ooRegina-Manual.docx
 
 Starts a headless LibreOffice, updates all indexes (the contents with page
 numbers) and stores the document as Word file and as PDF next to it.
@@ -64,4 +64,4 @@ def main(src):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "doc/Regina-OO-Manual.docx")
+    main(sys.argv[1] if len(sys.argv) > 1 else "doc/ooRegina-Manual.docx")

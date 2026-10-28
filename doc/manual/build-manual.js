@@ -1,16 +1,16 @@
-// Builds doc/Regina-OO-Manual.docx:   node doc/manual/build-manual.js
+// Builds doc/ooRegina-Manual.docx:   node doc/manual/build-manual.js
 // The sample chapter reads demo/oo/*.rexx and tests/expected/samples/*.out,
 // so the manual always shows the shipped programs and their real output.
 const fs = require('fs');
 const path = require('path');
 const S = require('./style.js');
-const { d, P, H1, H2, H3, UL, OL, table, screen, caption, pageBreak, runs, ARIAL } = S;
+const { d, P, H1, H2, H3, UL, OL, table, screen, caption, pageBreak, runs, ARIAL, img, ornament, decorate } = S;
 const { Document, Packer, Paragraph, TextRun, Header, Footer, AlignmentType, TabStopType,
         PageNumber, TableOfContents, BorderStyle } = d;
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const PUB = 'RXO-0001-0';
-const TITLE = 'Regina Rexx OO Introduction, Installation and Reference';
+const TITLE = 'ooRegina Introduction, Installation and Reference';
 const DATE = '28 October 2026';
 const W = (...a) => a;                          // column widths helper
 const count = (dir, ext) => fs.readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith(ext)).length;
@@ -28,23 +28,30 @@ const output = (name, suite = 'samples') => read(`tests/expected/${suite}/${name
 const big = (t, size, bold = true, after = 0) => new Paragraph({ spacing: { after },
   children: [new TextRun({ text: t, font: ARIAL, size, bold })] });
 
+// the cover: the title and the Queen of Clubs
+const centered = (t, size, bold, after, color) => new Paragraph({
+  alignment: AlignmentType.CENTER, spacing: { after },
+  children: [new TextRun({ text: t, font: ARIAL, size, bold, color })] });
+const cover = [
+  centered('ooRegina', 80, true, 40),
+  centered('Regina Rexx 3.9.7 with Object-Oriented Extensions', 24, false, 240),
+  new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 240 },
+    children: [img('cover.jpg', 340, 473, 'Queen of Clubs')] }),
+  new Paragraph({ spacing: { after: 160 }, children: [img('band.png', 482, 16, 'band of clubs')] }),
+  centered('Introduction, Installation and Reference', 30, true, 120),
+  centered(`Release 1  \u2022  updated ${DATE}  \u2022  Publication ${PUB}`, 18, false, 0),
+];
 const front = [
-  new Paragraph({ spacing: { before: 3600 }, children: [] }),
-  big('Regina Rexx OO', 56, true, 60),
-  big('Regina Rexx 3.9.7 with Object-Oriented Extensions', 24, false, 600),
-  big('Introduction, Installation', 30, true, 0),
-  new Paragraph({ spacing: { after: 240 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 18, color: '000000', space: 8 } },
-    children: [new TextRun({ text: 'and Reference', font: ARIAL, size: 30, bold: true })] }),
-  big(`Release 1  \u2022  updated ${DATE}`, 20, false, 60),
-  big('based on Regina Rexx 3.9.7 (18 March 2025)', 18, false, 2400),
-  big(`Publication ${PUB}`, 18, false, 40),
-  pageBreak(),
+  big('ooRegina', 40, true, 60),
+  big('Introduction, Installation and Reference', 24, false, 60),
+  big('based on Regina Rexx 3.9.7 (18 March 2025)', 18, false, 600),
   new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text: 'First Edition (October 2026)', font: ARIAL, bold: true, size: 22 })] }),
   P('This edition applies to Regina Rexx 3.9.7 with the object-oriented extension, Release 1, as published in the repository github.com/mikebeer/REGINA2, and to all later builds until otherwise indicated in new editions.'),
   P('Regina Rexx is an open-source REXX interpreter distributed under the GNU Library General Public License. The object-oriented extension described here is distributed under the same license. It is not part of an official Regina release.'),
-  P('Open Object Rexx (ooRexx) is maintained by the Rexx Language Association. This extension follows the syntax of ooRexx where it can, but it is a separate implementation and is not affiliated with that project. IBM and Object REXX are names of IBM products, used here only to identify the language this work descends from.'),
+  P('Open Object Rexx (ooRexx) and NetRexx are maintained by the Rexx Language Association, CREXX by its own open-source project. ooRegina is an independent implementation and is not affiliated with these projects. IBM and Object REXX are names of IBM products.'),
+  P('Cover illustration: Queen of Clubs by Christos Georghiou. The ornaments of this manual are taken from the same card.'),
   P('The repository holds the source, the build tools and the regression tests from which the statements in this manual can be checked. Comments on this publication may be addressed to the project.'),
+  ornament('index.png', 24, 57, 600, 0),
   pageBreak(),
   new Paragraph({ spacing: { after: 240 }, children: [new TextRun({ text: 'Contents', font: ARIAL, bold: true, size: 32 })] }),
   new TableOfContents('Contents', { hyperlink: true, headingStyleRange: '1-2' }),
@@ -55,20 +62,20 @@ const front = [
 // ------------------------------------------------------------------
 const preface = [
   H1('Preface', false),
-  P('This manual introduces the object-oriented extension of Regina Rexx. It tells you how to install the interpreter from a binary package or from source, how the extension differs from classic Regina and from Open Object Rexx, and it describes the new instructions, directives and classes. It ends with sample programs, the restrictions of this release, and the error messages.'),
+  P('This manual introduces the object-oriented extension of Regina Rexx. It tells you how to install the interpreter from a binary package or from source, how the extension differs from classic Regina and how it compares with Open Object Rexx, NetRexx and CREXX, and it describes the new instructions, directives and classes. It ends with sample programs, the restrictions of this release, and the error messages.'),
   P('It is written for REXX programmers who know classic REXX. Some familiarity with object-oriented programming helps, but each concept is explained where it is first used.'),
   H3('How this manual is organized'),
   ...UL([
     '**Chapter 1, Introduction**, says what the extension is and how it keeps classic programs unchanged.',
-    '**Chapter 2, Installing Regina Rexx OO**, covers the Linux, Windows and macOS packages and building from source.',
+    '**Chapter 2, Installing ooRegina**, covers the Linux, Windows and macOS packages and building from source.',
     '**Chapter 3, First Steps**, shows a first program and explains when the OO features are switched on.',
     '**Chapter 4, Differences from Classic Regina**, lists every construct whose meaning depends on the extension.',
-    '**Chapter 5, Differences from Open Object Rexx**, lists what is supported, what behaves differently and what is missing.',
+    '**Chapter 5, Comparison with Open Object Rexx**, lists what the two have in common, what behaves differently and what ooRexx has that ooRegina has not.',
     '**Chapter 6, Language Reference**, describes messages, instructions, directives, methods and operators.',
     '**Chapter 7, Built-in Classes**, lists the classes and their methods.',
     '**Chapter 8, Sample Programs**, prints the sample programs that come with the packages, with their output.',
     '**Chapter 9, Restrictions and Known Problems**, lists the limitations of this release.',
-    '**Chapter 10, cREXX and NetRexx Notation**, describes the notations of these two dialects that Regina Rexx OO also accepts.',
+    '**Chapter 10, CREXX and NetRexx Notation**, describes the notations of these two dialects that ooRegina also accepts.',
     '**Appendix A** lists the new error messages, **Appendix B** the switches and environment variables, **Appendix C** the contents of the packages.',
   ]),
   H3('Conventions'),
@@ -80,7 +87,7 @@ const preface = [
 // ------------------------------------------------------------------
 const ch1 = [
   H1('Chapter 1. Introduction'),
-  P('Regina is a REXX interpreter for Linux, Windows, macOS and many other systems. Regina Rexx OO is Regina 3.9.7 with an optional object-oriented extension in the style of Open Object Rexx (ooRexx). With it, a REXX program can define classes and methods, create objects, send messages to them and use collections such as arrays and directories:'),
+  P('Regina is a REXX interpreter for Linux, Windows, macOS and many other systems. ooRegina is Regina 3.9.7 with an optional object-oriented extension of its own. With it, a REXX program can define classes and methods, create objects, send messages to them and use collections such as arrays and directories:'),
   ...screen(`acct = .account~new(100)          /* create an object       */
 acct~deposit(50)                  /* send it a message      */
 say acct~balance                  /* 150                    */
@@ -99,7 +106,7 @@ exit
   ...UL([
     '**Existing programs run unchanged.** A program that does not use the new features runs exactly as it does on Regina 3.9.7: same results, same error messages, same TRACE output. The test suite of Regina itself and a set of classic tests check this for every build.',
     '**Object orientation is an option.** The OO features switch on when a program uses them, or when it asks for them with a marker or a startup switch. A switch can also turn the whole extension off.',
-    '**ooRexx syntax.** Where it can, the extension uses the syntax and the error numbers of ooRexx, so knowledge and many programs carry over in both directions.',
+    '**Several notations.** Messages are written with `~`, `->` or a period, and classes are declared with `::` directives or in the notation of NetRexx and CREXX, so programs and knowledge from the other object-oriented REXX dialects carry over.',
   ]),
   H2('How it works'),
   P('Every new construct was a syntax error in classic Regina, or is recognized only where a program asks for the extension. That is why classic programs cannot change meaning. For example, `a~b` (no blank before the tilde) was an error and is now a message, while `a ~b` (with a blank) still means "a concatenated with NOT b".'),
@@ -119,9 +126,9 @@ exit
     ['Memory', 'Garbage collection of objects that are no longer used; `--no-gc` switches it off'],
     ['Python', 'Python modules from Rexx: `.Python~import(\'statistics\')`, NumPy, pandas, json, datetime and more, through a Python interpreter built into Regina'],
     ['MQTT', 'the RgMqtt package: an MQTT 3.1.1 client (`MqttConnect`, `MqttPublish`, `MqttSubscribe`, `MqttReceive` ...) and, with `::requires \'mqtt\'`, the Mqtt class'],
-    ['Other notations', '`obj.m(args)`, `.Class(args)`, `this`, `null`, `is`, `as`, `typeof()` in every OO program; NetRexx programs (`options netrexx`, `.nrx` files) and cREXX Level B programs (`options levelb`) with their classes, interfaces and factories (Chapter 10)'],
+    ['Other notations', '`obj.m(args)`, `.Class(args)`, `this`, `null`, `is`, `as`, `typeof()` in every OO program; NetRexx programs (`options netrexx`, `.nrx` files) and CREXX programs (`options levelg`) with their classes, interfaces and factories (Chapter 10)'],
     ['Control', 'markers `/* OOREGINA */` and `OPTIONS OOREGINA`, switches `--oo` and `--no-oo`, variable `REGINA_OO`'],
-    ['Errors', 'error numbers 88, 91, 97, 98 and 99 as in ooRexx, in all message languages'],
+    ['Errors', 'error numbers 88, 91, 97, 98 and 99, in all message languages'],
   ], W(1700, 7938), 'What the extension adds'),
   H2('How it was tested'),
   P('Each build runs five test suites with `tests/run-regression.sh`. The results of this release are:'),
@@ -139,7 +146,7 @@ exit
 // Chapter 2
 // ------------------------------------------------------------------
 const ch2 = [
-  H1('Chapter 2. Installing Regina Rexx OO'),
+  H1('Chapter 2. Installing ooRegina'),
   H2('What you need'),
   ...table(['System', 'Package', 'Notes'], [
     ['Linux (Debian, Ubuntu; x86-64)', '`regina-rexx-oo_3.9.7+oo1_amd64.deb`', 'Replaces the distribution\'s `regina-rexx` package. Includes the library, `rexx`, `regina`, `rxstack`, `rxqueue`, man pages, samples and this manual.'],
@@ -306,16 +313,16 @@ const ch4 = [
     '**A blank before `~` changes the meaning.** `obj ~msg` is "obj concatenated with NOT msg". Write `obj~msg` or `obj -> msg`.',
   ]),
   H2('New error numbers'),
-  P('The extension adds the error numbers 88 (invalid argument), 91 (no result object), 97 (method not found), 98 (execution error) and 99 (translation error), with the numbering of ooRexx. Regina 3.9.7 did not use these numbers. Appendix A lists all messages.'),
+  P('The extension adds the error numbers 88 (invalid argument), 91 (no result object), 97 (method not found), 98 (execution error) and 99 (translation error). Regina 3.9.7 did not use these numbers. Appendix A lists all messages.'),
 ];
 
 // ------------------------------------------------------------------
 // Chapter 5
 // ------------------------------------------------------------------
 const ch5 = [
-  H1('Chapter 5. Differences from Open Object Rexx'),
-  P('The extension follows ooRexx syntax, so many ooRexx programs that use classes, methods and the common collections run unchanged. ooRexx is a much larger system, however. This chapter lists what is supported, what behaves differently and what is missing.'),
-  H2('Supported as in ooRexx'),
+  H1('Chapter 5. Comparison with Open Object Rexx'),
+  P('ooRegina and ooRexx share the message operator `~` and the `::` directives, so many ooRexx programs that use classes, methods and the common collections run unchanged. ooRexx is a much larger system, however. This chapter lists what the two have in common, what ooRegina adds, what behaves differently and what is missing.'),
+  H2('Shared with ooRexx'),
   ...UL([
     'Messages with `~`, cascades with `~~`, `~name:super`, attribute assignment `obj~name = value`, `[]` and `[]=`.',
     'The directives `::class` (with SUBCLASS, MIXINCLASS and INHERIT), `::method` (CLASS, PRIVATE, ABSTRACT, ATTRIBUTE), `::attribute` (GET, SET, CLASS), `::constant`, `::routine`, `::requires`.',
@@ -329,7 +336,7 @@ const ch5 = [
   ...UL([
     '`->` and `->>` as alternative spellings of `~` and `~~`, with blanks allowed around them.',
     '`::extension` adds methods to existing classes, also built-in ones, and can add mixins with INHERIT. This directive is not part of ooRexx 5: it comes from Executor, the experimental ooRexx of Jean-Louis Faucher. In ooRexx itself a method is added to an existing class with the DEFINE method of Class, and a mixin with INHERIT.',
-    'The notations of cREXX and NetRexx: `obj.m(args)`, `.Class(args)`, `this`, `null`, `USE ARG name = default`, `is`, `as` and `typeof`, and whole NetRexx and cREXX Level B programs (Chapter 10).',
+    'The notations of CREXX and NetRexx: `obj.m(args)`, `.Class(args)`, `this`, `null`, `USE ARG name = default`, `is`, `as` and `typeof`, and whole NetRexx and CREXX programs (Chapter 10).',
     'The markers `OOREGINA` and the switches `--oo` and `--no-oo` (ooRexx has no classic mode).',
     'LISP-style lists: the Cons class and the built-in `lisp` library.',
     'Python modules through the built-in Python interpreter (`.Python`, `.PyObject`); ooRexx has no Python bridge.',
@@ -340,7 +347,7 @@ const ch5 = [
     'Regina\'s classic features remain: its built-in functions, OPTIONS, the external queue, ADDRESS WITH and the Regina API.',
   ]),
   H2('Different behaviour'),
-  ...table(['Topic', 'ooRexx', 'Regina Rexx OO'], [
+  ...table(['Topic', 'ooRexx', 'ooRegina'], [
     ['Memory', 'Garbage collection frees unused objects', 'Garbage collection between clauses; `--no-gc` keeps all objects until the end (Chapter 9)'],
     ['Keywords', 'Always reserved where they apply', 'EXPOSE, USE ARG, LOOP and the DO options need a marker, a directive or `--oo` (Chapter 3)'],
     ['`.nil` and other environment symbols', 'Always objects', 'Constant symbols until the object system is active'],
@@ -588,7 +595,7 @@ say m~dimensions~toString(, 'x') m[2, 3]                  /* 3x4 23  */`, 'A two
     ['`hasIndex(k)`, `hasItem(x)`, `index(x)`, `remove(k)`', 'Tests, search and removal.'],
     ['`items`, `isEmpty`, `empty`', 'Counting and clearing.'],
     ['`makeArray`, `allIndexes`, `allItems`, `supplier`', 'Keys, items and walking.'],
-    ['Directory, StringTable: `entry`, `setEntry`, `hasEntry`, `removeEntry`', 'Access by name, uppercased as in ooRexx.'],
+    ['Directory, StringTable: `entry`, `setEntry`, `hasEntry`, `removeEntry`', 'Access by name, uppercased.'],
     ['Directory, StringTable: any other message', '`d~city` reads and `d~city = x` sets the entry CITY.'],
   ]),
   ...cls('Stem', 'A stem as an object. `RETURN x.` creates one in OO code; `.stem~new` or `.stem~new(default)` creates an empty one.', [
@@ -808,9 +815,9 @@ const samples = [
   ['10_python', 'Python libraries', 'Sales figures analysed with the Python modules statistics, collections and json: mean, median and standard deviation, a Counter, totals in a defaultdict read back as a stem, JSON text, and a Python function defined from Rexx.'],
   ['11_blocks', 'Blocks', 'A small book list processed with blocks: select, collect, inject, count, anySatisfy, detect, reject with a variable of the program, sortWith, a counter that keeps its state in a block, and a block with several clauses.'],
   ['12_extensions', 'More collections and extensions', 'Words counted with a Bag and a Set, the longest words in a SortedCollection with a sort block, set intersection, an Interval, new methods for String and Array with `::extension`, and cleanup with `ensure` followed by `condition(\'O\')`.'],
-  ['13_notation', 'cREXX and NetRexx notation', 'An Account class used with the notation of cREXX and NetRexx in an ordinary OO program: `.Account(\'Ann\', 100)`, `acct.deposit(50)`, chains, a named constructor `.Account.empty()`, `this` and `null`, USE ARG defaults, and the type tests `is`, `as`, `typeof` and `<=` (Chapter 10).'],
+  ['13_notation', 'CREXX and NetRexx notation', 'An Account class used with the notation of CREXX and NetRexx in an ordinary OO program: `.Account(\'Ann\', 100)`, `acct.deposit(50)`, chains, a named constructor `.Account.empty()`, `this` and `null`, USE ARG defaults, and the type tests `is`, `as`, `typeof` and `<=` (Chapter 10).'],
   ['14_netrexx', 'A NetRexx program', 'A stock list written in NetRexx (`options netrexx`): classes with properties, constructors named like the class, a subclass that calls `super()`, a static property counting the items, typed arguments, `loop ... over`, `null` and properties read and set as `bolt.count`.'],
-  ['15_levelb', 'A cREXX Level B program', 'Vehicles written in cREXX Level B (`options levelb`): an interface with a default and a named factory, two classes implementing it, a `match` that makes the truck class answer for specifications such as `truck:7.5`, procedures with typed arguments, `is`, `as` and a declaration `count = .int`.'],
+  ['15_crexx', 'A CREXX program', 'Vehicles written in CREXX (`options levelg`): an interface with a default and a named factory, two classes implementing it, a `match` that makes the truck class answer for specifications such as `truck:7.5`, procedures with typed arguments, `is`, `as` and a declaration `count = .int`.'],
 ];
 const mqttSamples = [
   ['13_mqtt', 'MQTT with the function package', 'A home monitor written as a classic program with the functions of RgMqtt: one connection publishes temperatures as retained messages, a second one subscribes with a wildcard, computes statistics and publishes an alarm, and a third connection, opened later, still receives the retained values. A will announces when the monitor disappears.'],
@@ -865,7 +872,7 @@ const ch9 = [
     'In a block only the names of a first `USE ARG` are parameters; `ARG` and `PARSE ARG` in a block set variables of the creator if it has them.',
     'A block keeps the variables of its creator as a copy made when the creator returns; two routines cannot share variables through a block after both have returned.',
     'Objects belong to the thread that created them and cannot be shared between threads that run REXX programs at the same time.',
-    'NetRexx and cREXX Level B programs are translated to Regina OO before they run; Chapter 10 lists what of these languages is not available.',
+    'NetRexx and CREXX programs are translated to Regina OO before they run; Chapter 10 lists what of these languages is not available.',
   ]),
   H2('Python'),
   ...UL([
@@ -894,52 +901,52 @@ const ch9 = [
 
 
 // ------------------------------------------------------------------
-// Chapter 10: cREXX and NetRexx notation
+// Chapter 10: CREXX and NetRexx notation
 // ------------------------------------------------------------------
 const ch10 = [
-  H1('Chapter 10. cREXX and NetRexx Notation'),
-  P('cREXX and NetRexx are two other object-oriented members of the REXX family. Both write a message with a period, `obj.m(args)`, where ooRexx and Regina Rexx OO write `obj~m(args)`, and both declare classes differently. Regina Rexx OO accepts their notation at three levels:'),
+  H1('Chapter 10. CREXX and NetRexx Notation'),
+  P('CREXX and NetRexx are two other object-oriented members of the REXX family. Both write a message with a period, `obj.m(args)`, where ooRexx and ooRegina write `obj~m(args)`, and both declare classes differently. ooRegina accepts their notation at three levels:'),
   ...table(['Level', 'Switched on by', 'What it gives'], [
     ['The common notation', 'every OO program (a directive, a marker, a message or `--oo`)', '`obj.m(args)`, `.Class(args)`, `.Class.f(args)`, `this`, `null`, `USE ARG name = default`, `x is .T`, `x as .T`, `typeof(x)`, `x <= .T`'],
     ['NetRexx programs', '`options netrexx` as the first instruction, or a file name ending in `.nrx`', 'classes, properties, methods and constructors in NetRexx syntax, `Name(args)`, `obj.prop`, `loop`, typed arguments'],
-    ['cREXX Level B programs', '`options levelb` as the first instruction', 'interfaces, classes, attributes, factories with `match`, methods, procedures, typed arguments and declarations'],
+    ['CREXX programs', '`options levelg` (or `options levelb`) as the first instruction', 'interfaces, classes, attributes, factories with `match`, methods, procedures, typed arguments and declarations'],
   ], W(2000, 3200, 4438), 'The three levels of the dialect notations'),
   P('None of this changes a classic program: the new meanings apply only in OO programs, and `--no-oo` switches all of them off. The period sends a message only when the symbol before it holds an object, so a compound variable such as `x.1` or `rec.name` keeps its classic meaning.'),
 
   H2('The four dialects compared'),
-  P('The table compares the object-oriented features of ooRexx 5, cREXX Level B and NetRexx 5.10. The last column says what Regina Rexx OO accepts of each: "ooRexx" means its own notation, "common" the notation of every OO program described in the next section, "NetRexx" and "Level B" programs started with `options netrexx` or `options levelb`.'),
-  ...table(['Feature', 'ooRexx 5', 'cREXX Level B', 'NetRexx', 'Regina Rexx OO accepts'], [
-    ['Message', '`obj~m(args)`', '`obj.m(args)`', '`obj.m(args)`, `obj.m`', 'ooRexx; `obj.m(args)` common; `obj.m` without parentheses in NetRexx and Level B programs'],
+  P('The table compares the object-oriented features of ooRexx 5, CREXX and NetRexx 5.10. The last column says what ooRegina accepts of each: "ooRexx" means its own notation, "common" the notation of every OO program described in the next section, "NetRexx" and "CREXX" programs started with `options netrexx` or `options levelg`.'),
+  ...table(['Feature', 'ooRexx 5', 'CREXX', 'NetRexx', 'ooRegina accepts'], [
+    ['Message', '`obj~m(args)`', '`obj.m(args)`', '`obj.m(args)`, `obj.m`', 'ooRexx; `obj.m(args)` common; `obj.m` without parentheses in NetRexx and CREXX programs'],
     ['Cascade', '`obj~~m`', '-', '-', '`~~`, also `->>`'],
-    ['New object', '`.C~new(args)`', '`.C(args)`, `.iface(args)`', '`C(args)`', 'all: `.C(args)` common, `.iface(args)` in Level B, `C(args)` in NetRexx programs'],
+    ['New object', '`.C~new(args)`', '`.C(args)`, `.iface(args)`', '`C(args)`', 'all: `.C(args)` common, `.iface(args)` in CREXX programs, `C(args)` in NetRexx programs'],
     ['Class', '`::class C subclass S inherit M`', '`c: class implements .i`', '`class C extends S implements I`', 'all three'],
     ['Interface', 'mixin classes', '`i: interface`, abstract and default methods', '`class I interface`', 'all; interfaces become mixin classes'],
     ['Inheritance', 'single, mixins', 'none, interfaces only', 'single, interfaces', 'single, mixins'],
     ['Method', '`::method m`, `use arg`', '`m: method = .t`, `arg a = .t`', '`method m(a, b = 5) returns t`', 'all; result types are ignored'],
     ['Constructor', '`::method init`', '`*: factory`, named factories, `match`', 'method named like the class, `super(...)`', 'all'],
     ['Instance state', '`expose`, `::attribute`', 'attributes `_x = .t`', '`properties`, `x = type`', 'all'],
-    ['Accessors', '`::attribute`, `obj~x = v`', 'methods only', '`obj.x`, `obj.x = v`, `indirect` (getX/setX)', 'all; `obj.x` in NetRexx and Level B programs'],
+    ['Accessors', '`::attribute`, `obj~x = v`', 'methods only', '`obj.x`, `obj.x = v`, `indirect` (getX/setX)', 'all; `obj.x` in NetRexx and CREXX programs'],
     ['Receiver', '`self`, `super`', '`self`', '`this`, `super`', '`self`, `super`; `this` common'],
     ['No object', '`.nil`', 'uninitialised `.C`', '`null`', '`.nil`; `null` common; not the uninitialised `.C`'],
     ['Class side', '`::method m class`', 'factories and `match`', '`static`', 'all'],
     ['Constants', '`::constant`', '-', '`properties constant`', '`::constant`; NetRexx constants as static properties'],
     ['Abstract', '`abstract`', 'interface method without body', '`abstract`', 'all'],
     ['Types', 'none', '`.int .float .string .boolean`, `.t[]`', '`int`, `String`, `Rexx`, Java types', 'accepted; checked when a method is called for numbers, boolean and char (88.10); no compile-time checks'],
-    ['Declaration', '-', '`x = .int`', '`x = int`', 'both (Level B: initial value; NetRexx: no value)'],
+    ['Declaration', '-', '`x = .int`', '`x = int`', 'both (CREXX: initial value; NetRexx: no value)'],
     ['Argument default', '`use arg a, b = 5`', '`arg b = 5`', '`method m(b = 5)`', 'all'],
     ['Type test', '`x~isA(.C)`', '`x is .t`, `typeof(x)`', '`x <= T`', 'all: `is`, `typeof`, `x <= .T` common'],
     ['Cast', '-', '`x as .t`', '`T x`', '`as` common (error 88.9); not the NetRexx cast'],
     ['Loop over items', '`do x over c`', '`do`', '`loop x over c`', 'all'],
-    ['Arrays', '`.array`, `a[i]`', '`.t[]`, `a[i]`, `a[0]` = count', '`int[n]`, `a[i]`', 'all; `a[0]` in Level B programs'],
-    ['Modules', '`::requires`', '`namespace`, `import`, `.ns..x`', '`package`, `import`', '`::requires` (also of `.nrx` files); Level B `import` becomes `::requires`; namespaces and NetRexx imports are dropped'],
+    ['Arrays', '`.array`, `a[i]`', '`.t[]`, `a[i]`, `a[0]` = count', '`int[n]`, `a[i]`', 'all; `a[0]` in CREXX programs'],
+    ['Modules', '`::requires`', '`namespace`, `import`, `.ns..x`', '`package`, `import`', '`::requires` (also of `.nrx` files); CREXX `import` becomes `::requires`; namespaces and NetRexx imports are dropped'],
     ['Dynamic messages', '`unknown`, `send`, `sendWith`', '-', '-', 'ooRexx'],
     ['Operator methods', '`::method "+"`', 'Level G `<eq>`', '-', 'ooRexx'],
     ['Blocks', '`{ ... }` routines', '-', '-', 'closures `{ :x | ... }`'],
     ['Errors', '`raise`, condition objects', '`signal on`', '`catch`, `finally`, `signal`', '`signal on`, `condition(\'O\')`; no `raise`, `catch` or `finally`'],
     ['Concurrency', '`reply`, `guard`, `start`', 'Level G tasks', 'Java threads', 'none'],
-    ['Class library', 'ooRexx classes', '`rxfnsb` and others', 'Java class library', 'Regina\'s functions and the classes of Chapter 7; no Java and no cREXX libraries'],
+    ['Class library', 'ooRexx classes', '`rxfnsb` and others', 'Java class library', 'Regina\'s functions and the classes of Chapter 7; no Java and no CREXX libraries'],
     ['Extending a class', '`define` method of Class', '-', '-', '`::extension` (from Executor)'],
-  ], W(1300, 1750, 1950, 1950, 2688), 'The OO features of ooRexx, cREXX and NetRexx and what Regina Rexx OO accepts'),
+  ], W(1300, 1750, 1950, 1950, 2688), 'The OO features of ooRexx, CREXX and NetRexx and what ooRegina accepts'),
 
   H2('The common notation'),
   ...table(['Written', 'Means', 'Note'], [
@@ -996,9 +1003,9 @@ say (acct is .Account) typeof(acct)
   P('**Typed arguments** are checked when the method is called: `int`, `long`, `short` and `byte` need a whole number, `float` and `double` a number, `boolean` 0 or 1, and `char` one character. Otherwise error 88.10 is raised, for example "by must be of type int; found "x"". Other types (Rexx, String, classes) are not checked.'),
   P('**Not available:** the Java class library and everything that needs it (`java.lang`, `Vector`, `ArrayList`, Swing), `catch` and `finally`, `signal` of exceptions, casts written as `int s`, overloading (two methods of the same name with different arguments), `select case`, compile-time type checking and `binary` arithmetic. The methods of a subclass reach the properties of its superclass through their attributes (`self~x`), which the translation writes for them.'),
 
-  H2('cREXX Level B programs'),
-  P('A program that starts with `options levelb` is a cREXX Level B program. It is translated in the same way as a NetRexx program, line for line.'),
-  ...table(['Level B', 'Regina OO', 'Note'], [
+  H2('CREXX programs'),
+  P('A program that starts with `options levelg` (or `options levelb`) is a CREXX program. CREXX Level G is built on Level B, whose classes, interfaces and factories are described here; the tasks and `DO PARALLEL` of Level G are not available. It is translated in the same way as a NetRexx program, line for line.'),
+  ...table(['CREXX', 'Regina OO', 'Note'], [
     ['`vehicle: interface`', '`::class vehicle mixinclass Object`', 'methods without a body are abstract; a method with a body is a default method'],
     ['`car: class implements .vehicle .named`', '`::class car inherit vehicle named`', ''],
     ['`_name = .string` (in the class)', 'an instance variable, exposed in all methods', 'starts as \'\' (string), 0 (int, float, boolean), an empty Array (`.t[]`) or `.nil`; `with register.N` is ignored'],
@@ -1012,11 +1019,11 @@ say (acct is .Account) typeof(acct)
     ['`count = .int`', '`count = 0`', 'a declaration'],
     ['`list[0]`', '`list~items()`', 'the number of items'],
     ['`<typeof>(x)`, `.ns..vehicle`', '`typeof(x)`, `.vehicle`', 'namespaces are not needed'],
-    ['`import mylib`, `namespace n`', '`::requires \'mylib\'` at the end, (removed)', 'imports of the cREXX libraries (`rx...`) are dropped'],
-  ], W(3300, 3300, 3038), 'The translation of cREXX Level B'),
-  P('Typed arguments (`.int`, `.float`, `.decimal`, `.boolean`) are checked as in NetRexx programs, with error 88.10. `x is .car` is true for a subclass of car as well; in cREXX it is true only for the class itself. `typeof` returns the class ID in uppercase (`CAR`) and `String` for a string.'),
-  P('**Not available:** the cREXX libraries (`rxfnsb` and the others; Regina\'s built-in functions are used instead), Level G and the other levels, `reference` arguments that change the caller\'s variable, `procedure expose`, module globals, `OBJECT_NOT_INITIALIZED`, assembler and `with register` layouts, and compile-time type checking.'),
-  P('The sample programs 13_notation.rexx, 14_netrexx.rexx and 15_levelb.rexx (Chapter 8) show the three levels.'),
+    ['`import mylib`, `namespace n`', '`::requires \'mylib\'` at the end, (removed)', 'imports of the CREXX libraries (`rx...`) are dropped'],
+  ], W(3300, 3300, 3038), 'The translation of CREXX'),
+  P('Typed arguments (`.int`, `.float`, `.decimal`, `.boolean`) are checked as in NetRexx programs, with error 88.10. `x is .car` is true for a subclass of car as well; in CREXX it is true only for the class itself. `typeof` returns the class ID in uppercase (`CAR`) and `String` for a string.'),
+  P('**Not available:** the CREXX libraries (`rxfnsb` and the others; Regina\'s built-in functions are used instead), Level G and the other levels, `reference` arguments that change the caller\'s variable, `procedure expose`, module globals, `OBJECT_NOT_INITIALIZED`, assembler and `with register` layouts, and compile-time type checking.'),
+  P('The sample programs 13_notation.rexx, 14_netrexx.rexx and 15_crexx.rexx (Chapter 8) show the three levels.'),
 ];
 
 // ------------------------------------------------------------------
@@ -1062,9 +1069,10 @@ const appC = [
 // the document
 // ------------------------------------------------------------------
 const header = new Header({ children: [new Paragraph({
-  border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '000000', space: 4 } },
-  children: [new TextRun({ text: TITLE, font: ARIAL, size: 16 })] })] });
+  border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: S.RED, space: 4 } },
+  children: [img('club.png', 9, 9, 'club'), new TextRun({ text: '  ' + TITLE, font: ARIAL, size: 16 })] })] });
 const footer = new Footer({ children: [new Paragraph({
+  border: { top: { style: BorderStyle.SINGLE, size: 8, color: S.GOLD, space: 4 } },
   tabStops: [{ type: TabStopType.RIGHT, position: S.BODY_W }],
   children: [new TextRun({ text: PUB, font: ARIAL, size: 16 }),
              new TextRun({ children: ['\t', PageNumber.CURRENT], size: 21 })] })] });
@@ -1072,17 +1080,19 @@ const page = { size: { width: 11906, height: 16838 },
                margin: { top: 1300, right: 1134, bottom: 1134, left: 1134, header: 708, footer: 708 } };
 
 const doc = new Document({
-  creator: 'Mike Beer', title: 'Regina Rexx OO: Introduction, Installation and Reference',
+  creator: 'Mike Beer', title: 'ooRegina: Introduction, Installation and Reference',
   description: 'Manual of the object-oriented extension of Regina Rexx 3.9.7',
   styles: S.styles, numbering: S.numbering, features: { updateFields: true },
   sections: [
+    { properties: { page: { ...page, margin: { ...page.margin, top: 900 } } }, children: cover },
     { properties: { page }, children: front },
     { properties: { page: { ...page, pageNumbers: { start: 1 } } },
       headers: { default: header }, footers: { default: footer },
-      children: [...preface, ...ch1, ...ch2, ...ch3, ...ch4, ...ch5, ...ch6, ...ch7, ...ch8,
-                 ...ch9, ...ch10, ...appA, ...appB, ...appC] },
+      children: decorate([...preface, ...ch1, ...ch2, ...ch3, ...ch4, ...ch5, ...ch6, ...ch7, ...ch8,
+                 ...ch9, ...ch10, ...appA, ...appB, ...appC,
+                 ornament('flower.png', 26, 21, 240, 0)]) },
   ],
 });
 
-const out = process.argv[2] || path.join(ROOT, 'doc', 'Regina-OO-Manual.docx');
+const out = process.argv[2] || path.join(ROOT, 'doc', 'ooRegina-Manual.docx');
 Packer.toBuffer(doc).then((b) => { fs.writeFileSync(out, b); console.log('wrote', out); });

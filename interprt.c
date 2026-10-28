@@ -1059,7 +1059,7 @@ oo_plain_assign:
          value = thisptr->p[1] ? evaluate(TSD,thisptr->p[1],NULL) : nullstringptr() ;
          if ( TSD->oo_dialect && thisptr->p[0]->type == X_HEAD_SYMBOL
            && oo_dialect_assign( TSD, thisptr->p[0], value ) )
-            break;   /* NetRexx/Level B: p.x = v sends x= */
+            break;   /* NetRexx/CREXX: p.x = v sends x= */
          if (thisptr->p[0]->type==X_HEAD_SYMBOL)
             fix_compound( TSD, thisptr->p[0], value ) ;
          else

@@ -5206,7 +5206,7 @@ yyreduce:
   case 426: /* expr: expr OO_IS $@23 expr  */
 #line 1388 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "IS" );
-                                         /* OO, cREXX: x is .T */
+                                         /* OO, CREXX: x is .T */
                                          yyval = makenode( X_OO_IS, 2, yyvsp[-3], yyvsp[0] ); }
 #line 5212 "yaccsrc.c"
     break;
@@ -5220,7 +5220,7 @@ yyreduce:
   case 428: /* expr: expr OO_AS $@24 expr  */
 #line 1392 "yaccsrc.y"
                                        { parendepth++; AUTO_REDUCE( yyvsp[-3], "AS" );
-                                         /* OO, cREXX: x as .T */
+                                         /* OO, CREXX: x as .T */
                                          yyval = makenode( X_OO_AS, 2, yyvsp[-3], yyvsp[0] ); }
 #line 5226 "yaccsrc.c"
     break;

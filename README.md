@@ -1,9 +1,9 @@
-# Regina Rexx OO
+# ooRegina
 
-Regina Rexx 3.9.7 with an optional **object-oriented extension** in the
-style of Open Object Rexx: classes, methods, attributes, messages (`~` and
-`->`), collections, `DO … OVER`, `USE ARG`, stems passed by reference and
-more. Classic Regina programs run unchanged.
+ooRegina is Regina Rexx 3.9.7 with an optional **object-oriented
+extension**: classes, methods, attributes, messages (`~`, `->` and the
+period of NetRexx and CREXX), collections, `DO … OVER`, `USE ARG`, stems
+passed by reference and more. Classic Regina programs run unchanged.
 
 ```rexx
 acct = .account~new(100)
@@ -51,10 +51,10 @@ c~listen({ use arg m; say m~topic '=' m~message }, 10)
 ::requires 'mqtt'
 ```
 
-The notation of **cREXX and NetRexx** works, too: `obj.m(args)`,
+The notation of **NetRexx and CREXX** works, too: `obj.m(args)`,
 `.Class(args)`, `this`, `null`, `x is .T`, `x as .T` in every OO program,
-and whole NetRexx programs (`options netrexx` or `*.nrx`) and cREXX Level
-B programs (`options levelb`) with their classes, interfaces and
+and whole NetRexx programs (`options netrexx` or `*.nrx`) and CREXX
+programs (`options levelg`) with their classes, interfaces and
 factories (manual, Chapter 10):
 
 ```rexx
@@ -86,9 +86,10 @@ manual.
 
 ## Documentation
 
-- **Manual:** [Regina-OO-Manual.pdf](doc/Regina-OO-Manual.pdf)
-  ([Word](doc/Regina-OO-Manual.docx)) covers installation (binary and from
-  source), the differences from classic Regina and from ooRexx, the
+- **Manual:** [ooRegina-Manual.pdf](doc/ooRegina-Manual.pdf)
+  ([Word](doc/ooRegina-Manual.docx)) covers installation (binary and from
+  source), the differences from classic Regina, a comparison with ooRexx,
+  NetRexx and CREXX, the
   reference of the new instructions, directives and classes, sample
   programs and the restrictions.
 - **Short guide:** [README.OO.md](README.OO.md)

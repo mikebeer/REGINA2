@@ -155,11 +155,11 @@ cp "$SRC"/*.mtb "$DIST/"
 cp "$SRC"/demo/*.rexx "$DIST/demo/"
 mkdir -p "$DIST/demo/oo"; cp "$SRC"/demo/oo/* "$DIST/demo/oo/"
 cp -R "$SRC/python/pylib" "$DIST/pylib"      # found next to rexx
-for m in "$SRC"/doc/Regina-OO-Manual.*; do [ -f "$m" ] && cp "$m" "$DIST/"; done
+for m in "$SRC"/doc/ooRegina-Manual.*; do [ -f "$m" ] && cp "$m" "$DIST/"; done
 cp "$SRC/README.OO.md" "$DIST/"
 cp "$SRC/COPYING-LIB" "$DIST/COPYING-LIB.txt"
 cat > "$DIST/INSTALL-macOS.txt" <<'EOI'
-Regina Rexx 3.9.7 with the OO extension, for macOS 11 or later
+ooRegina (Regina Rexx 3.9.7 with the OO extension), for macOS 11 or later
 (one universal binary for Apple Silicon and Intel Macs).
 
 1. Unpack the archive, then in Terminal, in the unpacked folder:

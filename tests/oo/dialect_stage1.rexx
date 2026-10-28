@@ -1,4 +1,4 @@
-/* cREXX / NetRexx notation in OO programs (stage 1) */
+/* CREXX / NetRexx notation in OO programs (stage 1) */
 a = .array(3)                     -- .Class(args) is .Class~new(args)
 a.put('x', 1)                     -- obj.m(args) as an instruction
 say a.items() a.at(1) a[1]

@@ -401,7 +401,7 @@ do_an_add:
       case X_HEAD_SYMBOL:
          if ( TSD->oo_dialect && ( sptr = oo_dialect_compound( TSD, thisptr ) ) != NULL )
          {
-            /* NetRexx/Level B: p.x is p~x */
+            /* NetRexx/CREXX: p.x is p~x */
             numthr = get_a_descr( TSD, NULL, 0, sptr );
             Free_stringTSD( sptr );
             if ( kill )
@@ -713,7 +713,7 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
       case X_HEAD_SYMBOL:
          if ( TSD->oo_dialect && ( stmp1 = oo_dialect_compound( TSD, thisptr ) ) != NULL )
          {
-            /* NetRexx/Level B: p.x is p~x */
+            /* NetRexx/CREXX: p.x is p~x */
             RETURN_NEW( stmp1 );
          }
          /* always duplicate, since stmp1 might point to tmp area */
@@ -725,7 +725,7 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
          if ( TSD->oo_active && thisptr->type == X_SIM_SYMBOL
            && thisptr->name && thisptr->name->len == 4 )
          {
-            /* cREXX/NetRexx: THIS and NULL while no such variable is set */
+            /* CREXX/NetRexx: THIS and NULL while no such variable is set */
             stmp1 = oo_dialect_symbol( TSD, thisptr->name );
             if ( stmp1 )
             {
@@ -754,7 +754,7 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
             thisptr->u.node = NULL;
             if ( TSD->oo_active )
             {
-               /* cREXX/NetRexx notation: obj.m(args), .Class(args) */
+               /* CREXX/NetRexx notation: obj.m(args), .Class(args) */
                int handled;
                streng *ptr = oo_dot_call( TSD, thisptr, 1, &handled );
                if ( handled )
@@ -778,13 +778,13 @@ streng *evaluate( tsd_t *TSD, nodeptr thisptr, streng **kill )
             if ( TSD->oo_active && thisptr->name->len == 8
               && memcmp( thisptr->name->value, "__OOTYPE", 8 ) == 0 )
             {
-               /* the argument check of NetRexx/Level B methods */
+               /* the argument check of NetRexx/CREXX methods */
                RETURN_NEW( oo_typecheck( TSD, thisptr ) );
             }
             if ( TSD->oo_active && thisptr->name->len == 6
               && memcmp( thisptr->name->value, "TYPEOF", 6 ) == 0 )
             {
-               /* cREXX typeof(x), kept as X_IN_FUNC so a later label wins */
+               /* CREXX typeof(x), kept as X_IN_FUNC so a later label wins */
                streng *ptr = oo_typeof( TSD, thisptr );
                if ( TSD->trace_stat == 'I' )
                   tracevalue( TSD, ptr, 'F' );

@@ -1,7 +1,7 @@
-/* 13_notation.rexx - cREXX and NetRexx notation in any OO program
+/* 13_notation.rexx - CREXX and NetRexx notation in any OO program
  *
  * The usual Regina OO notation obj~m(args) can also be written obj.m(args),
- * as in cREXX and NetRexx. The period sends a message only when the
+ * as in CREXX and NetRexx. The period sends a message only when the
  * symbol before it holds an object: x.1 stays a compound variable.
  */
 acct = .Account('Ann', 100)          -- .Class(args) is .Class~new(args)

@@ -2045,7 +2045,7 @@ key_with          [wW][iI][tT][hH]
    return MSGSEND ; }
 
    /*
-    * cREXX notation: "x is .T" and "x as .T" after a term, when the right
+    * CREXX notation: "x is .T" and "x as .T" after a term, when the right
     * operand starts with a period and a letter (else IS stays a symbol).
     */
 {blank}+[iI][sS]{blank}+/\.[A-Za-z_!?] {
@@ -2061,7 +2061,7 @@ key_with          [wW][iI][tT][hH]
    return OO_AS ; }
 
    /*
-    * cREXX/NetRexx notation: ".name(" directly after ")" or "]" sends a
+    * CREXX/NetRexx notation: ".name(" directly after ")" or "]" sends a
     * message, a.b().c() is a~b()~c(). Only the period is consumed.
     */
 \./[A-Za-z_!?][A-Za-z0-9_!?]*\( {
@@ -3443,7 +3443,7 @@ static int fetch_is_nrx( void )
 }
 
 /*
- * NetRexx and cREXX Level B programs (see dialect.c): the translation is
+ * NetRexx and CREXX programs (see dialect.c): the translation is
  * read by the lexer from pre_buf. Returns 1 if buf was translated; buf is
  * then owned by pre_buf (freed here).
  */

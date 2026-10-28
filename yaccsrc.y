@@ -1386,11 +1386,11 @@ expr        : '('                      { /* We have to accept exprs here even
             |      NOT                 { exiterror( ERR_INVALID_EXPRESSION, 1, "\\" ); }
             | expr OO_IS               { parendepth--; }
                        expr            { parendepth++; AUTO_REDUCE( $1, "IS" );
-                                         /* OO, cREXX: x is .T */
+                                         /* OO, CREXX: x is .T */
                                          $$ = makenode( X_OO_IS, 2, $1, $4 ); }
             | expr OO_AS               { parendepth--; }
                        expr            { parendepth++; AUTO_REDUCE( $1, "AS" );
-                                         /* OO, cREXX: x as .T */
+                                         /* OO, CREXX: x as .T */
                                          $$ = makenode( X_OO_AS, 2, $1, $4 ); }
             | expr '='                 { parendepth--; }
                        expr            { parendepth++; AUTO_REDUCE( $1, "=" );

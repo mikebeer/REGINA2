@@ -7465,7 +7465,7 @@ static void run_prolog( tsd_t *TSD, void *data )
  * that name is found. The source is lib/lisp.cls of the distribution.
  */
 static const char lisp_library[] =
-   "/* lisp.cls - LISP-style list functions for Regina Rexx OO\n"
+   "/* lisp.cls - LISP-style list functions for ooRegina\n"
    " *\n"
    " * ::requires 'lisp' loads this library. It is built into the\n"
    " * interpreter, so no file is needed; a file named lisp.cls next to the\n"
@@ -7795,7 +7795,7 @@ const char *oo_session_source( void )
 /* the built-in libraries: lisp (LISP routines) and python (.Python is built in) */
 static const char python_library[] = "/* .Python and .PyObject are built-in classes */\n";
 static const char mqtt_library[] =
-   "/* mqtt.cls - MQTT classes for Regina Rexx OO\n"
+   "/* mqtt.cls - MQTT classes for ooRegina\n"
    " *\n"
    " * ::requires 'mqtt' loads this library. It is built into the interpreter\n"
    " * and uses the RgMqtt function package (librgmqtt.so, rgmqtt.dll), which\n"
@@ -9734,7 +9734,7 @@ void oo_exec_message( tsd_t *TSD, nodeptr thisptr )
 }
 
 /* ------------------------------------------------------------------ */
-/* cREXX / NetRexx notation: obj.m(args), .Class(args), this, null    */
+/* CREXX / NetRexx notation: obj.m(args), .Class(args), this, null    */
 /* ------------------------------------------------------------------ */
 
 /*
@@ -9764,7 +9764,7 @@ static streng *dot_receiver( tsd_t *TSD, const char *s, int len )
    }
    else if ( ( v = oo_peek_simple( TSD, nm ) ) != NULL )
    {
-      /* NetRexx and Level B: strings receive messages, too (s.length()) */
+      /* NetRexx and CREXX: strings receive messages, too (s.length()) */
       if ( obj_of( TSD, v ) || TSD->oo_dialect )
          r = Str_dupTSD( v );
    }
@@ -9994,7 +9994,7 @@ static streng *type_compare( tsd_t *TSD, nodeptr thisptr, int *handled )
    return r;
 }
 
-/* typeof(x) (cREXX): the name of x's class; only in OO programs and only
+/* typeof(x) (CREXX): the name of x's class; only in OO programs and only
    when no label, ::routine or builtin function of that name exists */
 streng *oo_typeof( tsd_t *TSD, nodeptr thisptr )
 {
@@ -10016,7 +10016,7 @@ streng *oo_typeof( tsd_t *TSD, nodeptr thisptr )
    return id ? id : Str_creTSD( "" );
 }
 
-/* a NetRexx or Level B program was read (see dialect.c) */
+/* a NetRexx or CREXX program was read (see dialect.c) */
 void oo_dialect_start( tsd_t *TSD, int dialect )
 {
    get_ot( TSD );
@@ -10025,7 +10025,7 @@ void oo_dialect_start( tsd_t *TSD, int dialect )
 
 /*
  * The receiver and messages of a compound symbol a.b.c in NetRexx and
- * Level B programs: a is a variable with a value (or THIS, or a class
+ * CREXX programs: a is a variable with a value (or THIS, or a class
  * name). Returns the receiver (new string) and the number of messages in
  * *nmsg (their names in msgs[]), or NULL for a classic compound variable.
  */
@@ -10068,7 +10068,7 @@ static streng *dialect_split( tsd_t *TSD, nodeptr thisptr, streng **msgs, int *n
    return recv;
 }
 
-/* NetRexx/Level B: the value of a.b (a~b), or NULL for a classic compound */
+/* NetRexx/CREXX: the value of a.b (a~b), or NULL for a classic compound */
 streng *oo_dialect_compound( tsd_t *TSD, nodeptr thisptr )
 {
    streng *msgs[DIALECT_MAXTAILS], *recv, *r;
@@ -10091,7 +10091,7 @@ streng *oo_dialect_compound( tsd_t *TSD, nodeptr thisptr )
    return recv;
 }
 
-/* NetRexx/Level B: a.b = value sends b= to a; takes value if it returns 1 */
+/* NetRexx/CREXX: a.b = value sends b= to a; takes value if it returns 1 */
 int oo_dialect_assign( tsd_t *TSD, nodeptr target, streng *value )
 {
    streng *msgs[DIALECT_MAXTAILS], *recv, *r;
@@ -10132,7 +10132,7 @@ int oo_dialect_assign( tsd_t *TSD, nodeptr target, streng *value )
 
 /*
  * __OOTYPE(value, type, name): the run-time check of a typed argument in
- * NetRexx and Level B methods (int: a whole number, float: a number,
+ * NetRexx and CREXX methods (int: a whole number, float: a number,
  * boolean: 0 or 1, char: one character). Returns value or raises 88.10.
  */
 streng *oo_typecheck( tsd_t *TSD, nodeptr thisptr )
