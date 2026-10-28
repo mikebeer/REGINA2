@@ -11,7 +11,7 @@ const { Document, Packer, Paragraph, TextRun, Header, Footer, AlignmentType, Tab
 const ROOT = path.resolve(__dirname, '..', '..');
 const PUB = 'RXO-0001-0';
 const TITLE = 'Regina Rexx OO Introduction, Installation and Reference';
-const DATE = '17 October 2026';
+const DATE = '28 October 2026';
 const W = (...a) => a;                          // column widths helper
 const count = (dir, ext) => fs.readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith(ext)).length;
 const N = { trip: 23, classic: count('tests/classic', '.rexx'), oo: count('tests/oo', '.rexx'),
@@ -68,6 +68,7 @@ const preface = [
     '**Chapter 7, Built-in Classes**, lists the classes and their methods.',
     '**Chapter 8, Sample Programs**, prints the sample programs that come with the packages, with their output.',
     '**Chapter 9, Restrictions and Known Problems**, lists the limitations of this release.',
+    '**Chapter 10, cREXX and NetRexx Notation**, describes the notations of these two dialects that Regina Rexx OO also accepts.',
     '**Appendix A** lists the new error messages, **Appendix B** the switches and environment variables, **Appendix C** the contents of the packages.',
   ]),
   H3('Conventions'),
@@ -118,6 +119,7 @@ exit
     ['Memory', 'Garbage collection of objects that are no longer used; `--no-gc` switches it off'],
     ['Python', 'Python modules from Rexx: `.Python~import(\'statistics\')`, NumPy, pandas, json, datetime and more, through a Python interpreter built into Regina'],
     ['MQTT', 'the RgMqtt package: an MQTT 3.1.1 client (`MqttConnect`, `MqttPublish`, `MqttSubscribe`, `MqttReceive` ...) and, with `::requires \'mqtt\'`, the Mqtt class'],
+    ['Other notations', '`obj.m(args)`, `.Class(args)`, `this`, `null`, `is`, `as`, `typeof()` in every OO program; NetRexx programs (`options netrexx`, `.nrx` files) and cREXX Level B programs (`options levelb`) with their classes, interfaces and factories (Chapter 10)'],
     ['Control', 'markers `/* OOREGINA */` and `OPTIONS OOREGINA`, switches `--oo` and `--no-oo`, variable `REGINA_OO`'],
     ['Errors', 'error numbers 88, 91, 97, 98 and 99 as in ooRexx, in all message languages'],
   ], W(1700, 7938), 'What the extension adds'),
@@ -320,13 +322,14 @@ const ch5 = [
     'Arrays with any number of dimensions: `.array~new(3, 4)`, `a[i, j]`, `dimension`, growing on assignment.',
     'SELF and SUPER, EXPOSE, USE ARG, the UNKNOWN method, operator methods, mixins and multiple inheritance.',
     '`DO x OVER`, `DO WITH INDEX i ITEM x OVER`, `DO ... FOR` with OVER, `DO COUNTER`, `DO LABEL`, LOOP.',
-    '`::extension` adds methods to existing classes, also built-in ones, and can add mixins with INHERIT.',
     'Set, Bag and the Message class; `condition(\'O\')` returns the condition as a Directory.',
     'The error numbers 88, 91, 97, 98 and 99.',
   ]),
   H2('Additions'),
   ...UL([
     '`->` and `->>` as alternative spellings of `~` and `~~`, with blanks allowed around them.',
+    '`::extension` adds methods to existing classes, also built-in ones, and can add mixins with INHERIT. This directive is not part of ooRexx 5: it comes from Executor, the experimental ooRexx of Jean-Louis Faucher. In ooRexx itself a method is added to an existing class with the DEFINE method of Class, and a mixin with INHERIT.',
+    'The notations of cREXX and NetRexx: `obj.m(args)`, `.Class(args)`, `this`, `null`, `USE ARG name = default`, `is`, `as` and `typeof`, and whole NetRexx and cREXX Level B programs (Chapter 10).',
     'The markers `OOREGINA` and the switches `--oo` and `--no-oo` (ooRexx has no classic mode).',
     'LISP-style lists: the Cons class and the built-in `lisp` library.',
     'Python modules through the built-in Python interpreter (`.Python`, `.PyObject`); ooRexx has no Python bridge.',
@@ -805,6 +808,9 @@ const samples = [
   ['10_python', 'Python libraries', 'Sales figures analysed with the Python modules statistics, collections and json: mean, median and standard deviation, a Counter, totals in a defaultdict read back as a stem, JSON text, and a Python function defined from Rexx.'],
   ['11_blocks', 'Blocks', 'A small book list processed with blocks: select, collect, inject, count, anySatisfy, detect, reject with a variable of the program, sortWith, a counter that keeps its state in a block, and a block with several clauses.'],
   ['12_extensions', 'More collections and extensions', 'Words counted with a Bag and a Set, the longest words in a SortedCollection with a sort block, set intersection, an Interval, new methods for String and Array with `::extension`, and cleanup with `ensure` followed by `condition(\'O\')`.'],
+  ['13_notation', 'cREXX and NetRexx notation', 'An Account class used with the notation of cREXX and NetRexx in an ordinary OO program: `.Account(\'Ann\', 100)`, `acct.deposit(50)`, chains, a named constructor `.Account.empty()`, `this` and `null`, USE ARG defaults, and the type tests `is`, `as`, `typeof` and `<=` (Chapter 10).'],
+  ['14_netrexx', 'A NetRexx program', 'A stock list written in NetRexx (`options netrexx`): classes with properties, constructors named like the class, a subclass that calls `super()`, a static property counting the items, typed arguments, `loop ... over`, `null` and properties read and set as `bolt.count`.'],
+  ['15_levelb', 'A cREXX Level B program', 'Vehicles written in cREXX Level B (`options levelb`): an interface with a default and a named factory, two classes implementing it, a `match` that makes the truck class answer for specifications such as `truck:7.5`, procedures with typed arguments, `is`, `as` and a declaration `count = .int`.'],
 ];
 const mqttSamples = [
   ['13_mqtt', 'MQTT with the function package', 'A home monitor written as a classic program with the functions of RgMqtt: one connection publishes temperatures as retained messages, a second one subscribes with a wildcard, computes statistics and publishes an alarm, and a third connection, opened later, still receives the retained values. A will announces when the monitor disappears.'],
@@ -859,6 +865,7 @@ const ch9 = [
     'In a block only the names of a first `USE ARG` are parameters; `ARG` and `PARSE ARG` in a block set variables of the creator if it has them.',
     'A block keeps the variables of its creator as a copy made when the creator returns; two routines cannot share variables through a block after both have returned.',
     'Objects belong to the thread that created them and cannot be shared between threads that run REXX programs at the same time.',
+    'NetRexx and cREXX Level B programs are translated to Regina OO before they run; Chapter 10 lists what of these languages is not available.',
   ]),
   H2('Python'),
   ...UL([
@@ -883,6 +890,98 @@ const ch9 = [
   ], W(2400, 7238), 'Platform status'),
   H2('Performance'),
   P('Classic programs run at the speed of Regina 3.9.7: built with the same compiler options, the REXXCPS benchmark gave a median of 9.67 million clauses per second against 9.51 million for Regina 3.9.7 (seven runs each), a difference within the noise of the measurement. A message is slower than a call of an internal routine, because it creates a new variable scope and looks up the method. Collections are implemented in C and are fast; a loop over thousands of items is no problem.'),
+];
+
+
+// ------------------------------------------------------------------
+// Chapter 10: cREXX and NetRexx notation
+// ------------------------------------------------------------------
+const ch10 = [
+  H1('Chapter 10. cREXX and NetRexx Notation'),
+  P('cREXX and NetRexx are two other object-oriented members of the REXX family. Both write a message with a period, `obj.m(args)`, where ooRexx and Regina Rexx OO write `obj~m(args)`, and both declare classes differently. Regina Rexx OO accepts their notation at three levels:'),
+  ...table(['Level', 'Switched on by', 'What it gives'], [
+    ['The common notation', 'every OO program (a directive, a marker, a message or `--oo`)', '`obj.m(args)`, `.Class(args)`, `.Class.f(args)`, `this`, `null`, `USE ARG name = default`, `x is .T`, `x as .T`, `typeof(x)`, `x <= .T`'],
+    ['NetRexx programs', '`options netrexx` as the first instruction, or a file name ending in `.nrx`', 'classes, properties, methods and constructors in NetRexx syntax, `Name(args)`, `obj.prop`, `loop`, typed arguments'],
+    ['cREXX Level B programs', '`options levelb` as the first instruction', 'interfaces, classes, attributes, factories with `match`, methods, procedures, typed arguments and declarations'],
+  ], W(2000, 3200, 4438), 'The three levels of the dialect notations'),
+  P('None of this changes a classic program: the new meanings apply only in OO programs, and `--no-oo` switches all of them off. The period sends a message only when the symbol before it holds an object, so a compound variable such as `x.1` or `rec.name` keeps its classic meaning.'),
+
+  H2('The common notation'),
+  ...table(['Written', 'Means', 'Note'], [
+    ['`obj.m(args)`', '`obj~m(args)`', 'when the variable OBJ holds an object; otherwise the classic call of the function `OBJ.M`'],
+    ['`a.b(1).c()`', '`a~b(1)~c()`', 'a period directly after `)` or `]` and followed by a name and `(` is a message'],
+    ['`obj.m(args)` as an instruction', 'the message instruction `obj~m(args)`', 'not a command to the environment; RESULT is set'],
+    ['`.Class(args)`', '`.Class~new(args)`', 'when `.Class` is a class object'],
+    ['`.Class.f(args)`', '`.Class~f(args)`', 'a class method, for example a named constructor'],
+    ['`this`', '`self`', 'only while no variable THIS is set; `this.m()` sends m to self'],
+    ['`null`', '`.nil`', 'only while no variable NULL is set'],
+    ['`use arg a, b = 5`', 'B is 5 when the second argument is omitted', 'the default is any expression; it is evaluated only when needed'],
+    ['`x is .T`', '`x~isA(.T)`: 1 or 0', 'the right operand must start with a period and a letter'],
+    ['`x as .T`', 'x, when `x~isA(.T)`', 'otherwise error 88.9'],
+    ['`typeof(x)`', 'the ID of the class of x', 'only when no label or ::routine TYPEOF exists'],
+    ['`x <= .T`, `.T >= x`', '`x~isA(.T)`', 'the NetRexx type test; only when the operand is a class object'],
+  ], W(2400, 2600, 4638), 'The common notation'),
+  P('`is` and `as` compare like the comparison operators, so they bind less tightly than concatenation: write `say (x is .Array) (y is .String)`. In a program where IS or AS is a variable, `is .T` and `as .T` are still the operators; `x is` without a following period keeps the classic meaning.'),
+  ...screen(`acct = .Account('Ann', 100)
+acct.deposit(50)
+say acct.owner() 'has' acct.balance()
+say (acct is .Account) typeof(acct)
+::class Account
+::attribute owner get
+::attribute balance get
+::method init
+  expose owner balance
+  use arg owner, balance = 0
+::method deposit
+  expose balance
+  use arg amount
+  balance = balance + amount
+  return this`, 'The common notation in an OO program'),
+
+  H2('NetRexx programs'),
+  P('A program that starts with `options netrexx`, or whose file name ends in `.nrx`, is a NetRexx program. Before it is parsed it is translated into Regina OO: every line of the translation is the same line of the program, so line numbers in error messages and in TRACE output are those of the program. TRACE shows the translated clauses. The translation is done in memory; the file is not changed.'),
+  ...table(['NetRexx', 'Regina OO', 'Note'], [
+    ['`class Point extends Shape implements Named`', '`::class Point subclass Shape inherit Named public`', 'an interface of the same file becomes a mixin class; other interfaces (Java) are ignored'],
+    ['`class Named interface`', '`::class Named mixinclass Object`', 'its methods are abstract'],
+    ['`properties [static] [indirect]` and `x = int`, `y = 5`, `s`', 'instance (or class) variables with attributes `x`, `y`, `s`', 'typed properties start as 0 (int, float, boolean) or `.nil`; `indirect` adds `getX` and `setX`'],
+    ['`method Point(a, b = 0)`', '`::method init` with `use arg a, b = 0`', 'the constructor; it calls the superclass constructor first'],
+    ['`super(args)`, `this(args)`', 'the superclass constructor, another constructor', ''],
+    ['`method area(n = int) static returns double`', '`::method area class` with `use arg n` and a check', 'RETURNS and SIGNALS are accepted and ignored'],
+    ['`Point(1, 2)`, `Point.origin()`, `Point.count`', '`.Point(1, 2)`, `.Point~origin()`, `.Point~count`', 'for the classes of the program; other classes are found at run time'],
+    ['`describe()` in a method', '`self~describe()`', 'the methods of the class are called without `this.`'],
+    ['`p.x`, `p.x = 5`', '`p~x`, `p~x = 5`', 'at run time, when P holds an object'],
+    ['`s.length()`, `s.upper`', '`s~length()`, `s~upper`', 'strings take messages, too'],
+    ['`loop i = 1 to 10`, `loop for 3`, `loop x over list`', '`do i = 1 to 10`, `do 3`, `do x over list`', ''],
+    ['`n = int`, `a = int[5]`', '`drop n`, `a = .array~new(5)`', 'a declaration; an array'],
+    ['`ask`, `parse ask x`', '`linein()`, `parse pull x`', ''],
+    ['a line ending in `-`', 'a line ending in `,`', 'the NetRexx continuation'],
+    ['`import`, `package`', '(removed)', ''],
+  ], W(3300, 3300, 3038), 'The translation of NetRexx'),
+  P('Statements before the first class are the main program. Without them, the static method `main` of the first class that has one is run, with the argument string of the program. A NetRexx file can also be loaded with `::requires \'geometry.nrx\'`; its classes are then available, and its `main` method is not run.'),
+  P('**Typed arguments** are checked when the method is called: `int`, `long`, `short` and `byte` need a whole number, `float` and `double` a number, `boolean` 0 or 1, and `char` one character. Otherwise error 88.10 is raised, for example "by must be of type int; found "x"". Other types (Rexx, String, classes) are not checked.'),
+  P('**Not available:** the Java class library and everything that needs it (`java.lang`, `Vector`, `ArrayList`, Swing), `catch` and `finally`, `signal` of exceptions, casts written as `int s`, overloading (two methods of the same name with different arguments), `select case`, compile-time type checking and `binary` arithmetic. The methods of a subclass reach the properties of its superclass through their attributes (`self~x`), which the translation writes for them.'),
+
+  H2('cREXX Level B programs'),
+  P('A program that starts with `options levelb` is a cREXX Level B program. It is translated in the same way as a NetRexx program, line for line.'),
+  ...table(['Level B', 'Regina OO', 'Note'], [
+    ['`vehicle: interface`', '`::class vehicle mixinclass Object`', 'methods without a body are abstract; a method with a body is a default method'],
+    ['`car: class implements .vehicle .named`', '`::class car inherit vehicle named`', ''],
+    ['`_name = .string` (in the class)', 'an instance variable, exposed in all methods', 'starts as \'\' (string), 0 (int, float, boolean), an empty Array (`.t[]`) or `.nil`; `with register.N` is ignored'],
+    ['`*: factory` with `arg spec = .string`', 'the constructor `init` with `use arg spec`', 'without an `arg` line the class factory takes the arguments of the interface factory'],
+    ['`from_size: factory`', 'the class method `from_size`', 'creates the object without the default factory and runs the body'],
+    ['`*: match`, `from_size: match`', 'class methods that score a provider', 'the highest positive score wins, ties go to the first name in alphabetical order, a class without match scores 1'],
+    ['`.vehicle("mini")`, `.vehicle.from_size(8)`', 'the factory of the selected class', 'all classes of the program that implement the interface are asked'],
+    ['`describe: method = .string`', '`::method describe`', 'the result type is ignored'],
+    ['`add: procedure = .int` with `arg a = .int`', '`::routine add` with `use arg a` and a check', '`main: procedure` is run when there are no statements before it'],
+    ['`call clear()`, `size()` in a method', '`self~clear()`, `self~size()`', ''],
+    ['`count = .int`', '`count = 0`', 'a declaration'],
+    ['`list[0]`', '`list~items()`', 'the number of items'],
+    ['`<typeof>(x)`, `.ns..vehicle`', '`typeof(x)`, `.vehicle`', 'namespaces are not needed'],
+    ['`import mylib`, `namespace n`', '`::requires \'mylib\'` at the end, (removed)', 'imports of the cREXX libraries (`rx...`) are dropped'],
+  ], W(3300, 3300, 3038), 'The translation of cREXX Level B'),
+  P('Typed arguments (`.int`, `.float`, `.decimal`, `.boolean`) are checked as in NetRexx programs, with error 88.10. `x is .car` is true for a subclass of car as well; in cREXX it is true only for the class itself. `typeof` returns the class ID in uppercase (`CAR`) and `String` for a string.'),
+  P('**Not available:** the cREXX libraries (`rxfnsb` and the others; Regina\'s built-in functions are used instead), Level G and the other levels, `reference` arguments that change the caller\'s variable, `procedure expose`, module globals, `OBJECT_NOT_INITIALIZED`, assembler and `with register` layouts, and compile-time type checking.'),
+  P('The sample programs 13_notation.rexx, 14_netrexx.rexx and 15_levelb.rexx (Chapter 8) show the three levels.'),
 ];
 
 // ------------------------------------------------------------------
@@ -946,7 +1045,7 @@ const doc = new Document({
     { properties: { page: { ...page, pageNumbers: { start: 1 } } },
       headers: { default: header }, footers: { default: footer },
       children: [...preface, ...ch1, ...ch2, ...ch3, ...ch4, ...ch5, ...ch6, ...ch7, ...ch8,
-                 ...ch9, ...appA, ...appB, ...appC] },
+                 ...ch9, ...ch10, ...appA, ...appB, ...appC] },
   ],
 });
 

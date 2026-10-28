@@ -51,6 +51,26 @@ c~listen({ use arg m; say m~topic '=' m~message }, 10)
 ::requires 'mqtt'
 ```
 
+The notation of **cREXX and NetRexx** works, too: `obj.m(args)`,
+`.Class(args)`, `this`, `null`, `x is .T`, `x as .T` in every OO program,
+and whole NetRexx programs (`options netrexx` or `*.nrx`) and cREXX Level
+B programs (`options levelb`) with their classes, interfaces and
+factories (manual, Chapter 10):
+
+```rexx
+options netrexx
+p = Point(3, 4)
+say p.norm2()                     /* 25 */
+
+class Point
+  properties
+    x = int; y = int
+  method Point(ax = int, ay = int)
+    x = ax; y = ay
+  method norm2
+    return x * x + y * y
+```
+
 ## Downloads
 
 | System | File |

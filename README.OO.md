@@ -367,13 +367,51 @@ A Directory or StringTable uses the string value of an index, and `[]`,
 name, as in ooRexx: `d~city` finds the entry stored with `d['CITY']`. A
 Table also accepts objects as indexes and compares them by identity.
 
+## Other dialects: cREXX and NetRexx notation
+
+The notation of cREXX and NetRexx is accepted at three levels (manual,
+Chapter 10):
+
+**In every OO program** (`--no-oo` switches it off; a period sends a
+message only when the symbol before it holds an object, so `x.1` stays a
+compound variable):
+
+| Written | Means |
+|---|---|
+| `obj.m(args)`, `a.b().c()` | `obj~m(args)`, `a~b()~c()` (also as an instruction) |
+| `.Class(args)`, `.Class.f(args)` | `.Class~new(args)`, `.Class~f(args)` |
+| `this`, `null` | `self`, `.nil` (while no such variable is set) |
+| `use arg a, b = 5` | B is 5 when the argument is omitted |
+| `x is .T`, `x as .T`, `typeof(x)` | `x~isA(.T)`; x or error 88.9; the class ID |
+| `x <= .T`, `.T >= x` | `x~isA(.T)` (NetRexx), when the operand is a class |
+
+**NetRexx programs**: `options netrexx` as the first instruction, or a
+file `*.nrx`. `class N extends S implements I`, `properties [static]
+[indirect]`, `method m(a, b = 5, c = int) [static] [returns t]`, the
+constructor named like the class with `super(...)`, `Name(args)`,
+`obj.prop` (read and set), `s.length()` on strings, `loop`, `ask`, typed
+arguments checked at run time (error 88.10). A `.nrx` file can be loaded
+with `::requires`. Not available: the Java library, `catch`/`finally`,
+exceptions, casts, overloading.
+
+**cREXX Level B programs**: `options levelb`. `name: interface`,
+`name: class implements .i`, attributes `_x = .type`, `*: factory` and
+named factories, provider selection with `match`, `m: method = .type`,
+`p: procedure = .type`, `arg a = .int` (checked), `x = .int`, `list[0]`,
+`import` (as `::requires`). Not available: the cREXX libraries, other
+levels, reference arguments, compile-time type checks.
+
+Both kinds of programs are translated to Regina OO before they are parsed
+(`dialect.c`), line for line, so line numbers in messages stay right.
+Samples: `demo/oo/13_notation.rexx`, `14_netrexx.rexx`, `15_levelb.rexx`.
+
 ## Errors
 
 The new error numbers follow ooRexx:
 
 | Error | Meaning |
 |---|---|
-| 88.x | Invalid argument (for example an array index that isn't a positive whole number, or one above 100000000) |
+| 88.x | Invalid argument (for example an array index that isn't a positive whole number, or one above 100000000; 88.9 a failed `as`, 88.10 a typed argument of the wrong type) |
 | 91.x | A message that must return a result didn't return one |
 | 97.x | The object doesn't understand the message |
 | 98.x | Execution errors: missing class, abstract method called, class inheritance cycle, … |

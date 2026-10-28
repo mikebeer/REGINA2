@@ -10,7 +10,7 @@ tests/run-regression.sh /path/to/build/rexx
 |---|---|---|
 | `trip` | Regina's own trip suite in `../trip` | unmodified Regina 3.9.7 |
 | `classic` | `tests/classic/*.rexx`: classic behaviour the OO syntax must not change (`~` as NOT, `-` and `>` near each other, brackets in strings, labels, PARSE templates, `USE`/`ARG` as plain symbols) | unmodified Regina 3.9.7 |
-| `oo` | `tests/oo/*.rexx`: the new syntax (`~`, `->`, `~~`, `->>`, `[ ]`, `::` directives) | reviewed output of the OO build |
+| `oo` | `tests/oo/*.rexx`: the new syntax (`~`, `->`, `~~`, `->>`, `[ ]`, `::` directives) and the cREXX/NetRexx notations (`dialect_*.rexx`; `geometry.nrx` is a NetRexx library they load) | reviewed output of the OO build |
 | `samples` | the sample programs in `demo/oo` | reviewed output of the OO build |
 | `packages` | `tests/packages/*.rexx`: external function packages (rgnet, RgMqtt) | reviewed output of the OO build |
 
